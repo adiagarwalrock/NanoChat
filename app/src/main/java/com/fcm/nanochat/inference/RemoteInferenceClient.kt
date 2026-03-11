@@ -1,5 +1,6 @@
 package com.fcm.nanochat.inference
 
+import com.fcm.nanochat.data.SettingsSnapshot
 import com.fcm.nanochat.model.ChatRole
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -19,12 +20,12 @@ import java.io.IOException
 class RemoteInferenceClient(
     private val httpClient: OkHttpClient
 ) : InferenceClient {
-    override suspend fun availability(settings: com.fcm.nanochat.data.SettingsSnapshot): BackendAvailability {
-        return when {
-            settings.baseUrl.isBlank() -> BackendAvailability.Unavailable("Set a base URL in Settings.")
-            settings.modelName.isBlank() -> BackendAvailability.Unavailable("Set a model name in Settings.")
-            settings.apiKey.isBlank() -> BackendAvailability.Unavailable("Add an API key in Settings.")
-            else -> BackendAvailability.Available
+    override suspend fun availability(settings: SettingsSnapshot): BackendAvailability {
+        val firstMissingField = RemoteConfigValidator.missingFields(settings).firstOrNull()
+        return if (firstMissingField == null) {
+            BackendAvailability.Available
+        } else {
+            BackendAvailability.Unavailable(configurationMessage(firstMissingField))
         }
     }
 
@@ -38,13 +39,7 @@ class RemoteInferenceClient(
             BackendAvailability.Available -> Unit
         }
 
-        val baseUrl = request.settings.baseUrl.trim().trimEnd('/')
-        val apiUrl = if (baseUrl.endsWith("/chat/completions")) {
-            baseUrl
-        } else {
-            "$baseUrl/chat/completions"
-        }
-
+        val apiUrl = RemoteApiUrlResolver.chatCompletionsUrl(request.settings.baseUrl)
         val body = buildRequestBody(request).toString()
             .toRequestBody("application/json".toMediaType())
 
@@ -89,9 +84,10 @@ class RemoteInferenceClient(
                 try {
                     while (!source.exhausted()) {
                         val line = source.readUtf8Line() ?: break
-                        if (!line.startsWith("data: ")) continue
+                        if (!line.startsWith("data:")) continue
 
-                        val payload = line.removePrefix("data: ").trim()
+                        val payload = line.removePrefix("data:").trim()
+                        if (payload.isEmpty()) continue
                         if (payload == "[DONE]") break
 
                         val delta = parseDelta(payload)
@@ -136,7 +132,30 @@ class RemoteInferenceClient(
         val root = JSONObject(payload)
         val choices = root.optJSONArray("choices") ?: return ""
         if (choices.length() == 0) return ""
-        val delta = choices.getJSONObject(0).optJSONObject("delta") ?: return ""
-        return delta.optString("content", "")
+
+        val delta = choices.optJSONObject(0)?.optJSONObject("delta") ?: return ""
+        val content = delta.opt("content") ?: return ""
+
+        return when (content) {
+            is String -> content
+            is JSONArray -> buildString {
+                for (index in 0 until content.length()) {
+                    val item = content.opt(index)
+                    if (item is JSONObject) {
+                        append(item.optString("text"))
+                    }
+                }
+            }
+
+            else -> ""
+        }
+    }
+
+    private fun configurationMessage(field: RemoteConfigField): String {
+        return when (field) {
+            RemoteConfigField.BASE_URL -> "Set a base URL in Settings."
+            RemoteConfigField.MODEL_NAME -> "Set a model name in Settings."
+            RemoteConfigField.API_KEY -> "Add an API key in Settings."
+        }
     }
 }

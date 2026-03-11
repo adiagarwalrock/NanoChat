@@ -30,26 +30,12 @@ class ChatRepository(
 
     fun observeSessions(): Flow<List<ChatSession>> =
         database.sessionDao().observeSessions().map { sessions ->
-            sessions.map { entity ->
-                ChatSession(
-                    id = entity.id,
-                    title = entity.title,
-                    updatedAt = entity.updatedAt,
-                    isPinned = false
-                )
-            }
+            sessions.map(ChatSessionEntity::toModel)
         }
 
     fun observeMessages(sessionId: Long): Flow<List<ChatMessage>> =
         database.messageDao().observeMessages(sessionId).map { messages ->
-            messages.map { entity ->
-                ChatMessage(
-                    id = entity.id,
-                    sessionId = entity.sessionId,
-                    role = entity.role,
-                    content = entity.content
-                )
-            }
+            messages.map(ChatMessageEntity::toModel)
         }
 
     suspend fun ensureSession(): Long {
@@ -57,11 +43,11 @@ class ChatRepository(
         return latest?.id ?: createSession()
     }
 
-    suspend fun createSession(title: String = "New chat"): Long {
+    suspend fun createSession(title: String = ChatDefaults.defaultSessionTitle): Long {
         val now = System.currentTimeMillis()
         return database.sessionDao().insert(
             ChatSessionEntity(
-                title = title,
+                title = ChatDefaults.normalizedSessionTitle(title),
                 createdAt = now,
                 updatedAt = now
             )
@@ -69,7 +55,7 @@ class ChatRepository(
     }
 
     suspend fun renameSession(sessionId: Long, title: String) {
-        val normalized = title.trim().ifBlank { "New chat" }
+        val normalized = ChatDefaults.normalizedSessionTitle(title)
         database.sessionDao().updateSession(sessionId, normalized, System.currentTimeMillis())
     }
 
@@ -135,15 +121,12 @@ class ChatRepository(
         clientFor(mode).availability(settings)
 
     suspend fun recentTurnsFor(mode: InferenceMode, sessionId: Long): List<ChatTurn> {
-        val limit = when (mode) {
-            InferenceMode.AICORE -> 10
-            InferenceMode.REMOTE -> 20
-        }
+        val limit = ChatDefaults.historyWindowFor(mode)
 
         return database.messageDao()
             .latestMessages(sessionId, limit)
             .asReversed()
-            .map { ChatTurn(role = it.role, content = it.content) }
+            .map(ChatMessageEntity::toTurn)
     }
 
     fun streamResponse(
@@ -165,8 +148,32 @@ class ChatRepository(
         InferenceClientSelector.select(mode, localInferenceClient, remoteInferenceClient)
 
     private suspend fun updateSessionTitleIfNeeded(sessionId: Long, content: String, now: Long) {
-        val trimmed = content.trim()
-        val title = if (trimmed.length <= 32) trimmed else trimmed.take(29) + "..."
-        database.sessionDao().updateSession(sessionId, title.ifBlank { "New chat" }, now)
+        database.sessionDao().updateSession(
+            sessionId,
+            ChatDefaults.normalizedSessionTitle(content),
+            now
+        )
     }
+}
+
+private fun ChatSessionEntity.toModel(): ChatSession {
+    return ChatSession(
+        id = id,
+        title = title,
+        updatedAt = updatedAt,
+        isPinned = false
+    )
+}
+
+private fun ChatMessageEntity.toModel(): ChatMessage {
+    return ChatMessage(
+        id = id,
+        sessionId = sessionId,
+        role = role,
+        content = content
+    )
+}
+
+private fun ChatMessageEntity.toTurn(): ChatTurn {
+    return ChatTurn(role = role, content = content)
 }

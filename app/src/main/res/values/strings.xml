@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">NanoChat</string>
+    <string name="copy_message">Copy message</string>
 </resources>

@@ -1,147 +1,148 @@
 AGENTS PLAYBOOK — NanoChat Android (Compose + Material 3 + AI backends)
-This file orients agentic coders working here. Kotlin official style; Material You expressive theming. No Cursor rules (.cursor/, .cursorrules) or Copilot instructions (.github/copilot-instructions.md) are present.
+For agentic coders in /mnt/d/NanoChat. Kotlin official style; Material You expressive 3 theming mandated. No Cursor rules (.cursor/, .cursorrules) or Copilot instructions (.github/copilot-instructions.md) currently present—add to this file if they appear.
 
-Quick Context
-- App: Android, single app module `app`, Compose-only UI, package `com.fcm.nanochat`.
-- SDK/Tooling: minSdk 31, target/compile 35, Java/Kotlin 17, Kotlin 2.1.10, Compose BOM 2024.12.01, AGP 9.1.0, KSP 2.1.10-1.0.29.
-- Tabs: Chat, Models (stub), Settings; bottom nav in `NanoChatApp`.
-- Backends: `InferenceMode` has `AICORE` (local Gemini Nano via reflection) and `REMOTE` (OpenAI-compatible SSE). Downloaded models deferred.
-- Persistence: Room (sessions/messages), DataStore (non-secret), EncryptedSharedPreferences (secrets).
-- Key files: `MainActivity`, `NanoChatApp`, `ChatViewModel`, `ChatRepository`, `InferenceClient*`, `AppPreferences`, `ui/theme`.
+Quick Context (from Plans)
+- App: Android single-module app `app`, Compose-only UI, package `com.fcm.nanochat`.
+- Tooling: Java/Kotlin 17, Kotlin 2.1.10, KSP 2.1.10-1.0.29, AGP 9.1.0, Compose BOM 2024.12.01, minSdk 31, target/compile 35.
+- Tabs: Chat, Models (stub for downloaded models), Settings; bottom nav in `NanoChatApp`.
+- Backends: `InferenceMode` supports `AICORE` (Gemini Nano via AICore reflection) and `REMOTE` (OpenAI-compatible SSE). Downloaded models planned; keep selectors extendable.
+- Persistence: Room for sessions/messages; DataStore for non-secret settings; EncryptedSharedPreferences for secrets.
+- Key files: MainActivity, NanoChatApp, ChatViewModel, SettingsViewModel, ChatRepository, InferenceClient*, PromptFormatter, StreamingMessageAssembler, AppPreferences, ui/theme.
 
-Build & Run
-- Use repo wrapper: `./gradlew assembleDebug` for dev builds.
-- Full check: `./gradlew build` (assemble + unit tests + lint tasks wired by AGP).
-- Install to device/emulator: `./gradlew installDebug`; requires API ≥31.
-- Lint only: `./gradlew :app:lint` or `./gradlew :app:lintDebug`.
-- Clean if IDE cache drifts: `./gradlew clean` (use sparingly).
-- When scripting outside repo root, add `-p /mnt/d/NanoChat` to Gradle commands.
-- Keep Gradle JVM at 17; do not bump without AGP validation.
-- Do not commit `local.properties`; it holds SDK paths.
-- If enabling configuration cache, verify Compose + KSP compatibility per build.
-
-Windows / PowerShell Notes
-- Use `.\\gradlew.bat assembleDebug` (cmd/PowerShell) instead of `./gradlew`; same for test/lint/install.
-- Single-test examples on Windows: `.\\gradlew.bat test --tests "com.fcm.nanochat.viewmodel.StreamingMessageAssemblerTest"` and `.\\gradlew.bat test --tests "com.fcm.nanochat.inference.PromptFormatterTest.historyWindow keeps the most recent turns"`.
-- Quote paths with spaces (e.g., `"C:\\Program Files\\Android\\Android Studio"`); avoid backslash-escaped quotes in PowerShell scripts.
-- Set env vars per shell: PowerShell `$Env:ANDROID_SDK_ROOT="C:\\Android\\sdk"`; cmd `set ANDROID_SDK_ROOT=C:\\Android\\sdk`.
-- Ensure `platform-tools` (adb) is on PATH for device installs; in PowerShell: `$Env:Path += ";$Env:ANDROID_SDK_ROOT\\platform-tools"`.
-- Git on Windows: enable LF normalization (`git config core.autocrlf input`) to avoid CRLF churn; keep Kotlin sources LF.
+Build & Run (best practices)
+- Use Gradle wrapper from repo root. Dev build: `./gradlew assembleDebug` (POSIX) or `.\\gradlew.bat assembleDebug` (cmd/PowerShell).
+- Full validation: `./gradlew build` (assemble + unit tests + lint wired by AGP).
+- Lint only: `./gradlew :app:lint` or `:app:lintDebug`.
+- Install on device/emulator: `./gradlew installDebug` (API 31+).
+- Clean only when cache drifts: `./gradlew clean` (rare).
+- Running from elsewhere: add `-p /mnt/d/NanoChat`.
+- Keep Gradle JVM at 17; avoid version bumps without AGP/KSP/Compose validation.
+- Do not commit `local.properties`; holds SDK/NDK paths.
+- If Gradle sync fails on KSP/artifact resolution, ensure `gradlePluginPortal()` exists and `android.disablekotlinsourcesets=false` in `gradle.properties` (see PRD history).
+- If enabling configuration cache, verify Compose + KSP compatibility per build; disable if diagnostics degrade.
 
 Device & Emulator
-- Target devices/emulators must be API 31+; prefer Pixel emulators for consistent behavior.
-- AICore/Gemini Nano requires enabling the on-device model in Developer Options on supported hardware; verify before testing AICORE mode.
-- Remote backend requires network; avoid using metered connections for streaming tests.
-- Keep animations enabled when validating Material You motion; disable only when debugging jank.
-- Ensure adb uses the same platform-tools as Android Studio to avoid version mismatch.
+- Target devices/emulators must be API 31+; prefer Pixel images for parity with AICore behavior.
+- AICore/Gemini Nano requires enabling in Developer Options; expect `BackendUnavailable` until enabled/downloaded.
+- Remote backend needs network; avoid metered connections when streaming.
+- Keep animations on when validating Material You motion; disable only when debugging jank.
+- Use same platform-tools across adb/Studio to avoid version mismatch.
+
+Windows / Shell Notes
+- Use `.\\gradlew.bat <task>` for cmd/PowerShell. Quote class names with double quotes.
+- Example single test (class): `.\\gradlew.bat test --tests "com.fcm.nanochat.viewmodel.StreamingMessageAssemblerTest"`.
+- Example single test (method): `.\\gradlew.bat test --tests "com.fcm.nanochat.inference.PromptFormatterTest.historyWindow keeps the most recent turns"`.
+- Env vars: PowerShell `$Env:ANDROID_SDK_ROOT="C:\\Android\\sdk"`; cmd `set ANDROID_SDK_ROOT=C:\\Android\\sdk`.
+- PATH add for adb (PowerShell): `$Env:Path += ";$Env:ANDROID_SDK_ROOT\\platform-tools"`.
+- Git CRLF: `git config core.autocrlf input`; keep sources LF to avoid churn.
+- Quote paths with spaces (e.g., "C:\\Program Files\\Android\\Android Studio").
 
 Tests
 - All unit tests: `./gradlew test`.
-- Single unit test class: `./gradlew test --tests "com.fcm.nanochat.viewmodel.StreamingMessageAssemblerTest"` (replace FQCN).
-- Single unit test method: `./gradlew test --tests "com.fcm.nanochat.inference.PromptFormatterTest.historyWindow keeps the most recent turns"` (quote display name).
-- Instrumentation (device/emulator): `./gradlew connectedAndroidTest` or `connectedDebugAndroidTest`; device API ≥31.
+- Single unit class: `./gradlew test --tests "com.fcm.nanochat.viewmodel.StreamingMessageAssemblerTest"` (replace FQCN).
+- Single unit method: `./gradlew test --tests "com.fcm.nanochat.inference.PromptFormatterTest.historyWindow keeps the most recent turns"` (quote display name).
+- Instrumentation: `./gradlew connectedAndroidTest` or `connectedDebugAndroidTest`; device/emulator API ≥31.
 - Single instrumentation class: `./gradlew connectedAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.fcm.nanochat.ExampleInstrumentedTest`.
-- Keep tests deterministic; mock network (OkHttp) and flows; avoid real network.
-- Milestone test focus: backend selection, history window limits, streaming assembly behavior, settings split, UI flows for mode switching and remote config validation.
+- Keep tests deterministic: mock network/flows; no live network. Target scenarios: backend selection, history window limits, streaming assembly, settings persistence split, UI mode switching/config validation.
 
 Lint & Formatting
-- Kotlin style: official (`kotlin.code.style=official`; `.idea/codeStyles/Project.xml`).
-- No ktlint/spotless configured; rely on IDE formatter/ktfmt defaults; do not add new formatters without alignment.
-- Imports: auto-sort, avoid wildcards, prefer explicit material icons.
-- XML: respect namespace ordering per Project.xml; keep attributes ordered and indented.
-- Avoid trailing commas unless IDE adds; wrap params/args per Kotlin style (~100–120 col soft limit).
-- Use `@Suppress` narrowly with explanation; remove dead/commented code.
+- Kotlin official style (`kotlin.code.style=official`; .idea/codeStyles/Project.xml). No ktlint/spotless—use IDE/ktfmt defaults only.
+- Imports: no wildcards; auto-sort; explicit Material icons.
+- Line width soft 100–120; avoid trailing commas unless IDE inserts.
+- XML: keep namespace ordering/indent per Project.xml; avoid reflowing attribute order without need.
+- Use `@Suppress` narrowly with justification; delete dead/commented code.
 
 Architecture Snapshot
-- DI: simple `AppContainer` built in `NanoChatApplication`; ViewModel factories created per screen.
-- Data: Room entities `ChatSessionEntity`, `ChatMessageEntity`; DAOs for sessions/messages; destructive migration for now (replace before release).
-- Preferences: `AppPreferences` combines DataStore (non-secret) + EncryptedSharedPreferences (secrets) into `SettingsSnapshot` Flow.
-- Domain: `InferenceClient` interface with `availability` + `streamChat`; `InferenceClientSelector`, `PromptFormatter`, `StreamingMessageAssembler` implement mode-specific behavior.
-- UI: Compose Material 3 components in `ui/`; state from `ChatScreenState` and `SettingsScreenState` flows.
+- DI: simple `AppContainer` in `NanoChatApplication`; ViewModel factories per screen.
+- Data: Room entities `ChatSessionEntity`, `ChatMessageEntity`; DAOs for session/message; currently `fallbackToDestructiveMigration()`—replace with migrations before release.
+- Preferences: `AppPreferences` merges DataStore (non-secret) + EncryptedSharedPreferences (secrets) into `SettingsSnapshot` Flow.
+- Domain: `InferenceClient` interface with availability + streamChat; selector + formatter + assembler implement backend semantics.
+- UI: Compose Material 3 screens in `ui/`; state from `ChatScreenState` and `SettingsScreenState` flows.
 
 Data & Persistence Rules
-- History window defaults: 10 turns for AICORE, 20 for REMOTE (`ChatRepository.recentTurnsFor`).
+- History window defaults: 10 turns AICORE, 20 turns REMOTE (`ChatRepository.recentTurnsFor`).
 - Session titles trimmed to 32 chars with ellipsis; reuse helper.
-- Use suspend DAO operations; never block main thread with DB calls.
-- Destructive migration is temporary—add migrations alongside schema changes and tests before any release.
-- Timestamps use `System.currentTimeMillis()`; keep consistent.
+- DAO calls are suspend; never block main thread.
+- Time source: `System.currentTimeMillis()` consistently.
+- Room currently uses destructive migration for development; add migrations + tests before any release.
+
+File Structure Snapshot (PRD)
+- `app/src/main/java/com/fcm/nanochat/` root.
+- Key packages: `data/` (AppPreferences, db entities/daos/database), `inference/` (InferenceClient + AICore/Remote), `models/` (catalog + download manager stubs), `viewmodel/`, `ui/screens/`.
+- Models tab is stub-only in milestone 1; downloaded-model management planned (MediaPipe tasks).
 
 Inference & Networking
-- Remote client: SSE-like stream via OkHttp to `baseUrl/chat/completions`; headers `Authorization: Bearer <apiKey>`, `Accept: text/event-stream`; `stream=true`; messages built from history + prompt.
-- Remote parsing: ignore empty chunks; stop on `[DONE]`; wrap errors in `InferenceException.RemoteFailure` with HTTP code context.
-- Local client: reflection bridge checks for `com.google.ai.edge.aicore` classes; returns `BackendUnavailable` when missing/not ready; uses `PromptFormatter.flattenForAicore` and final-only emission.
-- Availability: fail fast with `BackendAvailability.Unavailable` and user-readable messages; do not attempt send when unavailable.
-- Secrets must not enter logs or exceptions; redact tokens and base URLs in errors.
-- When adding new backends, extend `InferenceMode`, storage defaults, selector, UI chips, and tests together.
+- Remote client: OkHttp SSE to `baseUrl/chat/completions`; headers `Authorization: Bearer <apiKey>`, `Accept: text/event-stream`; `stream=true`; build messages from history + prompt (ChatML style from PRD).
+- Remote parsing: skip empty chunks; stop on `[DONE]`; wrap failures in `InferenceException.RemoteFailure` with HTTP code context; redact secrets.
+- Local client: reflection guard for `com.google.ai.edge.aicore`; return `BackendUnavailable` when missing/not ready; use `PromptFormatter.flattenForAicore`; emit final-only chunk.
+- Adding backends: extend `InferenceMode`, selector, storage defaults, UI chips, tests together; keep error surfaces consistent.
 
 State & ViewModels
-- State management: `StateFlow` + `stateIn` with `SharingStarted.WhileSubscribed(5_000)`; avoid mutable state exposure.
-- `ChatViewModel`: fields for draft, notice, isSending, selectedSessionId, lastUserPrompt; cancels prior send job before streaming; uses `StreamingMessageAssembler` to handle mode semantics (REMOTE incremental, AICORE final-only).
-- `SettingsViewModel`: updates baseUrl/modelName/apiKey/huggingFaceToken via AppPreferences; saves secrets to encrypted store.
-- UI collects via `collectAsStateWithLifecycle`; no direct Flow collects in composables beyond lifecycle-aware helpers.
-- Add new settings by extending `SettingsSnapshot`, DataStore keys, secure keys, ViewModel fields, and UI inputs atomically.
+- Expose StateFlow; use `stateIn` with `SharingStarted.WhileSubscribed(5_000)`; avoid mutable state leaks.
+- `ChatViewModel`: manages draft/notice/isSending/selectedSessionId/lastUserPrompt; cancels prior send job before streaming; uses assembler for REMOTE token patching and AICORE final-only.
+- `SettingsViewModel`: reads/writes baseUrl/modelName/apiKey/huggingFaceToken; secrets saved only to encrypted store.
+- UI collects via `collectAsStateWithLifecycle`; avoid raw Flow collects in composables.
+- Add new settings atomically across SettingsSnapshot, DataStore keys, secure keys, ViewModels, UI.
 
-Compose & UI (Material You Expressive)
-- Base theme in `ui/theme/Theme.kt`; dynamic color enabled on API 31+; darkTheme via system. Move palette toward dynamic/tonal (replace hardcoded purple when updating).
-- Use Material 3 components; avoid Material 2. Leverage `primaryContainer`/`secondaryContainer` for emphasis; surface variants for cards.
-- Edge-to-edge enabled (`enableEdgeToEdge()`); keep `safeDrawingPadding()` where needed.
-- Provide content descriptions for interactive icons (nav icons currently null—add on edits).
-- Keep layouts responsive: avoid fixed widths beyond the session pane; test portrait/landscape.
-- Prefer meaningful motion: `AnimatedContent`/`Crossfade` for tab/body transitions; avoid gratuitous micro-animations.
-- Typography: use `Typography` tokens; avoid ad-hoc fonts unless added centrally.
-- Avoid hard-coded colors; use theme tokens or dynamic color. Respect dark/light parity.
-- Compose patterns: hoist state; keep composables stateless where possible; use `rememberSaveable` for user text; use stable `LazyColumn` keys; keep modifiers ordered (layout → appearance → interaction).
+Compose & UI (Material You Expressive 3)
+- Theme: `ui/theme/Theme.kt`; dynamic color on API 31+; dark theme follows system; prefer tonal palettes and Material You expressive guidance.
+- Use Material 3 components; avoid Material 2. Emphasize `primaryContainer/secondaryContainer`, surface variants for cards; avoid hard-coded colors—use tokens/dynamic palettes.
+- Edge-to-edge enabled via `enableEdgeToEdge()`; keep `safeDrawingPadding()` where needed.
+- Typography: use defined `Typography`; avoid ad-hoc fonts unless added centrally.
+- Motion: prefer meaningful transitions (`AnimatedContent`, `Crossfade`) over micro-animations; keep system animations on when validating.
+- Accessibility: add content descriptions to interactive icons; maintain contrast; respect IME/insets; stable `LazyColumn` keys.
+- Layout: avoid fixed widths; test portrait/landscape; keep modifiers ordered (layout → appearance → interaction).
 
 Error Handling & Notices
-- Map exceptions to user-facing copy: Configuration/BackendUnavailable/Busy/RemoteFailure. Keep messages concise and actionable.
-- On send failure, update assistant placeholder with friendly fallback to avoid empty bubble; clear notice once shown.
-- Do not leak secrets in error text; redact tokens/URLs.
-- Provide retry affordance (already present via `Retry last`).
-- Logging: avoid verbose logs in commits; prefer `Log.d` with tags stripped of secrets when necessary for debugging, and remove before release builds.
+- Map exceptions to user-facing copy: Configuration, BackendUnavailable, Busy, RemoteFailure. Keep copy concise/actionable.
+- On send failure, patch assistant placeholder with friendly fallback; clear notice after display.
+- Redact secrets/URLs in errors and logs. Prefer `Log.d` with safe tags; remove noisy logs before release.
+- Provide retry affordance (Retry last) and avoid empty bubbles.
 
 Strings & Localization
-- Keep user-facing strings in `res/values/strings.xml`; avoid hardcoding in composables.
-- Keep copy concise and actionable; prefer sentence case and plain English.
-- Avoid leaking secrets or URLs in strings.
+- All user-visible strings in `res/values/strings.xml`; avoid hardcoding in composables.
+- Keep wording concise, sentence case, plain English; no secrets/URLs.
 
 Types, Naming, Imports
-- Package remains `com.fcm.nanochat`; do not rename.
-- Prefer `data class` for models, `sealed interface/class` for closed hierarchies (e.g., `BackendAvailability`).
-- Explicit public types; allow inference for locals.
-- Naming: PascalCase classes/enums; camelCase functions/properties; UPPER_SNAKE for consts.
-- Imports: no wildcards; logical grouping (androidx, compose, kotlin, third-party, project).
-- Avoid `!!`; use safe calls/early returns; handle nullability via Flow defaults rather than nullable state.
+- Package stays `com.fcm.nanochat` (do not rename).
+- Prefer `data class` for models; `sealed interface/class` for closed sets (e.g., BackendAvailability); explicit public types, inferred locals.
+- Naming: PascalCase types/enums; camelCase functions/properties; UPPER_SNAKE for consts.
+- Avoid `!!`; use safe calls + early returns; prefer Flow defaults over nullable state.
 
 Coroutines & Flow
-- Use `viewModelScope`; cancel long-running jobs on new actions (send). Avoid `GlobalScope`.
-- Keep Flows cold; expose `StateFlow` to UI; avoid `collect` inside `combine` unless necessary.
-- For callback bridges, use `callbackFlow` + `awaitClose` (as in Remote client); close with meaningful exceptions.
-- If adding blocking IO, switch to Dispatchers.IO explicitly; never block main.
-- Tests with coroutines should prefer `runTest` and test dispatchers when async paths are added.
+- Use `viewModelScope`; cancel long-running jobs on new sends; avoid `GlobalScope`.
+- Keep Flows cold; expose `StateFlow`; avoid nesting `collect` inside `combine` unless necessary.
+- Callback bridges via `callbackFlow` + `awaitClose`; close with meaningful exceptions.
+- For blocking IO, switch to Dispatchers.IO explicitly; never block main.
+- Tests: use `runTest` and test dispatchers for coroutine code.
 
 Security
-- Secrets (apiKey, huggingFaceToken) live only in `EncryptedSharedPreferences`; never store in DataStore or Room.
-- Never log or assert on secret values; do not serialize them in crash reports.
-- Keep network to HTTPS; validate baseUrl input; trim trailing slashes before building paths.
+- Secrets (apiKey, huggingFaceToken) only in EncryptedSharedPreferences; never in DataStore or Room.
+- Never log or assert secret values; avoid placing secrets in crash reports/strings.
+- Use HTTPS for remote; validate baseUrl; trim trailing slashes before building requests.
 - Do not commit keystores, service accounts, or `local.properties`.
 
 Performance & UX
-- Remote streaming updates incrementally; AICORE emits final only—preserve assembler semantics when editing.
-- Message list uses `LazyColumn` with stable keys; keep cells lightweight; avoid heavy recomposition inside items.
-- Composer should remain responsive; avoid blocking send while streaming beyond current guard.
-- Consider accessibility: readable contrast, focus order, snackbar semantics. Avoid rapid toasts/snackbars.
+- Respect assembler semantics: REMOTE streams tokens; AICORE final only. Do not block UI thread.
+- `LazyColumn` with stable keys; keep row composables light to minimize recomposition.
+- Maintain responsiveness while streaming; avoid heavy work in composables.
+- Test both orientations; consider focus order and snackbar semantics; avoid rapid toasts.
 - Respect IME and insets; keep input areas above nav bars using `safeDrawingPadding()`.
-- Test both orientations where layout changes (session pane width, list height).
+- Prefer snackbar retry over toasts for actionable errors; avoid noisy vibration/haptics.
+
+Model Downloads (future)
+- `Downloaded` inference mode and MediaPipe `tasks-genai` are planned; keep storage/backends extensible.
+- Model catalog lives under `models/catalog`; manager stubs handle download/move/delete; no partial impls in milestone 1.
+- When enabling downloads, store HF token securely; copy rather than rename when moving across storage.
 
 Dependency Guidance
-- Versions pinned inline in `app/build.gradle.kts`; prefer BOM-managed artifacts for Compose. When upgrading, revalidate AICore reflection and Mediapipe placeholders.
-- OkHttp 4.12.0; keep callbacks on background (already). If adding Retrofit/Ktor, ensure coexistence with existing client or replace intentionally.
+- Versions pinned in `app/build.gradle.kts`; prefer Compose BOM. Revalidate AICore reflection + Mediapipe when upgrading.
+- OkHttp 4.12.0 present; if adding Retrofit/Ktor, ensure coexistence or intentionally replace; keep callbacks off main.
 
 Contribution & Hygiene
-- Run `./gradlew assembleDebug test lint` before publishing changes.
-- Keep AGENTS.md updated when adding backends, tabs, migrations, or theming shifts; target ~150 lines.
-- Avoid adding new top-level modules unless required; align with milestone scope (Models tab stays stub for now).
-- No commits requested automatically; stage/commit only when asked by user.
-- Respect existing user changes; do not revert unrelated edits. Avoid destructive git commands.
-- Use small, reviewable PRs; describe what and why (focus on user-facing impact and backend behavior).
-- If adding migrations/version bumps, update tests and document in AGENTS.md.
+- Before publish: `./gradlew assembleDebug test lint` (or Windows wrapper). Avoid configuration cache unless verified.
+- Keep AGENTS.md updated when backends, tabs, migrations, or theming change; target ~150 lines.
+- Avoid new top-level modules unless necessary; Models tab currently stub by design per PLAN_1.
+- Respect user changes; no destructive git commands. Only stage/commit when explicitly asked.
+- Use small, reviewable PRs with clear what/why, focusing on user-facing impact and backend behavior.
+- If adding migrations/version bumps, add tests and document here.

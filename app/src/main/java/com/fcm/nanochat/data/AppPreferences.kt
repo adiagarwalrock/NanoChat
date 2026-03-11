@@ -30,8 +30,7 @@ class AppPreferences(context: Context) {
     val settings: Flow<SettingsSnapshot> =
         appContext.dataStore.data.map { preferences ->
             SettingsSnapshot(
-                inferenceMode = preferences[Keys.inferenceMode]?.let(InferenceMode::valueOf)
-                    ?: InferenceMode.REMOTE,
+                inferenceMode = parseInferenceMode(preferences[Keys.inferenceMode]),
                 baseUrl = preferences[Keys.baseUrl].orEmpty(),
                 modelName = preferences[Keys.modelName].orEmpty(),
                 apiKey = secretStore.getString(SecretKeys.apiKey, "").orEmpty(),
@@ -43,7 +42,7 @@ class AppPreferences(context: Context) {
         appContext.dataStore.data.map { preferences ->
             preferences[Keys.pinnedSessionIds]
                 .orEmpty()
-                .mapNotNull { value -> value.toLongOrNull() }
+                .mapNotNull(String::toLongOrNull)
                 .toSet()
         }
 
@@ -52,7 +51,7 @@ class AppPreferences(context: Context) {
     }
 
     suspend fun updateBaseUrl(value: String) {
-        appContext.dataStore.edit { it[Keys.baseUrl] = value.trim() }
+        appContext.dataStore.edit { it[Keys.baseUrl] = normalizeBaseUrl(value) }
     }
 
     suspend fun updateModelName(value: String) {
@@ -76,6 +75,17 @@ class AppPreferences(context: Context) {
         }
     }
 
+    private fun parseInferenceMode(raw: String?): InferenceMode {
+        return raw?.let {
+            runCatching { InferenceMode.valueOf(it) }
+                .getOrDefault(InferenceMode.REMOTE)
+        } ?: InferenceMode.REMOTE
+    }
+
+    private fun normalizeBaseUrl(raw: String): String {
+        return raw.trim().trimEnd('/')
+    }
+
     private object Keys {
         val inferenceMode: Preferences.Key<String> = stringPreferencesKey("inference_mode")
         val baseUrl: Preferences.Key<String> = stringPreferencesKey("base_url")
@@ -84,8 +94,8 @@ class AppPreferences(context: Context) {
     }
 
     private object SecretKeys {
-        const val apiKey = "api_key"
-        const val huggingFaceToken = "hugging_face_token"
+        const val apiKey: String = "api_key"
+        const val huggingFaceToken: String = "hugging_face_token"
     }
 }
 

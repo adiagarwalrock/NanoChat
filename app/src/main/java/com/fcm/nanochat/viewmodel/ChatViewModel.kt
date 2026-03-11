@@ -16,9 +16,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -41,66 +42,69 @@ class ChatViewModel(
     private val pinnedSessionIds = repository.observePinnedSessionIds()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
-    private val messages = selectedSessionId.flatMapLatest { sessionId ->
+    private val activeSessionId = combine(selectedSessionId, sessions) { selected, sessionList ->
+        if (selected != null && sessionList.any { it.id == selected }) {
+            selected
+        } else {
+            sessionList.firstOrNull()?.id
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private val messages = activeSessionId.flatMapLatest { sessionId ->
         if (sessionId == null) {
-            kotlinx.coroutines.flow.flowOf(emptyList())
+            flowOf(emptyList())
         } else {
             repository.observeMessages(sessionId)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val uiState: StateFlow<ChatScreenState> =
-        combine(
-            sessions,
-            pinnedSessionIds,
-            messages,
-            draft,
-            settings,
-            isSending,
-            notice,
-            selectedSessionId
-        ) { values ->
-            val sessionsValue = values[0] as List<ChatSession>
-            val pinnedIds = values[1] as Set<Long>
-            val messagesValue = values[2] as List<ChatMessage>
-            val draftValue = values[3] as String
-            val settingsValue = values[4] as SettingsSnapshot
-            val isSendingValue = values[5] as Boolean
-            val noticeValue = values[6] as String?
-            val selectedSessionIdValue = values[7] as Long?
+    private val sessionState = combine(
+        sessions,
+        pinnedSessionIds,
+        messages,
+        activeSessionId,
+        isSending
+    ) { sessionList, pinnedIds, messageList, selectedId, sending ->
+        val orderedSessions = sessionList
+            .map { session -> session.copy(isPinned = pinnedIds.contains(session.id)) }
+            .sortedWith(compareByDescending<ChatSession> { it.isPinned }.thenByDescending { it.updatedAt })
 
-            val orderedSessions = sessionsValue
-                .map { session -> session.copy(isPinned = pinnedIds.contains(session.id)) }
-                .sortedWith(compareByDescending<ChatSession> { it.isPinned }.thenByDescending { it.updatedAt })
-
-            val activeSessionId =
-                if (selectedSessionIdValue != null && orderedSessions.any { it.id == selectedSessionIdValue }) {
-                    selectedSessionIdValue
-                } else {
-                    orderedSessions.firstOrNull()?.id
-                }
-
-            ChatScreenState(
-                sessions = orderedSessions,
-                selectedSessionId = activeSessionId,
-                messages = messagesValue.map { message ->
-                    message.copy(
-                        isStreaming = isSendingValue &&
-                            message.role == ChatRole.ASSISTANT &&
-                            message.id == messagesValue.lastOrNull()?.id
-                    )
-                },
-                draft = draftValue,
-                inferenceMode = settingsValue.inferenceMode,
-                isSending = isSendingValue,
-                notice = noticeValue
+        val uiMessages = messageList.map { message ->
+            message.copy(
+                isStreaming = sending &&
+                    message.role == ChatRole.ASSISTANT &&
+                    message.id == messageList.lastOrNull()?.id
             )
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatScreenState())
+        }
+
+        SessionUiState(
+            sessions = orderedSessions,
+            selectedSessionId = selectedId,
+            messages = uiMessages
+        )
+    }
+
+    val uiState: StateFlow<ChatScreenState> = combine(
+        sessionState,
+        draft,
+        settings,
+        isSending,
+        notice
+    ) { sessionUi, draftValue, settingsValue, isSendingValue, noticeValue ->
+        ChatScreenState(
+            sessions = sessionUi.sessions,
+            selectedSessionId = sessionUi.selectedSessionId,
+            messages = sessionUi.messages,
+            draft = draftValue,
+            inferenceMode = settingsValue.inferenceMode,
+            isSending = isSendingValue,
+            notice = noticeValue
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatScreenState())
 
     init {
         viewModelScope.launch {
-            val sessionId = repository.ensureSession()
-            selectedSessionId.value = sessionId
+            selectedSessionId.value = repository.ensureSession()
         }
     }
 
@@ -110,8 +114,7 @@ class ChatViewModel(
 
     fun createSession() {
         viewModelScope.launch {
-            val sessionId = repository.createSession()
-            selectedSessionId.value = sessionId
+            selectedSessionId.value = repository.createSession()
             draft.value = ""
             notice.value = null
         }
@@ -129,10 +132,9 @@ class ChatViewModel(
 
     fun deleteSession(sessionId: Long) {
         viewModelScope.launch {
-            val wasSelected = selectedSessionId.value == sessionId
+            val wasSelected = activeSessionId.value == sessionId
             repository.deleteSession(sessionId)
             if (wasSelected) {
-                selectedSessionId.value = null
                 selectedSessionId.value = repository.ensureSession()
             }
         }
@@ -147,11 +149,9 @@ class ChatViewModel(
     fun setInferenceMode(mode: InferenceMode) {
         viewModelScope.launch {
             repository.setInferenceMode(mode)
-            val availability = repository.backendAvailability(mode, settings.value)
-            if (availability is BackendAvailability.Unavailable) {
-                notice.value = availability.message
-            } else {
-                notice.value = null
+            when (val availability = repository.backendAvailability(mode, settings.value)) {
+                is BackendAvailability.Unavailable -> notice.value = availability.message
+                BackendAvailability.Available -> notice.value = null
             }
         }
     }
@@ -168,7 +168,7 @@ class ChatViewModel(
 
     fun sendMessage() {
         val prompt = draft.value.trim()
-        val sessionId = selectedSessionId.value ?: return
+        val sessionId = activeSessionId.value ?: return
         if (prompt.isBlank() || isSending.value) return
 
         sendJob?.cancel()
@@ -203,21 +203,31 @@ class ChatViewModel(
                     repository.updateAssistantMessage(assistantMessageId, assembler.current())
                 }
             }.onFailure { error ->
-                val message = when (error) {
-                    is InferenceException.Configuration -> error.message
-                    is InferenceException.BackendUnavailable -> error.message
-                    is InferenceException.Busy -> "AICore is busy or quota-limited. Wait a moment and retry."
-                    is InferenceException.RemoteFailure -> error.message
-                    else -> error.message ?: "Inference failed."
-                }
+                val message = userFacingError(error).ifBlank { "Unable to complete the request." }
                 notice.value = message
-                repository.updateAssistantMessage(assistantMessageId, "Unable to complete the request.")
+                repository.updateAssistantMessage(assistantMessageId, message)
             }
 
             isSending.value = false
         }
     }
+
+    private fun userFacingError(error: Throwable): String {
+        return when (error) {
+            is InferenceException.Configuration -> error.message.orEmpty()
+            is InferenceException.BackendUnavailable -> error.message.orEmpty()
+            is InferenceException.Busy -> "AICore is busy or quota-limited. Wait a moment and retry."
+            is InferenceException.RemoteFailure -> error.message.orEmpty()
+            else -> error.message ?: "Inference failed."
+        }
+    }
 }
+
+private data class SessionUiState(
+    val sessions: List<ChatSession>,
+    val selectedSessionId: Long?,
+    val messages: List<ChatMessage>
+)
 
 class ChatViewModelFactory(
     private val repository: ChatRepository

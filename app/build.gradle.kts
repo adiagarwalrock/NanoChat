@@ -75,8 +75,16 @@ dependencies {
     // JSON
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
+    // Markdown + LaTeX rendering in message bubbles
+    implementation("io.noties.markwon:core:4.6.2")
+    implementation("io.noties.markwon:inline-parser:4.6.2")
+    implementation("io.noties.markwon:ext-latex:4.6.2")
+
     // AICore — Gemini Nano on-device
     implementation("com.google.ai.edge.aicore:aicore:0.0.1-exp01")
+
+    // ML Kit Prompt API on top of AICore
+    implementation("com.google.mlkit:genai-prompt:1.0.0-beta1")
 
     // MediaPipe LLM Inference — downloaded models
     implementation("com.google.mediapipe:tasks-genai:0.10.22")
@@ -91,4 +99,3 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 }
-
