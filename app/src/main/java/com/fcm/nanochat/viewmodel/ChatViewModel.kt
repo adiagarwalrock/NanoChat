@@ -3,11 +3,15 @@ package com.fcm.nanochat.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.fcm.nanochat.data.SettingsSnapshot
 import com.fcm.nanochat.data.repository.ChatRepository
 import com.fcm.nanochat.inference.BackendAvailability
 import com.fcm.nanochat.inference.InferenceException
 import com.fcm.nanochat.inference.InferenceMode
+import com.fcm.nanochat.model.ChatMessage
+import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatScreenState
+import com.fcm.nanochat.model.ChatSession
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -29,10 +33,13 @@ class ChatViewModel(
     private var lastUserPrompt: String? = null
 
     private val settings = repository.observeSettings()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), com.fcm.nanochat.data.SettingsSnapshot())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsSnapshot())
 
     private val sessions = repository.observeSessions()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val pinnedSessionIds = repository.observePinnedSessionIds()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     private val messages = selectedSessionId.flatMapLatest { sessionId ->
         if (sessionId == null) {
@@ -45,6 +52,7 @@ class ChatViewModel(
     val uiState: StateFlow<ChatScreenState> =
         combine(
             sessions,
+            pinnedSessionIds,
             messages,
             draft,
             settings,
@@ -52,21 +60,33 @@ class ChatViewModel(
             notice,
             selectedSessionId
         ) { values ->
-            val sessionsValue = values[0] as List<com.fcm.nanochat.model.ChatSession>
-            val messagesValue = values[1] as List<com.fcm.nanochat.model.ChatMessage>
-            val draftValue = values[2] as String
-            val settingsValue = values[3] as com.fcm.nanochat.data.SettingsSnapshot
-            val isSendingValue = values[4] as Boolean
-            val noticeValue = values[5] as String?
-            val selectedSessionIdValue = values[6] as Long?
+            val sessionsValue = values[0] as List<ChatSession>
+            val pinnedIds = values[1] as Set<Long>
+            val messagesValue = values[2] as List<ChatMessage>
+            val draftValue = values[3] as String
+            val settingsValue = values[4] as SettingsSnapshot
+            val isSendingValue = values[5] as Boolean
+            val noticeValue = values[6] as String?
+            val selectedSessionIdValue = values[7] as Long?
+
+            val orderedSessions = sessionsValue
+                .map { session -> session.copy(isPinned = pinnedIds.contains(session.id)) }
+                .sortedWith(compareByDescending<ChatSession> { it.isPinned }.thenByDescending { it.updatedAt })
+
+            val activeSessionId =
+                if (selectedSessionIdValue != null && orderedSessions.any { it.id == selectedSessionIdValue }) {
+                    selectedSessionIdValue
+                } else {
+                    orderedSessions.firstOrNull()?.id
+                }
 
             ChatScreenState(
-                sessions = sessionsValue,
-                selectedSessionId = selectedSessionIdValue ?: sessionsValue.firstOrNull()?.id,
+                sessions = orderedSessions,
+                selectedSessionId = activeSessionId,
                 messages = messagesValue.map { message ->
                     message.copy(
                         isStreaming = isSendingValue &&
-                            message.role == com.fcm.nanochat.model.ChatRole.ASSISTANT &&
+                            message.role == ChatRole.ASSISTANT &&
                             message.id == messagesValue.lastOrNull()?.id
                     )
                 },
@@ -99,6 +119,29 @@ class ChatViewModel(
 
     fun selectSession(sessionId: Long) {
         selectedSessionId.value = sessionId
+    }
+
+    fun renameSession(sessionId: Long, title: String) {
+        viewModelScope.launch {
+            repository.renameSession(sessionId, title)
+        }
+    }
+
+    fun deleteSession(sessionId: Long) {
+        viewModelScope.launch {
+            val wasSelected = selectedSessionId.value == sessionId
+            repository.deleteSession(sessionId)
+            if (wasSelected) {
+                selectedSessionId.value = null
+                selectedSessionId.value = repository.ensureSession()
+            }
+        }
+    }
+
+    fun setSessionPinned(sessionId: Long, pinned: Boolean) {
+        viewModelScope.launch {
+            repository.setSessionPinned(sessionId, pinned)
+        }
     }
 
     fun setInferenceMode(mode: InferenceMode) {
@@ -187,4 +230,3 @@ class ChatViewModelFactory(
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }
 }
-

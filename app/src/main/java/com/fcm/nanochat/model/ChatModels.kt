@@ -18,7 +18,8 @@ data class ChatMessage(
 data class ChatSession(
     val id: Long,
     val title: String,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val isPinned: Boolean = false
 )
 
 data class ChatScreenState(
@@ -38,9 +39,3 @@ data class SettingsScreenState(
     val huggingFaceToken: String = "",
     val saveNotice: String? = null
 )
-
-enum class AppTab {
-    CHAT,
-    MODELS,
-    SETTINGS
-}

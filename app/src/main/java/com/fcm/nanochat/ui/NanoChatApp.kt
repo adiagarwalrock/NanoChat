@@ -24,11 +24,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -61,14 +66,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fcm.nanochat.inference.InferenceMode
 import com.fcm.nanochat.model.ChatMessage
 import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatScreenState
+import com.fcm.nanochat.model.ChatSession
 import com.fcm.nanochat.model.SettingsScreenState
 import kotlinx.coroutines.launch
 
@@ -83,6 +93,9 @@ fun NanoChatApp(
     onCreateSession: () -> Unit = {},
     onRetryLast: () -> Unit = {},
     onInferenceModeChange: (InferenceMode) -> Unit = {},
+    onRenameSession: (Long, String) -> Unit = { _, _ -> },
+    onDeleteSession: (Long) -> Unit = {},
+    onPinSession: (Long, Boolean) -> Unit = { _, _ -> },
     onBaseUrlChange: (String) -> Unit = {},
     onModelNameChange: (String) -> Unit = {},
     onApiKeyChange: (String) -> Unit = {},
@@ -94,6 +107,8 @@ fun NanoChatApp(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var renameTargetId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var renameDraft by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(chatState.notice) {
         val notice = chatState.notice ?: return@LaunchedEffect
@@ -117,6 +132,12 @@ fun NanoChatApp(
                     onSelectSession = { id ->
                         onSelectSession(id)
                         scope.launch { drawerState.close() }
+                    },
+                    onPinSession = onPinSession,
+                    onDeleteSession = onDeleteSession,
+                    onRenameSession = { id, currentTitle ->
+                        renameTargetId = id
+                        renameDraft = currentTitle
                     }
                 )
             }
@@ -145,8 +166,7 @@ fun NanoChatApp(
             ModalBottomSheet(
                 onDismissRequest = { showSettings = false },
                 containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-
+                contentColor = MaterialTheme.colorScheme.onSurface
             ) {
                 SettingsTab(
                     state = settingsState,
@@ -161,6 +181,38 @@ fun NanoChatApp(
                 )
             }
         }
+    }
+
+    if (renameTargetId != null) {
+        AlertDialog(
+            onDismissRequest = { renameTargetId = null },
+            confirmButton = {
+                Button(
+                    enabled = renameDraft.trim().isNotEmpty(),
+                    onClick = {
+                        onRenameSession(renameTargetId!!, renameDraft)
+                        renameTargetId = null
+                    }
+                ) {
+                    Text("Rename")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTargetId = null }) {
+                    Text("Cancel")
+                }
+            },
+            title = { Text("Rename chat") },
+            text = {
+                OutlinedTextField(
+                    value = renameDraft,
+                    onValueChange = { renameDraft = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Chat title") }
+                )
+            }
+        )
     }
 }
 
@@ -335,8 +387,14 @@ private fun EmptyConversation(modifier: Modifier = Modifier) {
 private fun SessionsDrawer(
     state: ChatScreenState,
     onCreateSession: () -> Unit,
-    onSelectSession: (Long) -> Unit
+    onSelectSession: (Long) -> Unit,
+    onPinSession: (Long, Boolean) -> Unit,
+    onDeleteSession: (Long) -> Unit,
+    onRenameSession: (Long, String) -> Unit
 ) {
+    val pinned = state.sessions.filter { it.isPinned }
+    val recents = state.sessions.filterNot { it.isPinned }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -354,41 +412,100 @@ private fun SessionsDrawer(
             Spacer(modifier = Modifier.width(8.dp))
             Text("New chat")
         }
+
+        if (pinned.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Pinned",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            pinned.forEach { session ->
+                SessionRow(
+                    session = session,
+                    isSelected = state.selectedSessionId == session.id,
+                    onSelectSession = onSelectSession,
+                    onPinSession = onPinSession,
+                    onDeleteSession = onDeleteSession,
+                    onRenameSession = onRenameSession
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(14.dp))
         Text(
             text = "Recents",
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        if (state.sessions.isEmpty()) {
+        if (recents.isEmpty()) {
             Text(
-                text = "No sessions yet.",
+                text = "No recent sessions.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(state.sessions, key = { it.id }) { session ->
-                    val selected = state.selectedSessionId == session.id
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(
-                                if (selected) MaterialTheme.colorScheme.surfaceContainerHighest
-                                else MaterialTheme.colorScheme.surface
-                            )
-                            .clickable { onSelectSession(session.id) }
-                            .padding(horizontal = 12.dp, vertical = 10.dp)
-                    ) {
-                        Text(
-                            text = session.title,
-                            maxLines = 1,
-                            color = if (selected) MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(recents, key = { it.id }) { session ->
+                    SessionRow(
+                        session = session,
+                        isSelected = state.selectedSessionId == session.id,
+                        onSelectSession = onSelectSession,
+                        onPinSession = onPinSession,
+                        onDeleteSession = onDeleteSession,
+                        onRenameSession = onRenameSession
+                    )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SessionRow(
+    session: ChatSession,
+    isSelected: Boolean,
+    onSelectSession: (Long) -> Unit,
+    onPinSession: (Long, Boolean) -> Unit,
+    onDeleteSession: (Long) -> Unit,
+    onRenameSession: (Long, String) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                if (isSelected) MaterialTheme.colorScheme.surfaceContainerHighest
+                else MaterialTheme.colorScheme.surface
+            )
+            .clickable { onSelectSession(session.id) }
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = session.title,
+            maxLines = 1,
+            modifier = Modifier.weight(1f),
+            color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { onPinSession(session.id, !session.isPinned) }) {
+                Icon(
+                    imageVector = Icons.Default.PushPin,
+                    contentDescription = "Pin",
+                    tint = if (session.isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.alpha(if (session.isPinned) 1f else 0.6f)
+                )
+            }
+            IconButton(onClick = { onRenameSession(session.id, session.title) }) {
+                Icon(Icons.Default.Edit, contentDescription = "Rename")
+            }
+            IconButton(onClick = { onDeleteSession(session.id) }) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete")
             }
         }
     }
@@ -576,6 +693,7 @@ private fun SettingsTab(
         if (state.modelName.isBlank()) add("Model name")
         if (state.apiKey.isBlank()) add("API key")
     }
+    val providerStatus = inferProviderStatus(state.baseUrl)
 
     LazyColumn(
         modifier = modifier
@@ -587,16 +705,21 @@ private fun SettingsTab(
             Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         }
         item {
-            Text(
-                text = "Gemini OpenAI-compatible base URL: https://generativelanguage.googleapis.com/v1beta/openai",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text("Provider Status", style = MaterialTheme.typography.labelLarge)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(providerStatus)
+                }
+            }
         }
         item {
             OutlinedTextField(
                 value = state.baseUrl,
                 onValueChange = onBaseUrlChange,
                 modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) },
                 label = { Text("Base URL") },
                 supportingText = { Text("Use base path; app auto-appends /chat/completions") }
             )
@@ -606,6 +729,7 @@ private fun SettingsTab(
                 value = state.modelName,
                 onValueChange = onModelNameChange,
                 modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
                 label = { Text("Model name") }
             )
         }
@@ -614,7 +738,10 @@ private fun SettingsTab(
                 value = state.apiKey,
                 onValueChange = onApiKeyChange,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("API key") }
+                label = { Text("API key") },
+                singleLine = true,
+                visualTransformation = LastFiveVisibleApiKeyTransformation(),
+                supportingText = { Text("Only the last 5 characters are visible") }
             )
         }
         item {
@@ -622,7 +749,8 @@ private fun SettingsTab(
                 value = state.huggingFaceToken,
                 onValueChange = onHuggingFaceTokenChange,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("HF token placeholder") }
+                singleLine = true,
+                label = { Text("HF token") }
             )
         }
         item {
@@ -652,6 +780,29 @@ private fun SettingsTab(
     }
 }
 
+private fun inferProviderStatus(baseUrl: String): String {
+    val normalized = baseUrl.lowercase()
+    return when {
+        normalized.isBlank() -> "No endpoint configured"
+        "generativelanguage.googleapis.com" in normalized -> "Using Gemini via GenAI"
+        "aiplatform.googleapis.com" in normalized || "vertexai" in normalized -> "Using Gemini via VertexAI"
+        "api.openai.com" in normalized -> "Using OpenAI"
+        "anthropic.com" in normalized -> "Using Anthropic-compatible endpoint"
+        else -> "Using OpenAI-compatible endpoint"
+    }
+}
+
+private class LastFiveVisibleApiKeyTransformation : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val raw = text.text
+        if (raw.length <= 5) {
+            return TransformedText(text, OffsetMapping.Identity)
+        }
+        val masked = "•".repeat(raw.length - 5) + raw.takeLast(5)
+        return TransformedText(AnnotatedString(masked), OffsetMapping.Identity)
+    }
+}
+
 @Composable
 private fun StatusCard(title: String, body: String) {
     Card {
@@ -662,6 +813,3 @@ private fun StatusCard(title: String, body: String) {
         }
     }
 }
-
-
-

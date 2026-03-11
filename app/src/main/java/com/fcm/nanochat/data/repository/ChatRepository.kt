@@ -26,13 +26,16 @@ class ChatRepository(
 ) {
     fun observeSettings(): Flow<SettingsSnapshot> = preferences.settings
 
+    fun observePinnedSessionIds(): Flow<Set<Long>> = preferences.pinnedSessionIds
+
     fun observeSessions(): Flow<List<ChatSession>> =
         database.sessionDao().observeSessions().map { sessions ->
             sessions.map { entity ->
                 ChatSession(
                     id = entity.id,
                     title = entity.title,
-                    updatedAt = entity.updatedAt
+                    updatedAt = entity.updatedAt,
+                    isPinned = false
                 )
             }
         }
@@ -63,6 +66,20 @@ class ChatRepository(
                 updatedAt = now
             )
         )
+    }
+
+    suspend fun renameSession(sessionId: Long, title: String) {
+        val normalized = title.trim().ifBlank { "New chat" }
+        database.sessionDao().updateSession(sessionId, normalized, System.currentTimeMillis())
+    }
+
+    suspend fun deleteSession(sessionId: Long) {
+        database.sessionDao().deleteSession(sessionId)
+        preferences.setSessionPinned(sessionId, false)
+    }
+
+    suspend fun setSessionPinned(sessionId: Long, pinned: Boolean) {
+        preferences.setSessionPinned(sessionId, pinned)
     }
 
     suspend fun saveUserMessage(sessionId: Long, content: String): Long {

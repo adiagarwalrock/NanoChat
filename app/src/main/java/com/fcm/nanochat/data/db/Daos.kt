@@ -18,6 +18,9 @@ interface ChatSessionDao {
     @Query("UPDATE chat_sessions SET title = :title, updatedAt = :updatedAt WHERE id = :sessionId")
     suspend fun updateSession(sessionId: Long, title: String, updatedAt: Long): Int
 
+    @Query("DELETE FROM chat_sessions WHERE id = :sessionId")
+    suspend fun deleteSession(sessionId: Long): Int
+
     @Query("SELECT * FROM chat_sessions ORDER BY updatedAt DESC LIMIT 1")
     suspend fun latestSession(): ChatSessionEntity?
 }
@@ -40,4 +43,3 @@ interface ChatMessageDao {
     @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY createdAt DESC, id DESC LIMIT :limit")
     suspend fun latestMessages(sessionId: Long, limit: Int): List<ChatMessageEntity>
 }
-

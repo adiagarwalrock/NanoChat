@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
@@ -38,6 +39,14 @@ class AppPreferences(context: Context) {
             )
         }
 
+    val pinnedSessionIds: Flow<Set<Long>> =
+        appContext.dataStore.data.map { preferences ->
+            preferences[Keys.pinnedSessionIds]
+                .orEmpty()
+                .mapNotNull { value -> value.toLongOrNull() }
+                .toSet()
+        }
+
     suspend fun updateInferenceMode(mode: InferenceMode) {
         appContext.dataStore.edit { it[Keys.inferenceMode] = mode.name }
     }
@@ -58,10 +67,20 @@ class AppPreferences(context: Context) {
         secretStore.edit().putString(SecretKeys.huggingFaceToken, value.trim()).apply()
     }
 
+    suspend fun setSessionPinned(sessionId: Long, pinned: Boolean) {
+        appContext.dataStore.edit { preferences ->
+            val current = preferences[Keys.pinnedSessionIds].orEmpty().toMutableSet()
+            val encoded = sessionId.toString()
+            if (pinned) current.add(encoded) else current.remove(encoded)
+            preferences[Keys.pinnedSessionIds] = current
+        }
+    }
+
     private object Keys {
         val inferenceMode: Preferences.Key<String> = stringPreferencesKey("inference_mode")
         val baseUrl: Preferences.Key<String> = stringPreferencesKey("base_url")
         val modelName: Preferences.Key<String> = stringPreferencesKey("model_name")
+        val pinnedSessionIds: Preferences.Key<Set<String>> = stringSetPreferencesKey("pinned_session_ids")
     }
 
     private object SecretKeys {
