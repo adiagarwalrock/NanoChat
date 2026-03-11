@@ -2,10 +2,6 @@ package com.fcm.nanochat.inference
 
 import android.content.Context
 import com.fcm.nanochat.data.SettingsSnapshot
-import com.google.mlkit.genai.common.FeatureStatus
-import com.google.mlkit.genai.common.GenAiException
-import com.google.mlkit.genai.prompt.Generation
-import com.google.mlkit.genai.prompt.GenerativeModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
@@ -19,21 +15,29 @@ class LocalInferenceClient(
             )
         }
 
-        val status = runCatching { generativeModel.checkStatus() }.getOrElse { error ->
+        val client = try {
+            generationClient
+        } catch (error: Throwable) {
             return BackendAvailability.Unavailable(availabilityErrorMessage(error))
         }
 
-        return when (status) {
-            FeatureStatus.AVAILABLE -> BackendAvailability.Available
-            FeatureStatus.DOWNLOADABLE -> BackendAvailability.Available
-            FeatureStatus.DOWNLOADING -> BackendAvailability.Unavailable(
+        val status = try {
+            invokeNoArg(client, "checkStatus")
+        } catch (error: Throwable) {
+            return BackendAvailability.Unavailable(availabilityErrorMessage(error))
+        }
+
+        return when (enumName(status)) {
+            "AVAILABLE", "DOWNLOADABLE" -> BackendAvailability.Available
+            "DOWNLOADING" -> BackendAvailability.Unavailable(
                 "Gemini Nano is downloading in AICore. Keep device online and retry once download completes."
             )
-            FeatureStatus.UNAVAILABLE -> BackendAvailability.Unavailable(
+
+            "UNAVAILABLE" -> BackendAvailability.Unavailable(
                 "Gemini Nano is unavailable right now. Ensure AICore has finished setup and the bootloader is locked."
             )
             else -> BackendAvailability.Unavailable(
-                "Unable to determine Gemini Nano availability (status=$status)."
+                "Unable to determine Gemini Nano availability (status=${enumName(status)})."
             )
         }
     }
@@ -45,19 +49,21 @@ class LocalInferenceClient(
         }
 
         val prompt = PromptFormatter.flattenForAicore(request.history, request.prompt, maxTurns = 10)
+        val client = try {
+            generationClient
+        } catch (error: Throwable) {
+            throw mapThrowableToInferenceException(error)
+        }
 
-        runCatching { generativeModel.warmup() }
+        runCatching { invokeNoArg(client, "warmup") }
 
         val response = runCatching {
-            generativeModel.generateContent(prompt)
+            invokeSingleArg(client, "generateContent", prompt)
         }.getOrElse { error ->
             throw mapThrowableToInferenceException(error)
         }
 
-        val text = response.candidates
-            .asSequence()
-            .mapNotNull { candidate -> candidate.text?.trim()?.takeIf(String::isNotEmpty) }
-            .firstOrNull()
+        val text = extractText(response)
             ?: throw InferenceException.BackendUnavailable(
                 "Gemini Nano returned an empty response. Try a more specific prompt."
             )
@@ -65,8 +71,14 @@ class LocalInferenceClient(
         emit(text)
     }
 
-    private val generativeModel: GenerativeModel by lazy {
-        Generation.getClient()
+    private val generationClient: Any by lazy {
+        val generationClass = Class.forName("com.google.mlkit.genai.prompt.Generation")
+        val getClientMethod = generationClass.methods.firstOrNull {
+            it.name == "getClient" && it.parameterCount == 0
+        } ?: throw NoSuchMethodException("Generation.getClient() is unavailable.")
+
+        getClientMethod.invoke(null)
+            ?: throw IllegalStateException("Generation client is null.")
     }
 
     @Suppress("DEPRECATION")
@@ -90,7 +102,7 @@ class LocalInferenceClient(
             return error
         }
 
-        if (error is GenAiException) {
+        if (isGenAiException(error)) {
             return mapGenAiException(error)
         }
 
@@ -119,36 +131,40 @@ class LocalInferenceClient(
         }
     }
 
-    private fun mapGenAiException(error: GenAiException): InferenceException {
+    private fun mapGenAiException(error: Throwable): InferenceException {
         val fallbackMessage = error.message ?: "Unknown AICore error."
+        val errorCodeName = enumName(readProperty(error, "errorCode"))
 
-        return when (error.errorCode) {
-            GenAiException.ErrorCode.BUSY,
-            GenAiException.ErrorCode.PER_APP_BATTERY_USE_QUOTA_EXCEEDED -> {
+        return when (errorCodeName) {
+            "BUSY", "PER_APP_BATTERY_USE_QUOTA_EXCEEDED" -> {
                 InferenceException.Busy("AICore is busy or quota-limited. Wait a moment and retry.")
             }
-            GenAiException.ErrorCode.BACKGROUND_USE_BLOCKED -> {
+
+            "BACKGROUND_USE_BLOCKED" -> {
                 InferenceException.BackendUnavailable(
                     "AICore inference requires the app in foreground. Keep NanoChat open and retry."
                 )
             }
-            GenAiException.ErrorCode.NOT_AVAILABLE -> {
+
+            "NOT_AVAILABLE" -> {
                 InferenceException.BackendUnavailable(
                     "Gemini Nano is not available yet. Keep device online and retry in a few minutes."
                 )
             }
-            GenAiException.ErrorCode.NEEDS_SYSTEM_UPDATE,
-            GenAiException.ErrorCode.AICORE_INCOMPATIBLE -> {
+
+            "NEEDS_SYSTEM_UPDATE", "AICORE_INCOMPATIBLE" -> {
                 InferenceException.BackendUnavailable(
                     "AICore requires a system update. Update Android system components and retry."
                 )
             }
-            GenAiException.ErrorCode.NOT_ENOUGH_DISK_SPACE -> {
+
+            "NOT_ENOUGH_DISK_SPACE" -> {
                 InferenceException.BackendUnavailable(
                     "AICore needs more storage. Free disk space and retry."
                 )
             }
-            GenAiException.ErrorCode.REQUEST_TOO_LARGE -> {
+
+            "REQUEST_TOO_LARGE" -> {
                 InferenceException.Configuration(
                     "Prompt is too long for on-device inference. Try a shorter prompt."
                 )
@@ -176,6 +192,68 @@ class LocalInferenceClient(
                 }
             }
         }
+    }
+
+    private fun extractText(response: Any): String? {
+        val candidates = when (val value = readProperty(response, "candidates")) {
+            is Iterable<*> -> value.asSequence()
+            is Array<*> -> value.asSequence()
+            else -> emptySequence()
+        }
+
+        return candidates
+            .mapNotNull { candidate ->
+                val raw = candidate?.let { readProperty(it, "text") } as? String
+                raw?.trim()?.takeIf(String::isNotEmpty)
+            }
+            .firstOrNull()
+    }
+
+    private fun invokeNoArg(instance: Any, methodName: String): Any? {
+        val method = instance.javaClass.methods.firstOrNull {
+            it.name == methodName && it.parameterCount == 0
+        } ?: throw NoSuchMethodException("${instance.javaClass.name}#$methodName()")
+
+        return method.invoke(instance)
+    }
+
+    private fun invokeSingleArg(instance: Any, methodName: String, arg: Any): Any {
+        val method = instance.javaClass.methods.firstOrNull {
+            it.name == methodName &&
+                    it.parameterCount == 1 &&
+                    it.parameterTypes[0].isAssignableFrom(arg.javaClass)
+        } ?: instance.javaClass.methods.firstOrNull {
+            it.name == methodName && it.parameterCount == 1
+        } ?: throw NoSuchMethodException("${instance.javaClass.name}#$methodName(..)")
+
+        return method.invoke(instance, arg)
+            ?: throw IllegalStateException("${instance.javaClass.name}#$methodName(..) returned null")
+    }
+
+    private fun readProperty(instance: Any, propertyName: String): Any? {
+        val getter = "get${propertyName.replaceFirstChar { it.uppercaseChar() }}"
+        val method = instance.javaClass.methods.firstOrNull {
+            it.name == getter && it.parameterCount == 0
+        }
+        if (method != null) {
+            return method.invoke(instance)
+        }
+
+        return runCatching {
+            instance.javaClass.getField(propertyName).get(instance)
+        }.getOrNull()
+    }
+
+    private fun enumName(value: Any?): String {
+        return when (value) {
+            is Enum<*> -> value.name
+            null -> "UNKNOWN"
+            else -> value.toString()
+        }
+    }
+
+    private fun isGenAiException(error: Throwable): Boolean {
+        return error.javaClass.name == "com.google.mlkit.genai.common.GenAiException"
     }
 
     private companion object {

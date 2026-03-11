@@ -23,9 +23,9 @@ data class SettingsSnapshot(
     val modelName: String = "",
     val apiKey: String = "",
     val huggingFaceToken: String = "",
-    val temperature: Double = AppPreferences.DEFAULT_TEMPERATURE,
-    val topP: Double = AppPreferences.DEFAULT_TOP_P,
-    val contextLength: Int = AppPreferences.DEFAULT_CONTEXT_LENGTH
+    val temperature: Double = 0.7,
+    val topP: Double = 0.9,
+    val contextLength: Int = 4096
 )
 
 class AppPreferences(context: Context) {
@@ -66,11 +66,11 @@ class AppPreferences(context: Context) {
         appContext.dataStore.edit { it[Keys.modelName] = value.trim() }
     }
 
-    suspend fun updateApiKey(value: String) {
+    fun updateApiKey(value: String) {
         secretStore.edit().putString(SecretKeys.apiKey, value.trim()).apply()
     }
 
-    suspend fun updateHuggingFaceToken(value: String) {
+    fun updateHuggingFaceToken(value: String) {
         secretStore.edit().putString(SecretKeys.huggingFaceToken, value.trim()).apply()
     }
 

@@ -145,7 +145,6 @@ internal fun SettingsTab(
         }
         item {
             StatusCard(
-                title = "Backend readiness",
                 body = if (missingRemoteFields.isEmpty()) {
                     "Remote is configured. Nano still requires Gemini Nano enabled in Developer Options on a supported device."
                 } else {
@@ -276,10 +275,10 @@ private fun StatsCard(state: SettingsScreenState, onRefresh: () -> Unit) {
 }
 
 @Composable
-private fun StatusCard(title: String, body: String) {
+private fun StatusCard(body: String) {
     Card {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(title, fontWeight = FontWeight.SemiBold)
+            Text("Backend readiness", fontWeight = FontWeight.SemiBold)
             Spacer(modifier = Modifier.height(8.dp))
             Text(body)
         }
