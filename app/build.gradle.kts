@@ -7,6 +7,7 @@ plugins {
 android {
     namespace = "com.fcm.nanochat"
     compileSdk = 35
+    buildToolsVersion = "36.1.0"
 
     defaultConfig {
         applicationId = "com.fcm.nanochat"
@@ -57,9 +58,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
 
     // Room
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.room:room-runtime:2.7.0")
+    implementation("androidx.room:room-ktx:2.7.0")
+    ksp("androidx.room:room-compiler:2.7.0")
 
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.1.1")
@@ -90,3 +91,4 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 }
+
