@@ -29,7 +29,10 @@ class MainActivity : ComponentActivity() {
                     factory = ChatViewModelFactory(container.chatRepository)
                 )
                 val settingsViewModel: SettingsViewModel = viewModel(
-                    factory = SettingsViewModelFactory(container.preferences)
+                    factory = SettingsViewModelFactory(
+                        container.preferences,
+                        container.chatRepository
+                    )
                 )
 
                 val chatState by chatViewModel.uiState.collectAsStateWithLifecycle()
@@ -51,7 +54,12 @@ class MainActivity : ComponentActivity() {
                     onModelNameChange = settingsViewModel::updateModelName,
                     onApiKeyChange = settingsViewModel::updateApiKey,
                     onHuggingFaceTokenChange = settingsViewModel::updateHuggingFaceToken,
+                    onTemperatureChange = settingsViewModel::updateTemperature,
+                    onTopPChange = settingsViewModel::updateTopP,
+                    onContextLengthChange = settingsViewModel::updateContextLength,
                     onSaveSettings = settingsViewModel::save,
+                    onClearHistory = settingsViewModel::clearAllHistory,
+                    onRefreshStats = settingsViewModel::refreshStats,
                     onDismissNotice = chatViewModel::clearNotice
                 )
             }

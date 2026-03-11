@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -26,7 +27,6 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -35,20 +35,21 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -69,8 +70,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -79,6 +80,7 @@ import com.fcm.nanochat.inference.InferenceMode
 import com.fcm.nanochat.model.ChatMessage
 import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatScreenState
+import com.fcm.nanochat.model.SettingsScreenState
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
 import io.noties.markwon.MarkwonConfiguration
@@ -95,14 +97,18 @@ import org.commonmark.node.IndentedCodeBlock
 @Composable
 internal fun ChatTab(
     state: ChatScreenState,
+    settingsState: SettingsScreenState,
     modifier: Modifier = Modifier,
     onOpenSessions: () -> Unit,
-    onOpenSettings: () -> Unit,
     onSendMessage: () -> Unit,
     onMessageDraftChange: (String) -> Unit,
     onCreateSession: () -> Unit,
     onRetryLast: () -> Unit,
-    onInferenceModeChange: (InferenceMode) -> Unit
+    onInferenceModeChange: (InferenceMode) -> Unit,
+    onTemperatureChange: (Double) -> Unit,
+    onTopPChange: (Double) -> Unit,
+    onContextLengthChange: (Int) -> Unit,
+    onMessageInfo: (ChatMessage) -> Unit
 ) {
     BoxWithConstraints(
         modifier = modifier
@@ -126,15 +132,19 @@ internal fun ChatTab(
         if (compact) {
             ChatTabContent(
                 state = state,
+                settingsState = settingsState,
                 imeVisible = imeVisible,
                 modifier = contentModifier,
                 onOpenSessions = onOpenSessions,
-                onOpenSettings = onOpenSettings,
                 onSendMessage = onSendMessage,
                 onMessageDraftChange = onMessageDraftChange,
                 onCreateSession = onCreateSession,
                 onRetryLast = onRetryLast,
-                onInferenceModeChange = onInferenceModeChange
+                onInferenceModeChange = onInferenceModeChange,
+                onTemperatureChange = onTemperatureChange,
+                onTopPChange = onTopPChange,
+                onContextLengthChange = onContextLengthChange,
+                onMessageInfo = onMessageInfo
             )
         } else {
             Row(modifier = Modifier.fillMaxSize()) {
@@ -148,15 +158,19 @@ internal fun ChatTab(
                 )
                 ChatTabContent(
                     state = state,
+                    settingsState = settingsState,
                     imeVisible = imeVisible,
                     modifier = contentModifier,
                     onOpenSessions = onOpenSessions,
-                    onOpenSettings = onOpenSettings,
                     onSendMessage = onSendMessage,
                     onMessageDraftChange = onMessageDraftChange,
                     onCreateSession = onCreateSession,
                     onRetryLast = onRetryLast,
-                    onInferenceModeChange = onInferenceModeChange
+                    onInferenceModeChange = onInferenceModeChange,
+                    onTemperatureChange = onTemperatureChange,
+                    onTopPChange = onTopPChange,
+                    onContextLengthChange = onContextLengthChange,
+                    onMessageInfo = onMessageInfo
                 )
             }
         }
@@ -166,17 +180,22 @@ internal fun ChatTab(
 @Composable
 private fun ChatTabContent(
     state: ChatScreenState,
+    settingsState: SettingsScreenState,
     imeVisible: Boolean,
     modifier: Modifier = Modifier,
     onOpenSessions: () -> Unit,
-    onOpenSettings: () -> Unit,
     onSendMessage: () -> Unit,
     onMessageDraftChange: (String) -> Unit,
     onCreateSession: () -> Unit,
     onRetryLast: () -> Unit,
-    onInferenceModeChange: (InferenceMode) -> Unit
+    onInferenceModeChange: (InferenceMode) -> Unit,
+    onTemperatureChange: (Double) -> Unit,
+    onTopPChange: (Double) -> Unit,
+    onContextLengthChange: (Int) -> Unit,
+    onMessageInfo: (ChatMessage) -> Unit
 ) {
     var composerHeightPx by remember { mutableStateOf(0) }
+    var controlsVisible by remember { mutableStateOf(false) }
     val density = LocalDensity.current
     val measuredComposerHeight = with(density) { composerHeightPx.toDp() }
     val imeBottomInset = with(density) { WindowInsets.ime.getBottom(density).toDp() }
@@ -188,9 +207,10 @@ private fun ChatTabContent(
         Column(modifier = Modifier.fillMaxSize()) {
             ChatTopBar(
                 selectedMode = state.inferenceMode,
+                modelName = settingsState.modelName,
                 onInferenceModeChange = onInferenceModeChange,
                 onOpenSessions = onOpenSessions,
-                onOpenSettings = onOpenSettings
+                onOpenControls = { controlsVisible = true }
             )
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -204,7 +224,8 @@ private fun ChatTabContent(
                 MessageList(
                     messages = state.messages,
                     modifier = Modifier.weight(1f),
-                    bottomPadding = listBottomPadding
+                    bottomPadding = listBottomPadding,
+                    onMessageInfo = onMessageInfo
                 )
             }
         }
@@ -221,24 +242,123 @@ private fun ChatTabContent(
                 onDraftChange = onMessageDraftChange,
                 onSend = onSendMessage,
                 onRetry = onRetryLast,
-                onCreateSession = onCreateSession,
                 modifier = Modifier
                     .onSizeChanged { composerHeightPx = it.height }
                     .padding(bottom = 8.dp)
             )
         }
     }
+
+    if (controlsVisible) {
+        ModelControlsSheet(
+            temperature = settingsState.temperature,
+            topP = settingsState.topP,
+            contextLength = settingsState.contextLength,
+            onTemperatureChange = onTemperatureChange,
+            onTopPChange = onTopPChange,
+            onContextLengthChange = onContextLengthChange,
+            onDismiss = { controlsVisible = false }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ModelControlsSheet(
+    temperature: Double,
+    topP: Double,
+    contextLength: Int,
+    onTemperatureChange: (Double) -> Unit,
+    onTopPChange: (Double) -> Unit,
+    onContextLengthChange: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text("Model controls", style = MaterialTheme.typography.titleMedium)
+            LabeledSlider(
+                label = "Temperature",
+                value = temperature.toFloat(),
+                range = 0f..2f,
+                steps = 5,
+                formatter = { "%.2f".format(it) },
+                onValueChange = { onTemperatureChange(it.toDouble()) }
+            )
+            LabeledSlider(
+                label = "Top P",
+                value = topP.toFloat(),
+                range = 0f..1f,
+                steps = 5,
+                formatter = { "%.2f".format(it) },
+                onValueChange = { onTopPChange(it.toDouble()) }
+            )
+            LabeledSlider(
+                label = "Context length",
+                value = contextLength.toFloat(),
+                range = 512f..32768f,
+                steps = 10,
+                formatter = { it.toInt().toString() },
+                onValueChange = { onContextLengthChange(it.toInt()) }
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+    }
+}
+
+@Composable
+private fun LabeledSlider(
+    label: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    formatter: (Float) -> String,
+    onValueChange: (Float) -> Unit
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, style = MaterialTheme.typography.labelLarge)
+            Text(formatter(value), style = MaterialTheme.typography.labelMedium)
+        }
+        androidx.compose.material3.Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = range,
+            steps = steps
+        )
+    }
 }
 
 @Composable
 private fun ChatTopBar(
     selectedMode: InferenceMode,
+    modelName: String,
     onInferenceModeChange: (InferenceMode) -> Unit,
     onOpenSessions: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenControls: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val selectedLabel = if (selectedMode == InferenceMode.REMOTE) "Remote" else "Nano"
+    val cleanModel = modelName
+        .replace(Regex("[-_]+"), " ")
+        .trim()
+        .ifBlank { "Model" }
+    val selectedLabel = if (selectedMode == InferenceMode.REMOTE) {
+        "Remote // $cleanModel"
+    } else {
+        "Gemini Nano"
+    }
 
     Row(
         modifier = Modifier
@@ -251,41 +371,47 @@ private fun ChatTopBar(
         IconButton(onClick = onOpenSessions) {
             Icon(Icons.Default.Menu, contentDescription = "Sessions")
         }
-        Box {
-            TextButton(onClick = { expanded = true }) {
-                Text(
-                    text = selectedLabel,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Icon(
-                    imageVector = Icons.Default.ArrowDropDown,
-                    contentDescription = "Select backend"
-                )
-            }
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Nano") },
-                    onClick = {
-                        expanded = false
-                        onInferenceModeChange(InferenceMode.AICORE)
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("Remote") },
-                    onClick = {
-                        expanded = false
-                        onInferenceModeChange(InferenceMode.REMOTE)
-                    }
-                )
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box {
+                TextButton(onClick = { expanded = true }) {
+                    Text(
+                        text = selectedLabel,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = "Select backend"
+                    )
+                }
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Gemini Nano") },
+                        onClick = {
+                            expanded = false
+                            onInferenceModeChange(InferenceMode.AICORE)
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Remote // $cleanModel") },
+                        onClick = {
+                            expanded = false
+                            onInferenceModeChange(InferenceMode.REMOTE)
+                        }
+                    )
+                }
             }
         }
-        IconButton(onClick = onOpenSettings) {
-            Icon(Icons.Default.Settings, contentDescription = "Settings")
+        IconButton(onClick = onOpenControls) {
+            Icon(Icons.Default.Tune, contentDescription = "Model controls")
         }
     }
 }
@@ -317,7 +443,8 @@ private fun EmptyConversation(modifier: Modifier = Modifier) {
 private fun MessageList(
     messages: List<ChatMessage>,
     modifier: Modifier = Modifier,
-    bottomPadding: Dp = 24.dp
+    bottomPadding: Dp = 24.dp,
+    onMessageInfo: (ChatMessage) -> Unit
 ) {
     val clipboardManager = LocalClipboardManager.current
 
@@ -329,7 +456,9 @@ private fun MessageList(
         items(messages, key = { it.id }) { message ->
             val isUser = message.role == ChatRole.USER
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onMessageInfo(message) },
                 horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
             ) {
                 if (isUser) {
@@ -403,12 +532,13 @@ private fun MessageCopyButton(
     IconButton(
         onClick = onCopy,
         enabled = enabled,
-        modifier = modifier.size(30.dp)
+        modifier = modifier.size(22.dp)
     ) {
         Icon(
             imageVector = Icons.Default.ContentCopy,
             contentDescription = stringResource(id = R.string.copy_message),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp)
         )
     }
 }
@@ -462,7 +592,9 @@ private fun MarkdownMessage(
                             setColor(latexBackgroundColor)
                         }
                     }
-                    builder.theme().padding(JLatexMathTheme.Padding.symmetric(5, 8))
+                    builder
+                        .theme()
+                        .padding(JLatexMathTheme.Padding.symmetric(5, 8))
                     builder.theme().textColor(textArgb)
                 }
             )
@@ -495,7 +627,6 @@ private fun Composer(
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
     onRetry: () -> Unit,
-    onCreateSession: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val sendEnabled = draft.isNotBlank() && !isSending
@@ -533,13 +664,8 @@ private fun Composer(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onCreateSession) {
-                        Icon(Icons.Default.Add, contentDescription = "New chat")
-                    }
-                    TextButton(onClick = onRetry, enabled = !isSending) {
-                        Text("Retry")
-                    }
+                TextButton(onClick = onRetry, enabled = !isSending) {
+                    Text("Retry")
                 }
 
                 Box(

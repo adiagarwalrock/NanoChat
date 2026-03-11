@@ -126,6 +126,17 @@ class RemoteInferenceClient(
             .put("model", request.settings.modelName)
             .put("stream", true)
             .put("messages", messages)
+            .apply {
+                if (request.settings.temperature > 0) {
+                    put("temperature", request.settings.temperature)
+                }
+                if (request.settings.topP > 0) {
+                    put("top_p", request.settings.topP)
+                }
+                if (request.settings.contextLength > 0) {
+                    put("max_tokens", request.settings.contextLength)
+                }
+            }
     }
 
     private fun parseDelta(payload: String): String {

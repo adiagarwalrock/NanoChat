@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.fcm.nanochat.inference.InferenceMode
 import com.fcm.nanochat.model.ChatRole
 
 @Entity(tableName = "chat_sessions")
@@ -31,6 +32,11 @@ data class ChatMessageEntity(
     val sessionId: Long,
     val role: ChatRole,
     val content: String,
+    val inferenceMode: InferenceMode,
+    val modelName: String,
+    val temperature: Double,
+    val topP: Double,
+    val contextLength: Int,
     val createdAt: Long,
     val updatedAt: Long
 )

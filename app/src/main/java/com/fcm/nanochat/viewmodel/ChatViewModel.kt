@@ -16,7 +16,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -177,8 +176,8 @@ class ChatViewModel(
             notice.value = null
             lastUserPrompt = prompt
 
-            val mode = settings.value.inferenceMode
             val snapshot = settings.value
+            val mode = snapshot.inferenceMode
             val availability = repository.backendAvailability(mode, snapshot)
             if (availability is BackendAvailability.Unavailable) {
                 notice.value = availability.message
@@ -187,8 +186,8 @@ class ChatViewModel(
             }
 
             val history = repository.recentTurnsFor(mode, sessionId)
-            repository.saveUserMessage(sessionId, prompt)
-            val assistantMessageId = repository.insertAssistantPlaceholder(sessionId)
+            repository.saveUserMessage(sessionId, prompt, snapshot)
+            val assistantMessageId = repository.insertAssistantPlaceholder(sessionId, snapshot)
             draft.value = ""
             val assembler = StreamingMessageAssembler()
 

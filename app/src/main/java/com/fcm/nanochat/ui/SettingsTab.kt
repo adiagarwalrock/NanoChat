@@ -20,6 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,7 +41,12 @@ internal fun SettingsTab(
     onModelNameChange: (String) -> Unit,
     onApiKeyChange: (String) -> Unit,
     onHuggingFaceTokenChange: (String) -> Unit,
-    onSaveSettings: () -> Unit
+    onTemperatureChange: (Double) -> Unit,
+    onTopPChange: (Double) -> Unit,
+    onContextLengthChange: (Int) -> Unit,
+    onSaveSettings: () -> Unit,
+    onClearHistory: () -> Unit,
+    onRefreshStats: () -> Unit
 ) {
     val missingRemoteFields = RemoteConfigValidator.missingFields(
         baseUrl = state.baseUrl,
@@ -57,6 +63,9 @@ internal fun SettingsTab(
     ) {
         item {
             Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        }
+        item {
+            StatsCard(state = state, onRefresh = onRefreshStats)
         }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
@@ -88,6 +97,16 @@ internal fun SettingsTab(
             )
         }
         item {
+            ParameterSliders(
+                temperature = state.temperature,
+                topP = state.topP,
+                contextLength = state.contextLength,
+                onTemperatureChange = onTemperatureChange,
+                onTopPChange = onTopPChange,
+                onContextLengthChange = onContextLengthChange
+            )
+        }
+        item {
             OutlinedTextField(
                 value = state.apiKey,
                 onValueChange = onApiKeyChange,
@@ -113,7 +132,10 @@ internal fun SettingsTab(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = state.saveNotice.orEmpty(), color = MaterialTheme.colorScheme.primary)
+                Text(
+                    text = listOfNotNull(state.saveNotice, state.clearNotice).joinToString(" "),
+                    color = MaterialTheme.colorScheme.primary
+                )
                 Button(onClick = onSaveSettings) {
                     Icon(Icons.Default.Save, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
@@ -131,6 +153,12 @@ internal fun SettingsTab(
                     "Remote is missing: $labels. Nano requires Gemini Nano enabled in Developer Options on a supported device."
                 }
             )
+        }
+        item {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onClearHistory, modifier = Modifier.fillMaxWidth()) {
+                Text("Clear all chat history")
+            }
         }
     }
 }
@@ -155,6 +183,95 @@ private class LastFiveVisibleApiKeyTransformation : VisualTransformation {
         }
         val masked = "•".repeat(raw.length - 5) + raw.takeLast(5)
         return TransformedText(AnnotatedString(masked), OffsetMapping.Identity)
+    }
+}
+
+@Composable
+private fun ParameterSliders(
+    temperature: Double,
+    topP: Double,
+    contextLength: Int,
+    onTemperatureChange: (Double) -> Unit,
+    onTopPChange: (Double) -> Unit,
+    onContextLengthChange: (Int) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Model controls", style = MaterialTheme.typography.titleMedium)
+        LabeledSlider(
+            label = "Temperature",
+            value = temperature.toFloat(),
+            range = 0f..2f,
+            steps = 5,
+            formatter = { "%.2f".format(it) },
+            onValueChange = { onTemperatureChange(it.toDouble()) }
+        )
+        LabeledSlider(
+            label = "Top P",
+            value = topP.toFloat(),
+            range = 0f..1f,
+            steps = 5,
+            formatter = { "%.2f".format(it) },
+            onValueChange = { onTopPChange(it.toDouble()) }
+        )
+        LabeledSlider(
+            label = "Context length",
+            value = contextLength.toFloat(),
+            range = 512f..32768f,
+            steps = 10,
+            formatter = { it.toInt().toString() },
+            onValueChange = { onContextLengthChange(it.toInt()) }
+        )
+    }
+}
+
+@Composable
+private fun LabeledSlider(
+    label: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    formatter: (Float) -> String,
+    onValueChange: (Float) -> Unit
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, style = MaterialTheme.typography.labelLarge)
+            Text(formatter(value), style = MaterialTheme.typography.labelMedium)
+        }
+        androidx.compose.material3.Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = range,
+            steps = steps
+        )
+    }
+}
+
+@Composable
+private fun StatsCard(state: SettingsScreenState, onRefresh: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Usage", style = MaterialTheme.typography.titleMedium)
+                TextButton(onClick = onRefresh) {
+                    Text("Refresh")
+                }
+            }
+            Text("Sessions: ${state.stats.sessionCount}")
+            Text("Messages sent: ${state.stats.messagesSent}")
+            Text("Messages received: ${state.stats.messagesReceived}")
+        }
     }
 }
 

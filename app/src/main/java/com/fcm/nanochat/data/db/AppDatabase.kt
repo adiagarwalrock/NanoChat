@@ -6,11 +6,12 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import com.fcm.nanochat.inference.InferenceMode
 import com.fcm.nanochat.model.ChatRole
 
 @Database(
     entities = [ChatSessionEntity::class, ChatMessageEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(RoomConverters::class)
@@ -33,4 +34,10 @@ class RoomConverters {
 
     @TypeConverter
     fun toRole(value: String): ChatRole = ChatRole.valueOf(value)
+
+    @TypeConverter
+    fun fromMode(value: InferenceMode): String = value.name
+
+    @TypeConverter
+    fun toMode(value: String): InferenceMode = InferenceMode.valueOf(value)
 }

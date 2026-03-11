@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -51,7 +52,8 @@ internal fun SessionsDrawer(
     onSelectSession: (Long) -> Unit,
     onPinSession: (Long, Boolean) -> Unit,
     onDeleteSession: (Long) -> Unit,
-    onRenameSession: (Long, String) -> Unit
+    onRenameSession: (Long, String) -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     val pinned = state.sessions.filter { it.isPinned }
     val recents = state.sessions.filterNot { it.isPinned }
@@ -59,7 +61,7 @@ internal fun SessionsDrawer(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(18.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Text(
             text = "NanoChat",
@@ -67,7 +69,7 @@ internal fun SessionsDrawer(
             fontFamily = FontFamily.Serif,
             fontWeight = FontWeight.SemiBold
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(10.dp))
         TextButton(onClick = onCreateSession) {
             Icon(Icons.Default.Add, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
@@ -75,13 +77,13 @@ internal fun SessionsDrawer(
         }
 
         if (pinned.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "Pinned",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             pinned.forEach { session ->
                 SessionRow(
                     session = session,
@@ -94,13 +96,13 @@ internal fun SessionsDrawer(
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(10.dp))
         Text(
             text = "Recents",
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         if (recents.isEmpty()) {
             Text(
@@ -108,7 +110,7 @@ internal fun SessionsDrawer(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(recents, key = { it.id }) { session ->
                     SessionRow(
                         session = session,
@@ -120,6 +122,14 @@ internal fun SessionsDrawer(
                     )
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        TextButton(onClick = onOpenSettings) {
+            Icon(Icons.Default.Settings, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Settings")
         }
     }
 }
@@ -142,7 +152,7 @@ private fun SessionRow(
                 else MaterialTheme.colorScheme.surface
             )
             .clickable { onSelectSession(session.id) }
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {

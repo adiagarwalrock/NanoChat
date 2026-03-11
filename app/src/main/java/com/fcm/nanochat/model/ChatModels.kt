@@ -12,6 +12,11 @@ data class ChatMessage(
     val sessionId: Long,
     val role: ChatRole,
     val content: String,
+    val inferenceMode: InferenceMode = InferenceMode.REMOTE,
+    val modelName: String = "",
+    val temperature: Double = com.fcm.nanochat.data.AppPreferences.DEFAULT_TEMPERATURE,
+    val topP: Double = com.fcm.nanochat.data.AppPreferences.DEFAULT_TOP_P,
+    val contextLength: Int = com.fcm.nanochat.data.AppPreferences.DEFAULT_CONTEXT_LENGTH,
     val isStreaming: Boolean = false
 )
 
@@ -37,5 +42,16 @@ data class SettingsScreenState(
     val modelName: String = "",
     val apiKey: String = "",
     val huggingFaceToken: String = "",
-    val saveNotice: String? = null
+    val temperature: Double = com.fcm.nanochat.data.AppPreferences.DEFAULT_TEMPERATURE,
+    val topP: Double = com.fcm.nanochat.data.AppPreferences.DEFAULT_TOP_P,
+    val contextLength: Int = com.fcm.nanochat.data.AppPreferences.DEFAULT_CONTEXT_LENGTH,
+    val stats: UsageStats = UsageStats(),
+    val saveNotice: String? = null,
+    val clearNotice: String? = null
+)
+
+data class UsageStats(
+    val sessionCount: Long = 0,
+    val messagesSent: Long = 0,
+    val messagesReceived: Long = 0
 )

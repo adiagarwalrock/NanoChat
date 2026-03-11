@@ -3,7 +3,9 @@ package com.fcm.nanochat.data
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -20,7 +22,10 @@ data class SettingsSnapshot(
     val baseUrl: String = "",
     val modelName: String = "",
     val apiKey: String = "",
-    val huggingFaceToken: String = ""
+    val huggingFaceToken: String = "",
+    val temperature: Double = AppPreferences.DEFAULT_TEMPERATURE,
+    val topP: Double = AppPreferences.DEFAULT_TOP_P,
+    val contextLength: Int = AppPreferences.DEFAULT_CONTEXT_LENGTH
 )
 
 class AppPreferences(context: Context) {
@@ -34,7 +39,10 @@ class AppPreferences(context: Context) {
                 baseUrl = preferences[Keys.baseUrl].orEmpty(),
                 modelName = preferences[Keys.modelName].orEmpty(),
                 apiKey = secretStore.getString(SecretKeys.apiKey, "").orEmpty(),
-                huggingFaceToken = secretStore.getString(SecretKeys.huggingFaceToken, "").orEmpty()
+                huggingFaceToken = secretStore.getString(SecretKeys.huggingFaceToken, "").orEmpty(),
+                temperature = preferences[Keys.temperature] ?: DEFAULT_TEMPERATURE,
+                topP = preferences[Keys.topP] ?: DEFAULT_TOP_P,
+                contextLength = preferences[Keys.contextLength] ?: DEFAULT_CONTEXT_LENGTH
             )
         }
 
@@ -66,12 +74,31 @@ class AppPreferences(context: Context) {
         secretStore.edit().putString(SecretKeys.huggingFaceToken, value.trim()).apply()
     }
 
+    suspend fun updateTemperature(value: Double) {
+        appContext.dataStore.edit { it[Keys.temperature] = value }
+    }
+
+    suspend fun updateTopP(value: Double) {
+        appContext.dataStore.edit { it[Keys.topP] = value }
+    }
+
+    suspend fun updateContextLength(value: Int) {
+        val clamped = value.coerceIn(512, 32768)
+        appContext.dataStore.edit { it[Keys.contextLength] = clamped }
+    }
+
     suspend fun setSessionPinned(sessionId: Long, pinned: Boolean) {
         appContext.dataStore.edit { preferences ->
             val current = preferences[Keys.pinnedSessionIds].orEmpty().toMutableSet()
             val encoded = sessionId.toString()
             if (pinned) current.add(encoded) else current.remove(encoded)
             preferences[Keys.pinnedSessionIds] = current
+        }
+    }
+
+    suspend fun clearPinnedSessions() {
+        appContext.dataStore.edit { preferences ->
+            preferences[Keys.pinnedSessionIds] = emptySet()
         }
     }
 
@@ -91,11 +118,20 @@ class AppPreferences(context: Context) {
         val baseUrl: Preferences.Key<String> = stringPreferencesKey("base_url")
         val modelName: Preferences.Key<String> = stringPreferencesKey("model_name")
         val pinnedSessionIds: Preferences.Key<Set<String>> = stringSetPreferencesKey("pinned_session_ids")
+        val temperature: Preferences.Key<Double> = doublePreferencesKey("temperature")
+        val topP: Preferences.Key<Double> = doublePreferencesKey("top_p")
+        val contextLength: Preferences.Key<Int> = intPreferencesKey("context_length")
     }
 
     private object SecretKeys {
         const val apiKey: String = "api_key"
         const val huggingFaceToken: String = "hugging_face_token"
+    }
+
+    companion object {
+        const val DEFAULT_TEMPERATURE = 0.7
+        const val DEFAULT_TOP_P = 0.9
+        const val DEFAULT_CONTEXT_LENGTH = 4096
     }
 }
 

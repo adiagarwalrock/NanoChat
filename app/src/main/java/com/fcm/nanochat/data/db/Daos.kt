@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import com.fcm.nanochat.model.ChatRole
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -23,6 +24,9 @@ interface ChatSessionDao {
 
     @Query("SELECT * FROM chat_sessions ORDER BY updatedAt DESC LIMIT 1")
     suspend fun latestSession(): ChatSessionEntity?
+
+    @Query("SELECT COUNT(*) FROM chat_sessions")
+    suspend fun countSessions(): Long
 }
 
 @Dao
@@ -42,4 +46,7 @@ interface ChatMessageDao {
 
     @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY createdAt DESC, id DESC LIMIT :limit")
     suspend fun latestMessages(sessionId: Long, limit: Int): List<ChatMessageEntity>
+
+    @Query("SELECT COUNT(*) FROM chat_messages WHERE role = :role")
+    suspend fun countByRole(role: ChatRole): Long
 }

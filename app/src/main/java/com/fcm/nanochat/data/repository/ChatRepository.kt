@@ -14,6 +14,7 @@ import com.fcm.nanochat.inference.InferenceRequest
 import com.fcm.nanochat.model.ChatMessage
 import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatSession
+import com.fcm.nanochat.model.UsageStats
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -68,7 +69,11 @@ class ChatRepository(
         preferences.setSessionPinned(sessionId, pinned)
     }
 
-    suspend fun saveUserMessage(sessionId: Long, content: String): Long {
+    suspend fun saveUserMessage(
+        sessionId: Long,
+        content: String,
+        settings: SettingsSnapshot
+    ): Long {
         val now = System.currentTimeMillis()
         updateSessionTitleIfNeeded(sessionId, content, now)
         return database.messageDao().insert(
@@ -76,19 +81,32 @@ class ChatRepository(
                 sessionId = sessionId,
                 role = ChatRole.USER,
                 content = content,
+                inferenceMode = settings.inferenceMode,
+                modelName = settings.modelName,
+                temperature = settings.temperature,
+                topP = settings.topP,
+                contextLength = settings.contextLength,
                 createdAt = now,
                 updatedAt = now
             )
         )
     }
 
-    suspend fun insertAssistantPlaceholder(sessionId: Long): Long {
+    suspend fun insertAssistantPlaceholder(
+        sessionId: Long,
+        settings: SettingsSnapshot
+    ): Long {
         val now = System.currentTimeMillis()
         return database.messageDao().insert(
             ChatMessageEntity(
                 sessionId = sessionId,
                 role = ChatRole.ASSISTANT,
                 content = "",
+                inferenceMode = settings.inferenceMode,
+                modelName = settings.modelName,
+                temperature = settings.temperature,
+                topP = settings.topP,
+                contextLength = settings.contextLength,
                 createdAt = now,
                 updatedAt = now
             )
@@ -107,12 +125,18 @@ class ChatRepository(
         baseUrl: String,
         modelName: String,
         apiKey: String,
-        huggingFaceToken: String
+        huggingFaceToken: String,
+        temperature: Double,
+        topP: Double,
+        contextLength: Int
     ) {
         preferences.updateBaseUrl(baseUrl)
         preferences.updateModelName(modelName)
         preferences.updateApiKey(apiKey)
         preferences.updateHuggingFaceToken(huggingFaceToken)
+        preferences.updateTemperature(temperature)
+        preferences.updateTopP(topP)
+        preferences.updateContextLength(contextLength)
     }
 
     suspend fun settingsSnapshot(): SettingsSnapshot = preferences.settings.first()
@@ -147,6 +171,22 @@ class ChatRepository(
     fun clientFor(mode: InferenceMode): InferenceClient =
         InferenceClientSelector.select(mode, localInferenceClient, remoteInferenceClient)
 
+    suspend fun clearAllData() {
+        preferences.clearPinnedSessions()
+        database.clearAllTables()
+    }
+
+    suspend fun usageStats(): UsageStats {
+        val sessionCount = database.sessionDao().countSessions()
+        val userCount = database.messageDao().countByRole(ChatRole.USER)
+        val assistantCount = database.messageDao().countByRole(ChatRole.ASSISTANT)
+        return UsageStats(
+            sessionCount = sessionCount,
+            messagesSent = userCount,
+            messagesReceived = assistantCount
+        )
+    }
+
     private suspend fun updateSessionTitleIfNeeded(sessionId: Long, content: String, now: Long) {
         database.sessionDao().updateSession(
             sessionId,
@@ -170,7 +210,12 @@ private fun ChatMessageEntity.toModel(): ChatMessage {
         id = id,
         sessionId = sessionId,
         role = role,
-        content = content
+        content = content,
+        inferenceMode = inferenceMode,
+        modelName = modelName,
+        temperature = temperature,
+        topP = topP,
+        contextLength = contextLength
     )
 }
 
