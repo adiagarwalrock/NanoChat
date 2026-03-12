@@ -22,8 +22,11 @@ class HuggingFaceConnectionUiTest {
             huggingFaceAccount = HuggingFaceAccountUi(
                 isValidating = false,
                 isValid = true,
-                name = "Nano User",
+                username = "nano-user",
+                fullName = "Nano User",
                 email = "nano@example.com",
+                tokenRole = "read",
+                tokenName = "primary",
                 message = "Connected"
             )
         )
@@ -37,8 +40,9 @@ class HuggingFaceConnectionUiTest {
             )
         }
 
-        composeRule.onNodeWithText("Account details").assertIsDisplayed()
-        composeRule.onNodeWithText("Name: Nano User").assertIsDisplayed()
-        composeRule.onNodeWithText("Email: nano@example.com").assertIsDisplayed()
+        composeRule.onNodeWithText("Nano User").assertIsDisplayed()
+        composeRule.onNodeWithText("@nano-user").assertIsDisplayed()
+        composeRule.onNodeWithText("nano@example.com").assertIsDisplayed()
+        composeRule.onNodeWithText("Connected").assertIsDisplayed()
     }
 }

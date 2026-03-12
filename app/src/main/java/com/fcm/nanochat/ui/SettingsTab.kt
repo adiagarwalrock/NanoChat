@@ -1,46 +1,68 @@
 package com.fcm.nanochat.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.HourglassEmpty
-import androidx.compose.material.icons.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.Warning
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,10 +70,8 @@ import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.OffsetMapping
-import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,11 +79,64 @@ import coil.compose.AsyncImage
 import com.fcm.nanochat.R
 import com.fcm.nanochat.inference.RemoteConfigValidator
 import com.fcm.nanochat.model.GeminiNanoStatusUi
+import com.fcm.nanochat.model.HuggingFaceAccountUi
 import com.fcm.nanochat.model.SettingsScreenState
+import java.text.NumberFormat
+import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.pow
+import kotlin.math.roundToInt
 
-internal enum class SettingsSection { Home, Connection, ModelControls, HuggingFaceConnection, DataHistory }
+internal enum class SettingsSection {
+    Home,
+    AiConfiguration,
+    ModelControls,
+    Connection,
+    HuggingFaceConnection,
+    DataHistory
+}
+
+private enum class BehaviorPreset(
+    val title: String,
+    val description: String,
+    val temperature: Double,
+    val topP: Double
+) {
+    Precise(
+        title = "Precise",
+        description = "Sharper, deterministic responses with less variation.",
+        temperature = 0.2,
+        topP = 0.70
+    ),
+    Balanced(
+        title = "Balanced",
+        description = "Consistent answers with healthy creativity.",
+        temperature = 0.7,
+        topP = 0.90
+    ),
+    Creative(
+        title = "Creative",
+        description = "Higher variation for brainstorming and exploration.",
+        temperature = 1.0,
+        topP = 1.0
+    )
+}
+
+private enum class BadgeTone {
+    Positive,
+    Neutral,
+    Warning
+}
+
+private val SettingsScreenShape = RoundedCornerShape(24.dp)
+private val SettingsRowShape = RoundedCornerShape(18.dp)
+private val IconContainerShape = RoundedCornerShape(12.dp)
+private val InputShape = RoundedCornerShape(16.dp)
+private val ScreenHorizontalPadding = 20.dp
+private val SectionSpacing = 28.dp
+private val ItemSpacing = 16.dp
+private val CardPadding = 20.dp
 
 @Composable
 internal fun SettingsHome(
@@ -71,36 +144,132 @@ internal fun SettingsHome(
     modifier: Modifier = Modifier,
     onNavigate: (SettingsSection) -> Unit
 ) {
-    val providerStatus = inferProviderStatus(state.baseUrl)
+    val activePreset = closestBehaviorPreset(state.temperature, state.topP)
+    val remoteConfigured = RemoteConfigValidator.missingFields(
+        baseUrl = state.baseUrl,
+        modelName = state.modelName,
+        apiKey = state.apiKey
+    ).isEmpty()
+    val onDeviceEnabled = state.geminiStatus.supported && state.geminiStatus.downloaded
+
     LazyColumn(
-        modifier = modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(SectionSpacing)
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SettingRow(
-                    icon = { Icon(Icons.Default.Link, contentDescription = null) },
-                    title = "Connection",
-                    subtitle = providerStatus,
-                    onClick = { onNavigate(SettingsSection.Connection) }
-                )
-                SettingRow(
+            SystemSummaryCard(
+                modelName = displayModelName(state.modelName),
+                behaviorMode = activePreset.title,
+                providerStatus = connectionModeSummary(remoteConfigured),
+                onDeviceStatus = if (onDeviceEnabled) {
+                    "Gemini Nano enabled"
+                } else if (state.geminiStatus.supported) {
+                    "Gemini Nano available"
+                } else {
+                    "Gemini Nano unavailable"
+                },
+                onDeviceTone = when {
+                    onDeviceEnabled -> BadgeTone.Positive
+                    state.geminiStatus.supported -> BadgeTone.Neutral
+                    else -> BadgeTone.Warning
+                }
+            )
+        }
+
+        item {
+            SettingsGroup(title = "AI Configuration") {
+                SettingsNavigationRow(
                     icon = { Icon(Icons.Default.Tune, contentDescription = null) },
-                    title = "Model controls",
-                    subtitle = "Temperature, Top P, Context length",
-                    onClick = { onNavigate(SettingsSection.ModelControls) }
+                    title = "AI configuration",
+                    subtitle = "Behavior profiles and connection setup",
+                    onClick = { onNavigate(SettingsSection.AiConfiguration) }
                 )
-                SettingRow(
+            }
+        }
+
+        item {
+            SettingsGroup(title = "Integrations") {
+                SettingsNavigationRow(
                     icon = { Icon(Icons.Default.VpnKey, contentDescription = null) },
                     title = "Hugging Face",
                     subtitle = huggingFaceSubtitle(state),
                     onClick = { onNavigate(SettingsSection.HuggingFaceConnection) }
                 )
-                SettingRow(
+            }
+        }
+
+        item {
+            SettingsGroup(title = "Data") {
+                SettingsNavigationRow(
                     icon = { Icon(Icons.Outlined.History, contentDescription = null) },
-                    title = "Data & history",
+                    title = "Usage and history",
                     subtitle = "Sessions ${state.stats.sessionCount} · Sent ${state.stats.messagesSent} · Received ${state.stats.messagesReceived}",
                     onClick = { onNavigate(SettingsSection.DataHistory) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun AiConfigurationSettings(
+    state: SettingsScreenState,
+    modifier: Modifier = Modifier,
+    onNavigate: (SettingsSection) -> Unit
+) {
+    LazyColumn(
+        modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(SectionSpacing)
+    ) {
+        item {
+            SettingsPanel(
+                title = "Current configuration",
+                subtitle = "Overview of active model behavior and connection"
+            ) {
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Default.Star, contentDescription = null) },
+                    label = "Current model",
+                    value = displayModelName(state.modelName)
+                )
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Default.Tune, contentDescription = null) },
+                    label = "Temperature",
+                    value = String.format(Locale.US, "%.2f", state.temperature)
+                )
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Default.Tune, contentDescription = null) },
+                    label = "Context length",
+                    value = formatTokens(state.contextLength)
+                )
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Default.Link, contentDescription = null) },
+                    label = "Connection",
+                    value = connectionModeSummary(
+                        RemoteConfigValidator.missingFields(
+                            baseUrl = state.baseUrl,
+                            modelName = state.modelName,
+                            apiKey = state.apiKey
+                        ).isEmpty()
+                    )
+                )
+            }
+        }
+
+        item {
+            SettingsGroup(title = "Configuration panels") {
+                SettingsNavigationRow(
+                    icon = { Icon(Icons.Default.Tune, contentDescription = null) },
+                    title = "Edit model behavior",
+                    subtitle = "Behavior presets and advanced model tuning",
+                    onClick = { onNavigate(SettingsSection.ModelControls) }
+                )
+                SettingsNavigationRow(
+                    icon = { Icon(Icons.Default.Link, contentDescription = null) },
+                    title = "Edit connection settings",
+                    subtitle = "Connection status and advanced API configuration",
+                    onClick = { onNavigate(SettingsSection.Connection) }
                 )
             }
         }
@@ -115,150 +284,218 @@ internal fun ConnectionSettings(
     onModelNameChange: (String) -> Unit,
     onApiKeyChange: (String) -> Unit,
     onRefreshGeminiStatus: () -> Unit,
-    onDownloadGeminiNano: () -> Unit
+    onDownloadGeminiNano: () -> Unit,
+    onSaveSettings: () -> Unit = {}
 ) {
     val providerStatus = inferProviderStatus(state.baseUrl)
-    Column(
-        modifier = modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    val missingRemoteFields = RemoteConfigValidator.missingFields(
+        baseUrl = state.baseUrl,
+        modelName = state.modelName,
+        apiKey = state.apiKey
+    )
+
+    var advancedExpanded by rememberSaveable { mutableStateOf(false) }
+    var apiKeyVisible by rememberSaveable { mutableStateOf(false) }
+
+    LazyColumn(
+        modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(SectionSpacing)
     ) {
-        SectionCard(
-            title = stringResource(R.string.gemini_nano_title),
-            subtitle = stringResource(R.string.gemini_nano_subtitle)
-        ) {
-            GeminiStatusBlock(
-                status = state.geminiStatus,
-                onRefresh = onRefreshGeminiStatus,
-                onDownload = onDownloadGeminiNano
-            )
-        }
-        SectionCard(title = "Provider status", subtitle = providerStatus) {}
-        SectionCard(title = "Connection") {
-            OutlinedTextField(
-                value = state.baseUrl,
-                onValueChange = onBaseUrlChange,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) },
-                label = { Text("Base URL") },
-                supportingText = { Text("Use base path; app auto-appends /chat/completions") }
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            OutlinedTextField(
-                value = state.modelName,
-                onValueChange = onModelNameChange,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("Model name") }
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            OutlinedTextField(
-                value = state.apiKey,
-                onValueChange = onApiKeyChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("API key") },
-                singleLine = true,
-                visualTransformation = LastFiveVisibleApiKeyTransformation(),
-                supportingText = { Text("Only the last 5 characters are visible") }
-            )
-        }
-    }
-}
-
-@Composable
-private fun GeminiStatusBlock(
-    status: GeminiNanoStatusUi,
-    onRefresh: () -> Unit,
-    onDownload: () -> Unit
-) {
-    val supportedIcon = if (status.supported) Icons.Outlined.CheckCircle else Icons.Outlined.Warning
-    val supportedTint =
-        if (status.supported) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-    val downloadedIcon = when {
-        status.downloaded -> Icons.Outlined.CheckCircle
-        status.downloading -> Icons.Outlined.HourglassEmpty
-        else -> Icons.Outlined.Warning
-    }
-    val downloadedTint = when {
-        status.downloaded -> MaterialTheme.colorScheme.primary
-        status.downloading -> MaterialTheme.colorScheme.onSurfaceVariant
-        else -> MaterialTheme.colorScheme.error
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                stringResource(R.string.gemini_device_supported),
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Icon(supportedIcon, contentDescription = null, tint = supportedTint)
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    stringResource(R.string.gemini_model_downloaded),
-                    style = MaterialTheme.typography.bodyMedium
+        item {
+            SettingsPanel(
+                title = "Connection status",
+                subtitle = "Current provider and on-device model readiness"
+            ) {
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Default.Link, contentDescription = null) },
+                    label = "Remote provider",
+                    value = providerStatus,
+                    badge = if (missingRemoteFields.isEmpty()) {
+                        BadgeData("Connected", BadgeTone.Positive)
+                    } else {
+                        BadgeData("Needs setup", BadgeTone.Warning)
+                    }
                 )
-                val sizeLabel =
-                    formatModelSize(status, stringResource(R.string.gemini_size_unavailable))
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
+                    label = "On-device model",
+                    value = stringResource(R.string.gemini_nano_title),
+                    badge = when {
+                        state.geminiStatus.supported && state.geminiStatus.downloaded -> {
+                            BadgeData("Available", BadgeTone.Positive)
+                        }
+
+                        state.geminiStatus.supported -> BadgeData("Supported", BadgeTone.Neutral)
+                        else -> BadgeData("Unavailable", BadgeTone.Warning)
+                    }
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    StatusBadge(
+                        label = if (state.geminiStatus.supported) "Supported" else "Unsupported",
+                        tone = if (state.geminiStatus.supported) BadgeTone.Positive else BadgeTone.Warning
+                    )
+                    StatusBadge(
+                        label = when {
+                            state.geminiStatus.downloaded -> "Downloaded"
+                            state.geminiStatus.downloading -> "Downloading"
+                            else -> "Not downloaded"
+                        },
+                        tone = when {
+                            state.geminiStatus.downloaded -> BadgeTone.Positive
+                            state.geminiStatus.downloading -> BadgeTone.Neutral
+                            else -> BadgeTone.Warning
+                        }
+                    )
+                }
+
+                val sizeLabel = formatModelSize(
+                    status = state.geminiStatus,
+                    unavailableLabel = stringResource(R.string.gemini_size_unavailable)
+                )
                 if (sizeLabel.isNotBlank()) {
                     Text(
-                        sizeLabel,
-                        style = MaterialTheme.typography.labelSmall,
+                        text = "Model size: $sizeLabel",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (state.geminiStatus.downloading) {
+                    val downloaded = state.geminiStatus.bytesDownloaded ?: 0L
+                    val total = state.geminiStatus.bytesToDownload
+                        ?: state.geminiStatus.lastKnownModelSizeBytes
+                    val progressText = if (total > 0) {
+                        val pct = (downloaded * 100f / total).coerceIn(0f, 100f)
+                        stringResource(R.string.gemini_downloading_percent, pct.toInt())
+                    } else {
+                        stringResource(R.string.gemini_downloading_generic)
+                    }
+                    Text(
+                        text = progressText,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (!state.geminiStatus.downloaded && state.geminiStatus.supported && state.geminiStatus.downloadable && !state.geminiStatus.downloading) {
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onDownloadGeminiNano
+                    ) {
+                        Text(stringResource(R.string.gemini_download_gemini))
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onRefreshGeminiStatus) {
+                        Text(stringResource(R.string.gemini_refresh_status))
+                    }
+                }
+
+                if (!state.geminiStatus.message.isNullOrBlank()) {
+                    Text(
+                        text = state.geminiStatus.message.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-            Icon(downloadedIcon, contentDescription = null, tint = downloadedTint)
         }
 
-        if (!status.downloaded && status.supported) {
-            if (status.downloading) {
-                val downloaded = status.bytesDownloaded ?: 0
-                val total = status.bytesToDownload ?: status.lastKnownModelSizeBytes
-                val progressText = if (total > 0) {
-                    val pct = (downloaded * 100f / total).coerceIn(0f, 100f)
-                    stringResource(R.string.gemini_downloading_percent, pct.toInt())
-                } else {
-                    stringResource(R.string.gemini_downloading_generic)
-                }
-                Text(
-                    progressText,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall
+        item {
+            ExpandablePanel(
+                title = "Advanced connection settings",
+                subtitle = "Base URL, model name, and API credentials",
+                expanded = advancedExpanded,
+                onToggle = { advancedExpanded = !advancedExpanded }
+            ) {
+                OutlinedTextField(
+                    value = state.baseUrl,
+                    onValueChange = onBaseUrlChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = InputShape,
+                    singleLine = true,
+                    label = { Text("Base URL") },
+                    supportingText = {
+                        Text(
+                            "Used for remote inference API. Use the base path, the app appends /chat/completions."
+                        )
+                    }
                 )
-            } else if (status.downloadable) {
-                Button(onClick = onDownload, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.gemini_download_gemini))
+
+                OutlinedTextField(
+                    value = state.modelName,
+                    onValueChange = onModelNameChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = InputShape,
+                    singleLine = true,
+                    label = { Text("Model name") },
+                    supportingText = {
+                        Text("Model used for remote generation.")
+                    }
+                )
+
+                OutlinedTextField(
+                    value = state.apiKey,
+                    onValueChange = onApiKeyChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = InputShape,
+                    singleLine = true,
+                    label = { Text("API key") },
+                    visualTransformation = if (apiKeyVisible) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
+                    trailingIcon = {
+                        IconButton(onClick = { apiKeyVisible = !apiKeyVisible }) {
+                            Icon(
+                                imageVector = if (apiKeyVisible) {
+                                    Icons.Default.VisibilityOff
+                                } else {
+                                    Icons.Default.Visibility
+                                },
+                                contentDescription = if (apiKeyVisible) {
+                                    "Hide API key"
+                                } else {
+                                    "Show API key"
+                                }
+                            )
+                        }
+                    },
+                    supportingText = {
+                        Text("Stored securely on this device.")
+                    }
+                )
+
+                if (!state.saveNotice.isNullOrBlank()) {
+                    Text(
+                        text = state.saveNotice.orEmpty(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Button(
+                    onClick = onSaveSettings,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = InputShape
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Save connection settings")
                 }
             }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(onClick = onRefresh) {
-                Text(stringResource(R.string.gemini_refresh_status))
-            }
-        }
-
-        if (!status.message.isNullOrBlank()) {
-            Text(
-                status.message,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }
@@ -269,21 +506,104 @@ internal fun ModelControlsSettings(
     modifier: Modifier = Modifier,
     onTemperatureChange: (Double) -> Unit,
     onTopPChange: (Double) -> Unit,
-    onContextLengthChange: (Int) -> Unit
+    onContextLengthChange: (Int) -> Unit,
+    onSaveSettings: () -> Unit = {}
 ) {
-    Column(
-        modifier = modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    var advancedExpanded by rememberSaveable { mutableStateOf(false) }
+    val activePreset = closestBehaviorPreset(state.temperature, state.topP)
+
+    LazyColumn(
+        modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(SectionSpacing)
     ) {
-        SectionCard(title = "Model controls") {
-            ParameterSliders(
-                temperature = state.temperature,
-                topP = state.topP,
-                contextLength = state.contextLength,
-                onTemperatureChange = onTemperatureChange,
-                onTopPChange = onTopPChange,
-                onContextLengthChange = onContextLengthChange
-            )
+        item {
+            SettingsPanel(
+                title = "AI behavior",
+                subtitle = "Choose how the assistant should respond"
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    BehaviorPreset.entries.forEach { preset ->
+                        FilterChip(
+                            selected = activePreset == preset,
+                            onClick = {
+                                onTemperatureChange(preset.temperature)
+                                onTopPChange(preset.topP)
+                            },
+                            label = { Text(preset.title) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        )
+                    }
+                }
+
+                Text(
+                    text = activePreset.description,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        item {
+            ExpandablePanel(
+                title = "Advanced model tuning",
+                subtitle = "Temperature, top-p, and context length",
+                expanded = advancedExpanded,
+                onToggle = { advancedExpanded = !advancedExpanded }
+            ) {
+                SliderSetting(
+                    label = "Temperature",
+                    valueText = String.format(Locale.US, "%.2f", state.temperature),
+                    description = "Controls creativity of responses.",
+                    value = state.temperature.toFloat(),
+                    valueRange = 0f..2f,
+                    onValueChange = { onTemperatureChange(it.toDouble()) }
+                )
+
+                SliderSetting(
+                    label = "Top-P",
+                    valueText = String.format(Locale.US, "%.2f", state.topP),
+                    description = "Limits token probability distribution.",
+                    value = state.topP.toFloat(),
+                    valueRange = 0f..1f,
+                    onValueChange = { onTopPChange(it.toDouble()) }
+                )
+
+                SliderSetting(
+                    label = "Context length",
+                    valueText = formatTokens(state.contextLength),
+                    description = "Maximum tokens used as context.",
+                    value = state.contextLength.toFloat(),
+                    valueRange = 512f..32768f,
+                    onValueChange = { onContextLengthChange(it.roundToInt()) }
+                )
+
+                if (!state.saveNotice.isNullOrBlank()) {
+                    Text(
+                        text = state.saveNotice.orEmpty(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Button(
+                    onClick = onSaveSettings,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = InputShape
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Save model settings")
+                }
+            }
         }
     }
 }
@@ -296,97 +616,140 @@ internal fun HuggingFaceConnectionSettings(
     onValidateHuggingFaceToken: () -> Unit,
     onSaveSettings: () -> Unit
 ) {
-    Column(
-        modifier = modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    var manageTokenExpanded by rememberSaveable { mutableStateOf(state.huggingFaceToken.isBlank()) }
+    var tokenVisible by rememberSaveable { mutableStateOf(false) }
+
+    LazyColumn(
+        modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(SectionSpacing)
     ) {
-        SectionCard(title = "Authentication") {
-            OutlinedTextField(
-                value = state.huggingFaceToken,
-                onValueChange = onHuggingFaceTokenChange,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("Access token") },
-                supportingText = { Text("For better compatibility, provide a Read key.") }
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        item {
+            SettingsPanel(
+                title = "Account",
+                subtitle = "Connected integration status"
             ) {
-                TextButton(
-                    enabled = state.huggingFaceToken.isNotBlank() && !state.huggingFaceAccount.isValidating,
-                    onClick = onValidateHuggingFaceToken
-                ) {
-                    Text("Validate token")
-                }
+                when {
+                    state.huggingFaceAccount.isValidating -> {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Text(
+                                text = "Refreshing account details...",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = onValidateHuggingFaceToken,
-                        enabled = !state.huggingFaceAccount.isValidating
+                    state.huggingFaceAccount.isValid -> {
+                        AccountDetailsCard(
+                            account = state.huggingFaceAccount,
+                            onRefresh = onValidateHuggingFaceToken
+                        )
+                    }
+
+                    else -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            SummaryStatusRow(
+                                icon = { Icon(Icons.Default.VpnKey, contentDescription = null) },
+                                label = "Connection",
+                                value = "Not connected",
+                                badge = BadgeData("Disconnected", BadgeTone.Warning)
+                            )
+                            Text(
+                                text = state.huggingFaceAccount.message
+                                    ?: "Validate your token to fetch account details.",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            ExpandablePanel(
+                title = "Manage token",
+                subtitle = "Access token and validation actions",
+                expanded = manageTokenExpanded,
+                onToggle = { manageTokenExpanded = !manageTokenExpanded }
+            ) {
+                OutlinedTextField(
+                    value = state.huggingFaceToken,
+                    onValueChange = onHuggingFaceTokenChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = InputShape,
+                    singleLine = true,
+                    label = { Text("Access token") },
+                    visualTransformation = if (tokenVisible) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
+                    trailingIcon = {
+                        IconButton(onClick = { tokenVisible = !tokenVisible }) {
+                            Icon(
+                                imageVector = if (tokenVisible) {
+                                    Icons.Default.VisibilityOff
+                                } else {
+                                    Icons.Default.Visibility
+                                },
+                                contentDescription = if (tokenVisible) {
+                                    "Hide token"
+                                } else {
+                                    "Show token"
+                                }
+                            )
+                        }
+                    },
+                    supportingText = {
+                        Text("Use a token with read access for model downloads.")
+                    }
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(
+                        enabled = state.huggingFaceToken.isNotBlank() && !state.huggingFaceAccount.isValidating,
+                        onClick = onValidateHuggingFaceToken
+                    ) {
+                        Text("Validate token")
+                    }
+                    TextButton(
+                        enabled = state.huggingFaceAccount.isValid && !state.huggingFaceAccount.isValidating,
+                        onClick = onValidateHuggingFaceToken
                     ) {
                         Icon(Icons.Default.Refresh, contentDescription = null)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Refresh")
-                    }
-                    Button(onClick = onSaveSettings) {
-                        Icon(Icons.Default.Save, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Save")
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            when {
-                state.huggingFaceAccount.isValidating -> {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.width(18.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Text(
-                            "Validating Hugging Face token…",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Refresh account")
                     }
                 }
 
-                state.huggingFaceAccount.isValid -> {
-                    AccountDetailsCard(state.huggingFaceAccount, onValidateHuggingFaceToken)
-                }
-
-                !state.huggingFaceAccount.message.isNullOrBlank() -> {
+                if (!state.saveNotice.isNullOrBlank()) {
                     Text(
-                        state.huggingFaceAccount.message.orEmpty(),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
+                        text = state.saveNotice.orEmpty(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
 
-                else -> {
-                    Text(
-                        "No account details yet. Validate your token to see profile info.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Button(
+                    onClick = onSaveSettings,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = InputShape
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Save")
                 }
-            }
-
-            if (!state.saveNotice.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    state.saveNotice.orEmpty(),
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyMedium
-                )
             }
         }
     }
@@ -404,103 +767,591 @@ internal fun DataHistorySettings(
         modelName = state.modelName,
         apiKey = state.apiKey
     )
+    val remoteConfigured = missingRemoteFields.isEmpty()
+    val nanoAvailable = state.geminiStatus.supported && state.geminiStatus.downloaded
+    var confirmClearHistory by rememberSaveable { mutableStateOf(false) }
 
-    Column(
-        modifier = modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    LazyColumn(
+        modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(SectionSpacing)
     ) {
-        StatsCard(state = state, onRefresh = onRefreshStats)
-        SectionCard(title = "Backend readiness") {
-            val body = if (missingRemoteFields.isEmpty()) {
-                "Remote is configured. Nano still requires Gemini Nano enabled in Developer Options on a supported device."
-            } else {
-                val labels = missingRemoteFields.joinToString { it.displayName }
-                "Remote is missing: $labels. Nano requires Gemini Nano enabled in Developer Options on a supported device."
+        item {
+            SettingsPanel(
+                title = "Usage",
+                subtitle = "Conversation activity",
+                trailing = {
+                    TextButton(onClick = onRefreshStats) {
+                        Text("Refresh")
+                    }
+                }
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    UsageTile(
+                        icon = { Icon(Icons.Outlined.History, contentDescription = null) },
+                        label = "Sessions",
+                        value = state.stats.sessionCount,
+                        modifier = Modifier.weight(1f)
+                    )
+                    UsageTile(
+                        icon = { Icon(Icons.Default.ArrowUpward, contentDescription = null) },
+                        label = "Sent",
+                        value = state.stats.messagesSent,
+                        modifier = Modifier.weight(1f)
+                    )
+                    UsageTile(
+                        icon = { Icon(Icons.Default.ArrowDownward, contentDescription = null) },
+                        label = "Received",
+                        value = state.stats.messagesReceived,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
-            Text(body, style = MaterialTheme.typography.bodyMedium)
         }
-        SectionCard(title = "History & data") {
-            if (!state.clearNotice.isNullOrBlank()) {
-                Text(state.clearNotice.orEmpty(), color = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.height(8.dp))
+
+        item {
+            SettingsPanel(
+                title = "System health",
+                subtitle = "Backend and on-device readiness"
+            ) {
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Default.Link, contentDescription = null) },
+                    label = "Remote API",
+                    value = if (remoteConfigured) "Configured" else "Setup required",
+                    badge = if (remoteConfigured) {
+                        BadgeData("Connected", BadgeTone.Positive)
+                    } else {
+                        BadgeData("Missing fields", BadgeTone.Warning)
+                    }
+                )
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
+                    label = "Gemini Nano",
+                    value = when {
+                        nanoAvailable -> "Available"
+                        state.geminiStatus.supported -> "Not downloaded"
+                        else -> "Unavailable"
+                    },
+                    badge = when {
+                        nanoAvailable -> BadgeData("Ready", BadgeTone.Positive)
+                        state.geminiStatus.supported -> BadgeData(
+                            "Download needed",
+                            BadgeTone.Neutral
+                        )
+
+                        else -> BadgeData("Unavailable", BadgeTone.Warning)
+                    }
+                )
             }
-            Button(onClick = onClearHistory, modifier = Modifier.fillMaxWidth()) {
-                Text("Clear all chat history")
+        }
+
+        item {
+            SettingsPanel(
+                title = "Data",
+                subtitle = "Manage local conversation history"
+            ) {
+                if (!state.clearNotice.isNullOrBlank()) {
+                    Text(
+                        text = state.clearNotice.orEmpty(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Button(
+                    onClick = { confirmClearHistory = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = InputShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Clear chat history")
+                }
+            }
+        }
+    }
+
+    if (confirmClearHistory) {
+        AlertDialog(
+            onDismissRequest = { confirmClearHistory = false },
+            title = { Text("Delete all conversations?") },
+            text = { Text("This action cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        confirmClearHistory = false
+                        onClearHistory()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearHistory = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun SystemSummaryCard(
+    modelName: String,
+    behaviorMode: String,
+    providerStatus: String,
+    onDeviceStatus: String,
+    onDeviceTone: BadgeTone
+) {
+    SettingsPanel(
+        title = "AI system overview",
+        subtitle = "Quick status of model, behavior, and connectivity"
+    ) {
+        SummaryStatusRow(
+            icon = { Icon(Icons.Default.Star, contentDescription = null) },
+            label = "Active model",
+            value = modelName
+        )
+        SummaryStatusRow(
+            icon = { Icon(Icons.Default.Tune, contentDescription = null) },
+            label = "Behavior mode",
+            value = behaviorMode
+        )
+        SummaryStatusRow(
+            icon = { Icon(Icons.Default.Link, contentDescription = null) },
+            label = "Connection",
+            value = providerStatus
+        )
+        SummaryStatusRow(
+            icon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
+            label = "On-device AI",
+            value = onDeviceStatus,
+            badge = BadgeData(
+                onDeviceStatus.substringAfterLast(' ').replaceFirstChar { it.titlecase() },
+                onDeviceTone
+            )
+        )
+    }
+}
+
+@Composable
+private fun SettingsGroup(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium
+            )
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
+    }
+}
+
+@Composable
+private fun SettingsNavigationRow(
+    icon: @Composable () -> Unit,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = SettingsRowShape,
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(IconContainerShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .padding(8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                icon()
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsPanel(
+    title: String,
+    subtitle: String? = null,
+    trailing: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = SettingsScreenShape,
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(
+            modifier = Modifier.padding(CardPadding),
+            verticalArrangement = Arrangement.spacedBy(ItemSpacing)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    )
+                    if (!subtitle.isNullOrBlank()) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                trailing?.invoke()
+            }
+
+            content()
+        }
+    }
+}
+
+@Composable
+private fun ExpandablePanel(
+    title: String,
+    subtitle: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = SettingsScreenShape,
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(
+            modifier = Modifier.padding(CardPadding),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(InputShape)
+                    .clickable(onClick = onToggle)
+                    .padding(horizontal = 2.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    )
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(animationSpec = tween(durationMillis = 180)) +
+                        fadeIn(animationSpec = tween(durationMillis = 160)),
+                exit = shrinkVertically(animationSpec = tween(durationMillis = 160)) +
+                        fadeOut(animationSpec = tween(durationMillis = 120))
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(ItemSpacing), content = content)
             }
         }
     }
 }
 
 @Composable
-private fun AccountDetailsCard(
-    account: com.fcm.nanochat.model.HuggingFaceAccountUi,
-    onRefresh: () -> Unit
+private fun SummaryStatusRow(
+    icon: @Composable () -> Unit,
+    label: String,
+    value: String,
+    badge: BadgeData? = null
 ) {
-    val uriHandler = LocalUriHandler.current
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(IconContainerShape)
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .padding(8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            icon()
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium
+                ),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        if (badge != null) {
+            StatusBadge(label = badge.label, tone = badge.tone)
+        }
+    }
+}
+
+@Composable
+private fun SliderSetting(
+    label: String,
+    valueText: String,
+    description: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    onValueChange: (Float) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            )
+            Text(
+                text = valueText,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            )
+        }
+
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.70f),
+                inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            )
+        )
+    }
+}
+
+@Composable
+private fun UsageTile(
+    icon: @Composable () -> Unit,
+    label: String,
+    value: Long,
+    modifier: Modifier = Modifier
+) {
+    val animatedValue by animateIntAsState(
+        targetValue = value.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+        animationSpec = tween(durationMillis = 180),
+        label = "UsageTileNumber"
+    )
+
+    Surface(
+        modifier = modifier,
+        shape = SettingsRowShape,
+        color = MaterialTheme.colorScheme.surface
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 12.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(IconContainerShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                icon()
+            }
+            Text(
+                text = formatCount(animatedValue.toLong()),
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusBadge(
+    label: String,
+    tone: BadgeTone
+) {
+    val containerColor = when (tone) {
+        BadgeTone.Positive -> MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+        BadgeTone.Neutral -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
+        BadgeTone.Warning -> MaterialTheme.colorScheme.error.copy(alpha = 0.14f)
+    }
+    val contentColor = when (tone) {
+        BadgeTone.Positive -> MaterialTheme.colorScheme.primary
+        BadgeTone.Neutral -> MaterialTheme.colorScheme.onSurface
+        BadgeTone.Warning -> MaterialTheme.colorScheme.error
+    }
+
+    Surface(
+        shape = CircleShape,
+        color = containerColor
+    ) {
+        Text(
+            text = label,
+            color = contentColor,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+        )
+    }
+}
+
+@Composable
+private fun AccountDetailsCard(
+    account: HuggingFaceAccountUi,
+    onRefresh: () -> Unit
+) {
+    val uriHandler = LocalUriHandler.current
+
+    Surface(
+        shape = SettingsRowShape,
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
+                    modifier = Modifier.weight(1f),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Avatar(account.avatarUrl, account.fullName ?: account.username ?: "?")
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        val displayName = account.fullName ?: account.username ?: "Unknown user"
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = displayName,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
+                    Avatar(
+                        avatarUrl = account.avatarUrl,
+                        name = account.fullName ?: account.username ?: "?"
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(
+                            text = account.fullName ?: account.username ?: "Unknown account",
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium
                             )
-                            if (account.isPro) {
-                                AssistChip(
-                                    onClick = {},
-                                    enabled = false,
-                                    label = { Text("PRO", fontSize = 12.sp) },
-                                    colors = AssistChipDefaults.assistChipColors(
-                                        labelColor = MaterialTheme.colorScheme.onPrimary,
-                                        containerColor = MaterialTheme.colorScheme.primary
-                                    )
-                                )
-                            }
-                        }
-                        account.username?.let { user ->
+                        )
+                        account.username?.let { username ->
                             Text(
-                                text = "@$user",
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = "@$username",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         account.email?.let { email ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(email, style = MaterialTheme.typography.bodyMedium)
-                                if (account.emailVerified) {
-                                    Icon(
-                                        Icons.Outlined.CheckCircle,
-                                        contentDescription = "Email verified",
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
+                            Text(
+                                text = email,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -510,17 +1361,26 @@ private fun AccountDetailsCard(
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                account.tokenName?.let {
-                    AssistChip(onClick = {}, enabled = false, label = { Text("Token: $it") })
-                }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                StatusBadge(label = "Connected", tone = BadgeTone.Positive)
                 account.tokenRole?.let {
-                    AssistChip(onClick = {}, enabled = false, label = { Text("Role: $it") })
+                    StatusBadge(
+                        label = "Role: ${it.lowercase().replaceFirstChar { c -> c.titlecase() }}",
+                        tone = BadgeTone.Neutral
+                    )
+                }
+                account.tokenName?.let {
+                    StatusBadge(label = "Token: Active", tone = BadgeTone.Positive)
                 }
             }
 
-            account.profileUrl?.let { url ->
-                TextButton(onClick = { runCatching { uriHandler.openUri(url) } }) {
+            account.profileUrl?.let { profileUrl ->
+                TextButton(onClick = { runCatching { uriHandler.openUri(profileUrl) } }) {
                     Text("View profile")
                 }
             }
@@ -530,13 +1390,19 @@ private fun AccountDetailsCard(
 
 @Composable
 private fun Avatar(avatarUrl: String?, name: String) {
-    val initials = name.trim().split(" ").filter { it.isNotBlank() }
-        .mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("")
+    val initials = name
+        .trim()
+        .split(" ")
+        .filter { it.isNotBlank() }
+        .mapNotNull { it.firstOrNull()?.uppercase() }
+        .take(2)
+        .joinToString("")
+
     Box(
         modifier = Modifier
-            .size(56.dp)
-            .clip(RoundedCornerShape(28.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .size(52.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainer),
         contentAlignment = Alignment.Center
     ) {
         AsyncImage(
@@ -544,113 +1410,74 @@ private fun Avatar(avatarUrl: String?, name: String) {
             contentDescription = "Avatar",
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
-            placeholder = ColorPainter(MaterialTheme.colorScheme.surfaceVariant),
-            error = ColorPainter(MaterialTheme.colorScheme.surfaceVariant)
+            placeholder = ColorPainter(MaterialTheme.colorScheme.surfaceContainer),
+            error = ColorPainter(MaterialTheme.colorScheme.surfaceContainer)
         )
-        Text(initials.ifBlank { "?" }, style = MaterialTheme.typography.titleMedium)
-    }
-}
-
-@Composable
-private fun SettingRow(
-    icon: @Composable () -> Unit,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(8.dp)
-        ) {
-            icon()
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Icon(
-            Icons.Outlined.KeyboardArrowRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        Text(
+            text = initials.ifBlank { "?" },
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
 
-@Composable
-private fun SectionCard(
-    title: String,
-    subtitle: String? = null,
-    content: @Composable () -> Unit
-) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                if (!subtitle.isNullOrBlank()) {
-                    Text(
-                        subtitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-            content()
-        }
-    }
+private data class BadgeData(
+    val label: String,
+    val tone: BadgeTone
+)
+
+private fun closestBehaviorPreset(temperature: Double, topP: Double): BehaviorPreset {
+    return BehaviorPreset.entries.minByOrNull { preset ->
+        abs(temperature - preset.temperature) + abs(topP - preset.topP)
+    } ?: BehaviorPreset.Balanced
+}
+
+private fun displayModelName(modelName: String): String {
+    val cleaned = modelName
+        .replace('-', ' ')
+        .replace('_', ' ')
+        .trim()
+    return cleaned.ifBlank { "Gemini 3 Flash" }
 }
 
 private fun inferProviderStatus(baseUrl: String): String {
     val normalized = baseUrl.lowercase()
     return when {
-        normalized.isBlank() -> "No endpoint configured"
-        "generativelanguage.googleapis.com" in normalized -> "Using Gemini via GenAI"
-        "aiplatform.googleapis.com" in normalized || "vertexai" in normalized -> "Using Gemini via VertexAI"
-        "api.openai.com" in normalized -> "Using OpenAI"
-        "anthropic.com" in normalized -> "Using Anthropic-compatible endpoint"
-        else -> "Using OpenAI-compatible endpoint"
+        normalized.isBlank() -> "Not configured"
+        "generativelanguage.googleapis.com" in normalized -> "Gemini via GenAI"
+        "aiplatform.googleapis.com" in normalized || "vertexai" in normalized -> "Gemini via Vertex AI"
+        "api.openai.com" in normalized -> "OpenAI"
+        "anthropic.com" in normalized -> "Anthropic-compatible"
+        else -> "OpenAI-compatible"
     }
+}
+
+private fun connectionModeSummary(remoteConfigured: Boolean): String {
+    return if (remoteConfigured) "Remote API" else "Remote API setup needed"
 }
 
 private fun huggingFaceSubtitle(state: SettingsScreenState): String {
     return when {
-        state.huggingFaceToken.isBlank() -> "HF token not set"
+        state.huggingFaceToken.isBlank() -> "Token not set"
         state.huggingFaceAccount.isValidating -> "Validating token"
         state.huggingFaceAccount.isValid -> {
             val label = state.huggingFaceAccount.fullName
                 ?: state.huggingFaceAccount.username
                 ?: state.huggingFaceAccount.email
-            if (label.isNullOrBlank()) "HF token validated" else "Connected as $label"
+            if (label.isNullOrBlank()) "Connected" else "Connected as $label"
         }
 
-        !state.huggingFaceAccount.message.isNullOrBlank() -> "Token validation failed"
-        else -> "HF token saved"
+        !state.huggingFaceAccount.message.isNullOrBlank() -> "Validation failed"
+        else -> "Token saved"
     }
+}
+
+private fun formatTokens(value: Int): String {
+    return "${NumberFormat.getIntegerInstance().format(value)} tokens"
+}
+
+private fun formatCount(value: Long): String {
+    return NumberFormat.getIntegerInstance().format(value)
 }
 
 private fun formatModelSize(status: GeminiNanoStatusUi, unavailableLabel: String): String {
@@ -669,162 +1496,4 @@ private fun humanReadableByteCount(bytes: Long): String {
     val prefix = "kMGTPE"[exp - 1]
     val value = bytes / unit.pow(exp.toDouble())
     return "%.1f %sB".format(value, prefix)
-}
-
-private class LastFiveVisibleApiKeyTransformation : VisualTransformation {
-    override fun filter(text: AnnotatedString): TransformedText {
-        val raw = text.text
-        if (raw.length <= 5) {
-            return TransformedText(text, OffsetMapping.Identity)
-        }
-        val masked = "•".repeat(raw.length - 5) + raw.takeLast(5)
-        return TransformedText(AnnotatedString(masked), OffsetMapping.Identity)
-    }
-}
-
-@Composable
-private fun ParameterSliders(
-    temperature: Double,
-    topP: Double,
-    contextLength: Int,
-    onTemperatureChange: (Double) -> Unit,
-    onTopPChange: (Double) -> Unit,
-    onContextLengthChange: (Int) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Model controls", style = MaterialTheme.typography.titleMedium)
-        LabeledSlider(
-            label = "Temperature",
-            value = temperature.toFloat(),
-            range = 0f..2f,
-            steps = 5,
-            formatter = { "%.2f".format(it) },
-            onValueChange = { onTemperatureChange(it.toDouble()) }
-        )
-        LabeledSlider(
-            label = "Top P",
-            value = topP.toFloat(),
-            range = 0f..1f,
-            steps = 5,
-            formatter = { "%.2f".format(it) },
-            onValueChange = { onTopPChange(it.toDouble()) }
-        )
-        LabeledSlider(
-            label = "Context length",
-            value = contextLength.toFloat(),
-            range = 512f..32768f,
-            steps = 10,
-            formatter = { it.toInt().toString() },
-            onValueChange = { onContextLengthChange(it.toInt()) }
-        )
-    }
-}
-
-@Composable
-private fun LabeledSlider(
-    label: String,
-    value: Float,
-    range: ClosedFloatingPointRange<Float>,
-    steps: Int,
-    formatter: (Float) -> String,
-    onValueChange: (Float) -> Unit
-) {
-    Column {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(label, style = MaterialTheme.typography.labelLarge)
-            Text(formatter(value), style = MaterialTheme.typography.labelMedium)
-        }
-        androidx.compose.material3.Slider(
-            value = value,
-            onValueChange = onValueChange,
-            valueRange = range,
-            steps = steps
-        )
-    }
-}
-
-@Composable
-private fun StatsCard(state: SettingsScreenState, onRefresh: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Usage", style = MaterialTheme.typography.titleMedium)
-                TextButton(onClick = onRefresh) {
-                    Text("Refresh")
-                }
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    UsageTile(
-                        title = "Sessions",
-                        value = state.stats.sessionCount.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
-                    UsageTile(
-                        title = "Sent",
-                        value = state.stats.messagesSent.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    UsageTile(
-                        title = "Received",
-                        value = state.stats.messagesReceived.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun UsageTile(
-    title: String,
-    value: String,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.aspectRatio(1f),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
-    }
 }

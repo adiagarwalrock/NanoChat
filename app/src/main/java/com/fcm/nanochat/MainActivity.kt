@@ -51,6 +51,7 @@ class MainActivity : ComponentActivity() {
                     onRenameSession = chatViewModel::renameSession,
                     onDeleteSession = chatViewModel::deleteSession,
                     onPinSession = chatViewModel::setSessionPinned,
+                    onDeleteMessage = chatViewModel::deleteMessage,
                     onBaseUrlChange = settingsViewModel::updateBaseUrl,
                     onModelNameChange = settingsViewModel::updateModelName,
                     onApiKeyChange = settingsViewModel::updateApiKey,

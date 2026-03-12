@@ -54,7 +54,8 @@ Lint & Formatting
 
 Architecture Snapshot
 - DI: simple `AppContainer` in `NanoChatApplication`; ViewModel factories per screen.
-- Data: Room entities `ChatSessionEntity`, `ChatMessageEntity`; DAOs for session/message; currently `fallbackToDestructiveMigration()`—replace with migrations before release.
+- Data: Room entities `ChatSessionEntity`, `ChatMessageEntity`; DAOs for session/message; explicit
+  migrations are in place (`1->2`, `2->3`) with indexed message ordering.
 - Preferences: `AppPreferences` merges DataStore (non-secret) + EncryptedSharedPreferences (secrets) into `SettingsSnapshot` Flow.
 - Domain: `InferenceClient` interface with availability + streamChat; selector + formatter + assembler implement backend semantics.
 - UI: Compose Material 3 screens in `ui/`; state from `ChatScreenState` and `SettingsScreenState` flows.
@@ -64,7 +65,7 @@ Data & Persistence Rules
 - Session titles trimmed to 32 chars with ellipsis; reuse helper.
 - DAO calls are suspend; never block main thread.
 - Time source: `System.currentTimeMillis()` consistently.
-- Room currently uses destructive migration for development; add migrations + tests before any release.
+- Room uses explicit migrations; keep migration coverage updated for every schema/version change.
 
 File Structure Snapshot (PRD)
 - `app/src/main/java/com/fcm/nanochat/` root.

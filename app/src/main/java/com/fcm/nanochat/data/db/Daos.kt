@@ -49,4 +49,7 @@ interface ChatMessageDao {
 
     @Query("SELECT COUNT(*) FROM chat_messages WHERE role = :role")
     suspend fun countByRole(role: ChatRole): Long
+
+    @Query("DELETE FROM chat_messages WHERE id = :messageId")
+    suspend fun deleteMessage(messageId: Long): Int
 }

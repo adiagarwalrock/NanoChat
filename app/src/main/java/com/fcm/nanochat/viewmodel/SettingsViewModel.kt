@@ -11,6 +11,7 @@ import com.fcm.nanochat.model.GeminiNanoStatusUi
 import com.fcm.nanochat.model.HuggingFaceAccountUi
 import com.fcm.nanochat.model.SettingsScreenState
 import com.fcm.nanochat.model.UsageStats
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -125,13 +126,17 @@ class SettingsViewModel(
     fun save() {
         viewModelScope.launch {
             val current = _uiState.value
-            preferences.updateBaseUrl(current.baseUrl)
-            preferences.updateModelName(current.modelName)
-            preferences.updateApiKey(current.apiKey)
-            preferences.updateHuggingFaceToken(current.huggingFaceToken)
-            preferences.updateTemperature(current.temperature)
-            preferences.updateTopP(current.topP)
-            preferences.updateContextLength(current.contextLength)
+            preferences.updateModelSettings(
+                baseUrl = current.baseUrl,
+                modelName = current.modelName,
+                temperature = current.temperature,
+                topP = current.topP,
+                contextLength = current.contextLength
+            )
+            preferences.updateSecrets(
+                apiKey = current.apiKey,
+                huggingFaceToken = current.huggingFaceToken
+            )
             _uiState.update { it.copy(saveNotice = "Settings saved.", clearNotice = null) }
         }
     }
@@ -253,11 +258,14 @@ class SettingsViewModel(
             }
 
             val accountState = fetchHuggingFaceAccount(token)
-            lastValidatedToken = token
 
             _uiState.update { current ->
                 if (current.huggingFaceToken.trim() != token) current
                 else current.copy(huggingFaceAccount = accountState)
+            }
+
+            if (_uiState.value.huggingFaceToken.trim() == token) {
+                lastValidatedToken = token
             }
         }
     }
@@ -301,7 +309,11 @@ class SettingsViewModel(
                     preferences.updateHuggingFaceAccount(body)
                     return@withContext account.toUi(isValid = true, message = "Connected")
                 }
-            } catch (error: Exception) {
+            } catch (error: Throwable) {
+                if (error is CancellationException) {
+                    throw error
+                }
+
                 return@withContext HuggingFaceAccountUi(
                     isValidating = false,
                     isValid = false,
@@ -322,12 +334,25 @@ class SettingsViewModel(
 
     fun clearAllHistory() {
         viewModelScope.launch {
-            runCatching {
+            val wasCleared = try {
                 repository.clearAllData()
                 repository.createSession()
+                true
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
+                false
             }
+
             refreshStats()
-            _uiState.update { it.copy(clearNotice = "History cleared.", saveNotice = null) }
+            _uiState.update {
+                val clearNotice = if (wasCleared) {
+                    "History cleared."
+                } else {
+                    "Unable to clear history. Try again."
+                }
+                it.copy(clearNotice = clearNotice, saveNotice = null)
+            }
         }
     }
 }

@@ -39,6 +39,8 @@ class RemoteInferenceClient(
             BackendAvailability.Available -> Unit
         }
 
+        val outputChannel = channel
+
         val apiUrl = RemoteApiUrlResolver.chatCompletionsUrl(request.settings.baseUrl)
         val body = buildRequestBody(request).toString()
             .toRequestBody("application/json".toMediaType())
@@ -56,6 +58,10 @@ class RemoteInferenceClient(
         val call = httpClient.newCall(httpRequest)
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
+                if (call.isCanceled()) {
+                    close()
+                    return
+                }
                 close(InferenceException.RemoteFailure("Remote request failed.", e))
             }
 
@@ -82,23 +88,56 @@ class RemoteInferenceClient(
 
             fun streamEvents(source: BufferedSource) {
                 try {
+                    val eventDataLines = mutableListOf<String>()
+
                     while (!source.exhausted()) {
                         val line = source.readUtf8Line() ?: break
-                        if (!line.startsWith("data:")) continue
 
-                        val payload = line.removePrefix("data:").trim()
-                        if (payload.isEmpty()) continue
-                        if (payload == "[DONE]") break
+                        if (line.isEmpty()) {
+                            val shouldContinue = consumeEvent(eventDataLines)
+                            eventDataLines.clear()
+                            if (!shouldContinue) {
+                                break
+                            }
+                            continue
+                        }
 
-                        val delta = parseDelta(payload)
-                        if (delta.isNotEmpty()) {
-                            trySend(delta)
+                        if (line.startsWith(":")) {
+                            continue
+                        }
+
+                        if (line.startsWith("data:")) {
+                            eventDataLines += line.removePrefix("data:").trimStart()
                         }
                     }
+
+                    if (eventDataLines.isNotEmpty()) {
+                        consumeEvent(eventDataLines)
+                    }
+
                     close()
                 } catch (e: Exception) {
                     close(InferenceException.RemoteFailure("Failed to parse remote stream.", e))
                 }
+            }
+
+            fun consumeEvent(eventDataLines: List<String>): Boolean {
+                if (eventDataLines.isEmpty()) return true
+
+                val payload = eventDataLines.joinToString(separator = "\n").trim()
+                if (payload.isEmpty()) return true
+                if (payload == "[DONE]") return false
+
+                val delta = parseDelta(payload)
+                if (delta.isEmpty()) return true
+
+                val sendResult = outputChannel.trySend(delta)
+                if (sendResult.isSuccess || call.isCanceled() || outputChannel.isClosedForSend) {
+                    return true
+                }
+
+                close(InferenceException.RemoteFailure("Remote stream closed before delivering all content."))
+                return false
             }
         })
 

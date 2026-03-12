@@ -33,7 +33,9 @@ data class SettingsSnapshot(
 
 class AppPreferences(context: Context) {
     private val appContext = context.applicationContext
-    private val secretStore by lazy { createSecretStore(appContext) }
+    private val secretStore: SharedPreferences? by lazy(LazyThreadSafetyMode.NONE) {
+        runCatching { createSecretStore(appContext) }.getOrNull()
+    }
 
     val settings: Flow<SettingsSnapshot> =
         appContext.dataStore.data.map { preferences ->
@@ -41,8 +43,8 @@ class AppPreferences(context: Context) {
                 inferenceMode = parseInferenceMode(preferences[Keys.inferenceMode]),
                 baseUrl = preferences[Keys.baseUrl].orEmpty(),
                 modelName = preferences[Keys.modelName].orEmpty(),
-                apiKey = secretStore.getString(SecretKeys.apiKey, "").orEmpty(),
-                huggingFaceToken = secretStore.getString(SecretKeys.huggingFaceToken, "").orEmpty(),
+                apiKey = readSecret(SecretKeys.apiKey),
+                huggingFaceToken = readSecret(SecretKeys.huggingFaceToken),
                 temperature = preferences[Keys.temperature] ?: DEFAULT_TEMPERATURE,
                 topP = preferences[Keys.topP] ?: DEFAULT_TOP_P,
                 contextLength = preferences[Keys.contextLength] ?: DEFAULT_CONTEXT_LENGTH,
@@ -72,11 +74,43 @@ class AppPreferences(context: Context) {
     }
 
     fun updateApiKey(value: String) {
-        secretStore.edit().putString(SecretKeys.apiKey, value.trim()).apply()
+        writeSecretValue(SecretKeys.apiKey, value.trim())
     }
 
     fun updateHuggingFaceToken(value: String) {
-        secretStore.edit().putString(SecretKeys.huggingFaceToken, value.trim()).apply()
+        writeSecretValue(SecretKeys.huggingFaceToken, value.trim())
+    }
+
+    fun updateSecrets(apiKey: String, huggingFaceToken: String) {
+        runCatching {
+            secretStore
+                ?.edit()
+                ?.putString(SecretKeys.apiKey, apiKey.trim())
+                ?.putString(SecretKeys.huggingFaceToken, huggingFaceToken.trim())
+                ?.apply()
+        }
+    }
+
+    suspend fun updateModelSettings(
+        baseUrl: String,
+        modelName: String,
+        temperature: Double,
+        topP: Double,
+        contextLength: Int
+    ) {
+        val normalizedBaseUrl = normalizeBaseUrl(baseUrl)
+        val normalizedModelName = modelName.trim()
+        val clampedTemperature = temperature.coerceIn(0.0, 2.0)
+        val clampedTopP = topP.coerceIn(0.0, 1.0)
+        val clampedContextLength = contextLength.coerceIn(512, 32768)
+
+        appContext.dataStore.edit { preferences ->
+            preferences[Keys.baseUrl] = normalizedBaseUrl
+            preferences[Keys.modelName] = normalizedModelName
+            preferences[Keys.temperature] = clampedTemperature
+            preferences[Keys.topP] = clampedTopP
+            preferences[Keys.contextLength] = clampedContextLength
+        }
     }
 
     suspend fun updateTemperature(value: Double) {
@@ -125,6 +159,21 @@ class AppPreferences(context: Context) {
 
     private fun normalizeBaseUrl(raw: String): String {
         return raw.trim().trimEnd('/')
+    }
+
+    private fun readSecret(key: String): String {
+        return runCatching {
+            secretStore?.getString(key, "").orEmpty()
+        }.getOrDefault("")
+    }
+
+    private fun writeSecretValue(key: String, value: String) {
+        runCatching {
+            secretStore
+                ?.edit()
+                ?.putString(key, value)
+                ?.apply()
+        }
     }
 
     private object Keys {

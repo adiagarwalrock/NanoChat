@@ -35,9 +35,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import com.fcm.nanochat.inference.InferenceMode
-import com.fcm.nanochat.model.ChatMessage
 import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.SettingsScreenState
+import com.fcm.nanochat.ui.SettingsSection.AiConfiguration
 import com.fcm.nanochat.ui.SettingsSection.Connection
 import com.fcm.nanochat.ui.SettingsSection.DataHistory
 import com.fcm.nanochat.ui.SettingsSection.Home
@@ -61,6 +61,7 @@ fun NanoChatApp(
     onRenameSession: (Long, String) -> Unit = { _, _ -> },
     onDeleteSession: (Long) -> Unit = {},
     onPinSession: (Long, Boolean) -> Unit = { _, _ -> },
+    onDeleteMessage: (Long) -> Unit = {},
     onBaseUrlChange: (String) -> Unit = {},
     onModelNameChange: (String) -> Unit = {},
     onApiKeyChange: (String) -> Unit = {},
@@ -141,9 +142,8 @@ fun NanoChatApp(
                         onTemperatureChange = onTemperatureChange,
                         onTopPChange = onTopPChange,
                         onContextLengthChange = onContextLengthChange,
-                        onMessageInfo = { message ->
-                            scope.launch { snackbarHostState.showSnackbar(formatMessageInfo(message)) }
-                        }
+                        onMessageInfo = {},
+                        onDeleteMessage = { message -> onDeleteMessage(message.id) }
                     )
                 }
 
@@ -206,14 +206,23 @@ private fun SettingsPage(
     var section by rememberSaveable { mutableStateOf(Home) }
     val title = when (section) {
         Home -> "Settings"
+        AiConfiguration -> "AI configuration"
         Connection -> "Connection"
-        ModelControls -> "Model controls"
+        ModelControls -> "Model behavior"
         HuggingFaceConnection -> "Hugging Face"
-        DataHistory -> "Data & history"
+        DataHistory -> "Usage and history"
     }
 
     val navigateBack: () -> Unit = {
-        if (section != Home) section = Home else onBack()
+        section = when (section) {
+            Home -> {
+                onBack()
+                Home
+            }
+
+            AiConfiguration, HuggingFaceConnection, DataHistory -> Home
+            Connection, ModelControls -> AiConfiguration
+        }
     }
 
     BackHandler(onBack = navigateBack)
@@ -242,6 +251,12 @@ private fun SettingsPage(
                 onNavigate = { section = it }
             )
 
+            AiConfiguration -> AiConfigurationSettings(
+                state = state,
+                modifier = contentModifier,
+                onNavigate = { section = it }
+            )
+
             Connection -> ConnectionSettings(
                 state = state,
                 modifier = contentModifier,
@@ -249,7 +264,8 @@ private fun SettingsPage(
                 onModelNameChange = onModelNameChange,
                 onApiKeyChange = onApiKeyChange,
                 onRefreshGeminiStatus = onRefreshGeminiStatus,
-                onDownloadGeminiNano = onDownloadGeminiNano
+                onDownloadGeminiNano = onDownloadGeminiNano,
+                onSaveSettings = onSaveSettings
             )
 
             ModelControls -> ModelControlsSettings(
@@ -257,7 +273,8 @@ private fun SettingsPage(
                 modifier = contentModifier,
                 onTemperatureChange = onTemperatureChange,
                 onTopPChange = onTopPChange,
-                onContextLengthChange = onContextLengthChange
+                onContextLengthChange = onContextLengthChange,
+                onSaveSettings = onSaveSettings
             )
 
             HuggingFaceConnection -> HuggingFaceConnectionSettings(
@@ -275,15 +292,6 @@ private fun SettingsPage(
                 onClearHistory = onClearHistory
             )
         }
-    }
-}
-
-private fun formatMessageInfo(message: ChatMessage): String {
-    val modeLabel = if (message.inferenceMode == InferenceMode.REMOTE) "Remote" else "Nano"
-    return buildString {
-        append("Model: ${message.modelName.ifBlank { "(unspecified)" }}\n")
-        append("Backend: $modeLabel\n")
-        append("Temp: ${"%.2f".format(message.temperature)}  TopP: ${"%.2f".format(message.topP)}  Context: ${message.contextLength}")
     }
 }
 

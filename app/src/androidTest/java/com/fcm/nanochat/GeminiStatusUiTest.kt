@@ -1,8 +1,10 @@
 package com.fcm.nanochat
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import com.fcm.nanochat.model.GeminiNanoStatusUi
 import com.fcm.nanochat.model.SettingsScreenState
@@ -39,13 +41,14 @@ class GeminiStatusUiTest {
                 onModelNameChange = {},
                 onApiKeyChange = {},
                 onRefreshGeminiStatus = {},
-                onDownloadGeminiNano = {}
+                onDownloadGeminiNano = {},
+                onSaveSettings = {}
             )
         }
 
-        composeRule.onNodeWithText("Device supported").assertIsDisplayed()
-        composeRule.onNodeWithText("Model downloaded").assertIsDisplayed()
-        composeRule.onNodeWithText("Download Gemini Nano").assertDoesNotExist()
+        composeRule.onNodeWithText("On-device model").assertIsDisplayed()
+        composeRule.onNodeWithText("Downloaded").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Download Gemini Nano").assertCountEquals(0)
     }
 
     @Test
@@ -72,7 +75,8 @@ class GeminiStatusUiTest {
                 onModelNameChange = {},
                 onApiKeyChange = {},
                 onRefreshGeminiStatus = {},
-                onDownloadGeminiNano = {}
+                onDownloadGeminiNano = {},
+                onSaveSettings = {}
             )
         }
 

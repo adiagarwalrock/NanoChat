@@ -12,6 +12,7 @@ import com.fcm.nanochat.model.ChatMessage
 import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.ChatSession
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,6 +33,7 @@ class ChatViewModel(
     private val notice = MutableStateFlow<String?>(null)
     private val isSending = MutableStateFlow(false)
     private var sendJob: Job? = null
+    private var activeRequestId: Long = 0
     private var lastUserPrompt: String? = null
 
     private val settings = repository.observeSettings()
@@ -147,6 +149,12 @@ class ChatViewModel(
         }
     }
 
+    fun deleteMessage(messageId: Long) {
+        viewModelScope.launch {
+            repository.deleteMessage(messageId)
+        }
+    }
+
     fun setInferenceMode(mode: InferenceMode) {
         viewModelScope.launch {
             repository.setInferenceMode(mode)
@@ -172,45 +180,80 @@ class ChatViewModel(
         val sessionId = activeSessionId.value ?: return
         if (prompt.isBlank() || isSending.value) return
 
+        val requestId = ++activeRequestId
         sendJob?.cancel()
         sendJob = viewModelScope.launch {
             isSending.value = true
             notice.value = null
             lastUserPrompt = prompt
+            var assistantMessageId: Long? = null
 
-            val snapshot = settings.value
-            val mode = snapshot.inferenceMode
-            val availability = repository.backendAvailability(mode, snapshot)
-            if (availability is BackendAvailability.Unavailable) {
-                notice.value = availability.message
-                isSending.value = false
-                return@launch
-            }
+            try {
+                val snapshot = settings.value
+                val mode = snapshot.inferenceMode
+                val availability = repository.backendAvailability(mode, snapshot)
+                if (availability is BackendAvailability.Unavailable) {
+                    notice.value = availability.message
+                    return@launch
+                }
 
-            val history = repository.recentTurnsFor(mode, sessionId)
-            repository.saveUserMessage(sessionId, prompt, snapshot)
-            val assistantMessageId = repository.insertAssistantPlaceholder(sessionId, snapshot)
-            draft.value = ""
-            val assembler = StreamingMessageAssembler()
+                val history = repository.recentTurnsFor(mode, sessionId)
+                repository.saveUserMessage(sessionId, prompt, snapshot)
+                val createdAssistantMessageId =
+                    repository.insertAssistantPlaceholder(sessionId, snapshot)
+                assistantMessageId = createdAssistantMessageId
+                draft.value = ""
 
-            runCatching {
+                val assembler = StreamingMessageAssembler()
+                var lastPersistTimeMs = 0L
+                var lastPersistedLength = 0
+                var lastPersistedSnapshot = ""
+
                 repository.streamResponse(mode, history, prompt, snapshot).collect { delta ->
                     val content = assembler.append(mode, delta)
-                    if (mode == InferenceMode.REMOTE) {
-                        repository.updateAssistantMessage(assistantMessageId, content)
+                    if (
+                        mode == InferenceMode.REMOTE &&
+                        shouldPersistStreamSnapshot(content, lastPersistTimeMs, lastPersistedLength)
+                    ) {
+                        repository.updateAssistantMessage(createdAssistantMessageId, content)
+                        lastPersistTimeMs = System.currentTimeMillis()
+                        lastPersistedLength = content.length
+                        lastPersistedSnapshot = content
                     }
                 }
-                if (mode == InferenceMode.AICORE) {
-                    repository.updateAssistantMessage(assistantMessageId, assembler.current())
+
+                val finalContent = assembler.current()
+                if (mode == InferenceMode.AICORE || finalContent != lastPersistedSnapshot) {
+                    repository.updateAssistantMessage(createdAssistantMessageId, finalContent)
                 }
-            }.onFailure { error ->
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Throwable) {
                 val message = userFacingError(error).ifBlank { "Unable to complete the request." }
                 notice.value = message
-                repository.updateAssistantMessage(assistantMessageId, message)
+                assistantMessageId?.let { messageId ->
+                    repository.updateAssistantMessage(messageId, message)
+                }
+            } finally {
+                if (activeRequestId == requestId) {
+                    isSending.value = false
+                }
             }
-
-            isSending.value = false
         }
+    }
+
+    private fun shouldPersistStreamSnapshot(
+        content: String,
+        lastPersistTimeMs: Long,
+        lastPersistedLength: Int
+    ): Boolean {
+        if (content.isEmpty()) return false
+
+        if (lastPersistTimeMs == 0L) return true
+
+        val elapsedMs = System.currentTimeMillis() - lastPersistTimeMs
+        val lengthGrowth = content.length - lastPersistedLength
+        return elapsedMs >= STREAM_PERSIST_INTERVAL_MS || lengthGrowth >= STREAM_PERSIST_MIN_LENGTH_DELTA
     }
 
     private fun userFacingError(error: Throwable): String {
@@ -221,6 +264,11 @@ class ChatViewModel(
             is InferenceException.RemoteFailure -> error.message.orEmpty()
             else -> error.message ?: "Inference failed."
         }
+    }
+
+    private companion object {
+        const val STREAM_PERSIST_INTERVAL_MS = 180L
+        const val STREAM_PERSIST_MIN_LENGTH_DELTA = 24
     }
 }
 

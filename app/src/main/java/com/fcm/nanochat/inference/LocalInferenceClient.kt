@@ -190,7 +190,6 @@ class LocalInferenceClient : InferenceClient {
                     )
                 }
 
-                else -> initial
             }
         }
     }

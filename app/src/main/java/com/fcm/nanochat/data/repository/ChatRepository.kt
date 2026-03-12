@@ -119,6 +119,10 @@ class ChatRepository(
         database.messageDao().updateContent(messageId, content, System.currentTimeMillis())
     }
 
+    suspend fun deleteMessage(messageId: Long) {
+        database.messageDao().deleteMessage(messageId)
+    }
+
     suspend fun setInferenceMode(mode: InferenceMode) {
         preferences.updateInferenceMode(mode)
     }
@@ -132,13 +136,14 @@ class ChatRepository(
         topP: Double,
         contextLength: Int
     ) {
-        preferences.updateBaseUrl(baseUrl)
-        preferences.updateModelName(modelName)
-        preferences.updateApiKey(apiKey)
-        preferences.updateHuggingFaceToken(huggingFaceToken)
-        preferences.updateTemperature(temperature)
-        preferences.updateTopP(topP)
-        preferences.updateContextLength(contextLength)
+        preferences.updateModelSettings(
+            baseUrl = baseUrl,
+            modelName = modelName,
+            temperature = temperature,
+            topP = topP,
+            contextLength = contextLength
+        )
+        preferences.updateSecrets(apiKey = apiKey, huggingFaceToken = huggingFaceToken)
     }
 
     suspend fun settingsSnapshot(): SettingsSnapshot = preferences.settings.first()
