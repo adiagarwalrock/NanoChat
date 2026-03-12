@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -25,7 +26,9 @@ data class SettingsSnapshot(
     val huggingFaceToken: String = "",
     val temperature: Double = 0.7,
     val topP: Double = 0.9,
-    val contextLength: Int = 4096
+    val contextLength: Int = 4096,
+    val geminiNanoModelSizeBytes: Long = 0,
+    val huggingFaceAccountJson: String = ""
 )
 
 class AppPreferences(context: Context) {
@@ -42,7 +45,9 @@ class AppPreferences(context: Context) {
                 huggingFaceToken = secretStore.getString(SecretKeys.huggingFaceToken, "").orEmpty(),
                 temperature = preferences[Keys.temperature] ?: DEFAULT_TEMPERATURE,
                 topP = preferences[Keys.topP] ?: DEFAULT_TOP_P,
-                contextLength = preferences[Keys.contextLength] ?: DEFAULT_CONTEXT_LENGTH
+                contextLength = preferences[Keys.contextLength] ?: DEFAULT_CONTEXT_LENGTH,
+                geminiNanoModelSizeBytes = preferences[Keys.geminiNanoModelSizeBytes] ?: 0,
+                huggingFaceAccountJson = preferences[Keys.huggingFaceAccountJson] ?: ""
             )
         }
 
@@ -87,6 +92,15 @@ class AppPreferences(context: Context) {
         appContext.dataStore.edit { it[Keys.contextLength] = clamped }
     }
 
+    suspend fun updateHuggingFaceAccount(json: String) {
+        appContext.dataStore.edit { it[Keys.huggingFaceAccountJson] = json }
+    }
+
+    suspend fun updateGeminiNanoModelSize(bytes: Long) {
+        if (bytes <= 0) return
+        appContext.dataStore.edit { it[Keys.geminiNanoModelSizeBytes] = bytes }
+    }
+
     suspend fun setSessionPinned(sessionId: Long, pinned: Boolean) {
         appContext.dataStore.edit { preferences ->
             val current = preferences[Keys.pinnedSessionIds].orEmpty().toMutableSet()
@@ -121,6 +135,10 @@ class AppPreferences(context: Context) {
         val temperature: Preferences.Key<Double> = doublePreferencesKey("temperature")
         val topP: Preferences.Key<Double> = doublePreferencesKey("top_p")
         val contextLength: Preferences.Key<Int> = intPreferencesKey("context_length")
+        val geminiNanoModelSizeBytes: Preferences.Key<Long> =
+            longPreferencesKey("gemini_nano_model_size_bytes")
+        val huggingFaceAccountJson: Preferences.Key<String> =
+            stringPreferencesKey("hugging_face_account_json")
     }
 
     private object SecretKeys {

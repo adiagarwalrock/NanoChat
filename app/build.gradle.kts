@@ -76,6 +76,9 @@ dependencies {
     // JSON
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
+    // Images
+    implementation("io.coil-kt:coil-compose:2.5.0")
+
     // Markdown + LaTeX rendering in message bubbles
     implementation("io.noties.markwon:core:4.6.2")
     implementation("io.noties.markwon:inline-parser:4.6.2")

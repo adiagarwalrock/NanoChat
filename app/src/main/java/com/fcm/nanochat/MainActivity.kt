@@ -31,7 +31,8 @@ class MainActivity : ComponentActivity() {
                 val settingsViewModel: SettingsViewModel = viewModel(
                     factory = SettingsViewModelFactory(
                         container.preferences,
-                        container.chatRepository
+                        container.chatRepository,
+                        container.httpClient
                     )
                 )
 
@@ -54,12 +55,15 @@ class MainActivity : ComponentActivity() {
                     onModelNameChange = settingsViewModel::updateModelName,
                     onApiKeyChange = settingsViewModel::updateApiKey,
                     onHuggingFaceTokenChange = settingsViewModel::updateHuggingFaceToken,
+                    onValidateHuggingFaceToken = settingsViewModel::validateHuggingFaceToken,
                     onTemperatureChange = settingsViewModel::updateTemperature,
                     onTopPChange = settingsViewModel::updateTopP,
                     onContextLengthChange = settingsViewModel::updateContextLength,
                     onSaveSettings = settingsViewModel::save,
                     onClearHistory = settingsViewModel::clearAllHistory,
                     onRefreshStats = settingsViewModel::refreshStats,
+                    onRefreshGeminiStatus = settingsViewModel::refreshGeminiStatus,
+                    onDownloadGeminiNano = settingsViewModel::downloadGeminiNano,
                     onDismissNotice = chatViewModel::clearNotice
                 )
             }

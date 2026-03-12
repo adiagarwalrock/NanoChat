@@ -1,4 +1,13 @@
 <resources>
     <string name="app_name">NanoChat</string>
     <string name="copy_message">Copy message</string>
+    <string name="gemini_nano_title">Gemini Nano</string>
+    <string name="gemini_nano_subtitle">On-device status</string>
+    <string name="gemini_device_supported">Device supported</string>
+    <string name="gemini_model_downloaded">Model downloaded</string>
+    <string name="gemini_download_gemini">Download Gemini Nano</string>
+    <string name="gemini_refresh_status">Refresh status</string>
+    <string name="gemini_downloading_generic">Downloading…</string>
+    <string name="gemini_downloading_percent">Downloading… %1$d%%</string>
+    <string name="gemini_size_unavailable">Size unavailable</string>
 </resources>

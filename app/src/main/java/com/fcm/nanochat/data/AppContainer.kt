@@ -10,11 +10,11 @@ import okhttp3.OkHttpClient
 class AppContainer(context: Context) {
     private val appContext = context.applicationContext
     private val database = AppDatabase.create(appContext)
-    private val httpClient = OkHttpClient.Builder().build()
+    val httpClient = OkHttpClient.Builder().build()
 
     val preferences = AppPreferences(appContext)
 
-    private val localInferenceClient = LocalInferenceClient(appContext)
+    private val localInferenceClient = LocalInferenceClient()
     private val remoteInferenceClient = RemoteInferenceClient(httpClient)
 
     val chatRepository = ChatRepository(

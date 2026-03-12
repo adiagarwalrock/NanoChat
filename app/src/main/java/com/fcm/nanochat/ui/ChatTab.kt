@@ -1,17 +1,11 @@
 package com.fcm.nanochat.ui
 
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.RectF
 import android.graphics.drawable.GradientDrawable
-import android.text.Layout
-import android.text.TextPaint
 import android.text.method.LinkMovementMethod
-import android.text.style.LeadingMarginSpan
-import android.text.style.MetricAffectingSpan
 import android.widget.TextView
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -50,9 +44,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,7 +56,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -68,6 +63,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -81,18 +77,10 @@ import com.fcm.nanochat.model.ChatMessage
 import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.SettingsScreenState
-import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
-import io.noties.markwon.MarkwonConfiguration
-import io.noties.markwon.MarkwonSpansFactory
-import io.noties.markwon.RenderProps
-import io.noties.markwon.SpanFactory
-import io.noties.markwon.core.MarkwonTheme
 import io.noties.markwon.ext.latex.JLatexMathPlugin
 import io.noties.markwon.ext.latex.JLatexMathTheme
 import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
-import org.commonmark.node.FencedCodeBlock
-import org.commonmark.node.IndentedCodeBlock
 
 @Composable
 internal fun ChatTab(
@@ -178,6 +166,7 @@ internal fun ChatTab(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun ChatTabContent(
     state: ChatScreenState,
     settingsState: SettingsScreenState,
@@ -201,7 +190,8 @@ private fun ChatTabContent(
     val imeBottomInset = with(density) { WindowInsets.ime.getBottom(density).toDp() }
     val navBottomInset = with(density) { WindowInsets.navigationBars.getBottom(density).toDp() }
     val bottomInset = maxOf(imeBottomInset, navBottomInset)
-    val listBottomPadding = maxOf(measuredComposerHeight, 140.dp) + bottomInset + 14.dp
+    val composerHeight = if (measuredComposerHeight > 0.dp) measuredComposerHeight else 96.dp
+    val listBottomPadding = composerHeight + bottomInset + 20.dp
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -209,8 +199,7 @@ private fun ChatTabContent(
                 selectedMode = state.inferenceMode,
                 modelName = settingsState.modelName,
                 onInferenceModeChange = onInferenceModeChange,
-                onOpenSessions = onOpenSessions,
-                onOpenControls = { controlsVisible = true }
+                onOpenSessions = onOpenSessions
             )
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -239,6 +228,8 @@ private fun ChatTabContent(
             Composer(
                 draft = state.draft,
                 isSending = state.isSending,
+                notice = state.notice,
+                onOpenControls = { controlsVisible = true },
                 onDraftChange = onMessageDraftChange,
                 onSend = onSendMessage,
                 onRetry = onRetryLast,
@@ -346,8 +337,7 @@ private fun ChatTopBar(
     selectedMode: InferenceMode,
     modelName: String,
     onInferenceModeChange: (InferenceMode) -> Unit,
-    onOpenSessions: () -> Unit,
-    onOpenControls: () -> Unit
+    onOpenSessions: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val cleanModel = modelName
@@ -359,6 +349,8 @@ private fun ChatTopBar(
     } else {
         "Gemini Nano"
     }
+
+    val pillShape = RoundedCornerShape(22.dp)
 
     Row(
         modifier = Modifier
@@ -377,17 +369,29 @@ private fun ChatTopBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box {
-                TextButton(onClick = { expanded = true }) {
-                    Text(
-                        text = selectedLabel,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Icon(
-                        imageVector = Icons.Default.ArrowDropDown,
-                        contentDescription = "Select backend"
-                    )
+                Surface(
+                    onClick = { expanded = true },
+                    shape = pillShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    tonalElevation = 4.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = selectedLabel,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = "Select backend"
+                        )
+                    }
                 }
                 DropdownMenu(
                     expanded = expanded,
@@ -409,9 +413,6 @@ private fun ChatTopBar(
                     )
                 }
             }
-        }
-        IconButton(onClick = onOpenControls) {
-            Icon(Icons.Default.Tune, contentDescription = "Model controls")
         }
     }
 }
@@ -439,6 +440,7 @@ private fun EmptyConversation(modifier: Modifier = Modifier) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageList(
     messages: List<ChatMessage>,
@@ -447,57 +449,80 @@ private fun MessageList(
     onMessageInfo: (ChatMessage) -> Unit
 ) {
     val clipboardManager = LocalClipboardManager.current
+    val haptics = LocalHapticFeedback.current
 
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(top = 4.dp, bottom = bottomPadding)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = bottomPadding)
     ) {
         items(messages, key = { it.id }) { message ->
             val isUser = message.role == ChatRole.USER
+            var showUserCopy by remember(message.id) { mutableStateOf(false) }
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onMessageInfo(message) },
+                    .fillMaxWidth(),
                 horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
             ) {
                 if (isUser) {
                     Column(
                         modifier = Modifier
-                            .fillMaxWidth(0.86f)
-                            .padding(end = 2.dp),
+                            .fillMaxWidth(0.82f)
+                            .padding(end = 4.dp),
                         horizontalAlignment = Alignment.End
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(
-                                    RoundedCornerShape(
-                                        topStart = 18.dp,
-                                        topEnd = 18.dp,
-                                        bottomStart = 18.dp,
-                                        bottomEnd = 8.dp
-                                    )
-                                )
-                                .background(MaterialTheme.colorScheme.primaryContainer)
-                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                        Surface(
+                            shape = RoundedCornerShape(
+                                topStart = 18.dp,
+                                topEnd = 20.dp,
+                                bottomStart = 18.dp,
+                                bottomEnd = 10.dp
+                            ),
+                            color = MaterialTheme.colorScheme.primary,
+                            tonalElevation = 2.dp,
+                            shadowElevation = 6.dp
                         ) {
-                            MarkdownMessage(
-                                content = message.content,
-                                textColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .combinedClickable(
+                                        onClick = { onMessageInfo(message) },
+                                        onLongClick = {
+                                            haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                            showUserCopy = true
+                                        }
+                                    )
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                MarkdownMessage(
+                                    content = message.content,
+                                    textColor = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                if (showUserCopy) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End
+                                    ) {
+                                        MessageCopyButton(
+                                            enabled = message.content.isNotBlank(),
+                                            onCopy = {
+                                                clipboardManager.setText(AnnotatedString(message.content))
+                                                showUserCopy = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
                         }
-                        MessageCopyButton(
-                            enabled = message.content.isNotBlank(),
-                            onCopy = { clipboardManager.setText(AnnotatedString(message.content)) }
-                        )
                     }
                 } else {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 2.dp)
+                            .padding(horizontal = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         if (message.content.isBlank() && message.isStreaming) {
                             Text(
@@ -512,10 +537,15 @@ private fun MessageList(
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
-                        MessageCopyButton(
-                            enabled = message.content.isNotBlank(),
-                            onCopy = { clipboardManager.setText(AnnotatedString(message.content)) }
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            MessageCopyButton(
+                                enabled = message.content.isNotBlank(),
+                                onCopy = { clipboardManager.setText(AnnotatedString(message.content)) }
+                            )
+                        }
                     }
                 }
             }
@@ -529,17 +559,23 @@ private fun MessageCopyButton(
     onCopy: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    IconButton(
-        onClick = onCopy,
-        enabled = enabled,
-        modifier = modifier.size(22.dp)
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 2.dp
     ) {
-        Icon(
-            imageVector = Icons.Default.ContentCopy,
-            contentDescription = stringResource(id = R.string.copy_message),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(18.dp)
-        )
+        IconButton(
+            onClick = onCopy,
+            enabled = enabled,
+            modifier = modifier.size(28.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.ContentCopy,
+                contentDescription = stringResource(id = R.string.copy_message),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+        }
     }
 }
 
@@ -552,36 +588,17 @@ private fun MarkdownMessage(
     val context = LocalContext.current
     val density = LocalDensity.current
     val textArgb = textColor.toArgb()
-    val codeBackgroundColor = textColor.copy(alpha = 0.14f).toArgb()
     val latexBackgroundColor = textColor.copy(alpha = 0.12f).toArgb()
-    val codeCornerRadiusPx = with(density) { 10.dp.toPx() }
     val latexCornerRadiusPx = with(density) { 10.dp.toPx() }
 
     val markwon = remember(
         context,
         textArgb,
-        codeBackgroundColor,
         latexBackgroundColor,
-        codeCornerRadiusPx,
         latexCornerRadiusPx
     ) {
         Markwon.builder(context)
             .usePlugin(MarkwonInlineParserPlugin.create())
-            .usePlugin(
-                object : AbstractMarkwonPlugin() {
-                    override fun configureTheme(builder: MarkwonTheme.Builder) {
-                        builder
-                            .codeBackgroundColor(codeBackgroundColor)
-                            .codeBlockBackgroundColor(codeBackgroundColor)
-                    }
-
-                    override fun configureSpansFactory(builder: MarkwonSpansFactory.Builder) {
-                        val factory = RoundedCodeBlockSpanFactory(cornerRadiusPx = codeCornerRadiusPx)
-                        builder.setFactory(FencedCodeBlock::class.java, factory)
-                        builder.setFactory(IndentedCodeBlock::class.java, factory)
-                    }
-                }
-            )
             .usePlugin(
                 JLatexMathPlugin.create(16f) { builder ->
                     builder.inlinesEnabled(true)
@@ -615,7 +632,7 @@ private fun MarkdownMessage(
             textView.setTextColor(textArgb)
             textView.textSize = 14f
             textView.setLineSpacing(0f, 1.2f)
-            markwon.setMarkdown(textView, content.ifBlank { "" })
+            markwon.setMarkdown(textView, normalizeLists(content))
         }
     )
 }
@@ -624,16 +641,23 @@ private fun MarkdownMessage(
 private fun Composer(
     draft: String,
     isSending: Boolean,
+    notice: String?,
+    onOpenControls: () -> Unit,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val sendEnabled = draft.isNotBlank() && !isSending
-    val sendColor = if (sendEnabled) {
+    val sendContainerColor = if (sendEnabled) {
         MaterialTheme.colorScheme.primary
     } else {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val sendContentColor = if (sendEnabled) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     Card(
@@ -647,107 +671,108 @@ private fun Composer(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            OutlinedTextField(
-                value = draft,
-                onValueChange = onDraftChange,
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Chat with NanoChat...") },
-                minLines = 1,
-                maxLines = 4,
-                shape = RoundedCornerShape(18.dp)
-            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                TextButton(onClick = onRetry, enabled = !isSending) {
-                    Text("Retry")
-                }
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(sendColor)
-                        .clickable(enabled = sendEnabled, onClick = onSend)
-                        .padding(horizontal = 14.dp, vertical = 9.dp),
-                    contentAlignment = Alignment.Center
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    tonalElevation = 2.dp
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowUpward,
-                        contentDescription = "Send",
-                        tint = MaterialTheme.colorScheme.onPrimary
+                    IconButton(onClick = onOpenControls) {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = "Model controls",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+                TextField(
+                    value = draft,
+                    onValueChange = onDraftChange,
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Chat with NanoChat...") },
+                    minLines = 2,
+                    maxLines = 6,
+                    shape = RoundedCornerShape(18.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
+                        cursorColor = MaterialTheme.colorScheme.primary,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                )
+
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = sendContainerColor,
+                    tonalElevation = if (sendEnabled) 6.dp else 0.dp
+                ) {
+                    IconButton(onClick = onSend, enabled = sendEnabled) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowUpward,
+                            contentDescription = "Send",
+                            tint = sendContentColor
+                        )
+                    }
+                }
+            }
+
+            if (notice != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = notice,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = onRetry, enabled = !isSending) {
+                        Text("Retry last")
+                    }
                 }
             }
         }
     }
 }
 
-private class RoundedCodeBlockSpanFactory(
-    private val cornerRadiusPx: Float
-) : SpanFactory {
-    override fun getSpans(configuration: MarkwonConfiguration, props: RenderProps): Any {
-        return RoundedCodeBlockSpan(
-            theme = configuration.theme(),
-            cornerRadiusPx = cornerRadiusPx
-        )
-    }
-}
+private fun normalizeLists(raw: String): String {
+    if (raw.isBlank()) return raw
 
-private class RoundedCodeBlockSpan(
-    private val theme: MarkwonTheme,
-    private val cornerRadiusPx: Float
-) : MetricAffectingSpan(), LeadingMarginSpan {
+    val lines = raw.lines()
+    val builder = StringBuilder()
+    var insideFence = false
 
-    private val rect = RectF()
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-
-    override fun updateMeasureState(textPaint: TextPaint) {
-        apply(textPaint)
-    }
-
-    override fun updateDrawState(textPaint: TextPaint) {
-        apply(textPaint)
-    }
-
-    private fun apply(textPaint: TextPaint) {
-        theme.applyCodeBlockTextStyle(textPaint)
-    }
-
-    override fun getLeadingMargin(first: Boolean): Int = theme.getCodeBlockMargin()
-
-    override fun drawLeadingMargin(
-        canvas: Canvas,
-        textPaint: Paint,
-        x: Int,
-        dir: Int,
-        top: Int,
-        baseline: Int,
-        bottom: Int,
-        text: CharSequence,
-        start: Int,
-        end: Int,
-        first: Boolean,
-        layout: Layout
-    ) {
-        paint.style = Paint.Style.FILL
-        paint.color = theme.getCodeBlockBackgroundColor(textPaint)
-
-        val left: Int
-        val right: Int
-        if (dir > 0) {
-            left = x
-            right = canvas.width
-        } else {
-            left = x - canvas.width
-            right = x
+    for (line in lines) {
+        val trimmed = line.trimStart()
+        val isFenceToggle = trimmed.startsWith("```") || trimmed.startsWith("~~~")
+        if (isFenceToggle) {
+            insideFence = !insideFence
+            builder.append(line).append('\n')
+            continue
         }
 
-        rect.set(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat())
-        canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, paint)
+        if (!insideFence && line.startsWith("    ")) {
+            builder.append(line.removePrefix("    ")).append('\n')
+        } else {
+            builder.append(line).append('\n')
+        }
     }
+
+    return builder.toString().trimEnd('\n')
 }

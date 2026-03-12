@@ -47,11 +47,39 @@ data class SettingsScreenState(
     val contextLength: Int = com.fcm.nanochat.data.AppPreferences.DEFAULT_CONTEXT_LENGTH,
     val stats: UsageStats = UsageStats(),
     val saveNotice: String? = null,
-    val clearNotice: String? = null
+    val clearNotice: String? = null,
+    val geminiStatus: GeminiNanoStatusUi = GeminiNanoStatusUi(),
+    val huggingFaceAccount: HuggingFaceAccountUi = HuggingFaceAccountUi()
 )
 
 data class UsageStats(
     val sessionCount: Long = 0,
     val messagesSent: Long = 0,
     val messagesReceived: Long = 0
+)
+
+data class GeminiNanoStatusUi(
+    val supported: Boolean = false,
+    val downloaded: Boolean = false,
+    val downloading: Boolean = false,
+    val downloadable: Boolean = false,
+    val bytesDownloaded: Long? = null,
+    val bytesToDownload: Long? = null,
+    val lastKnownModelSizeBytes: Long = 0,
+    val message: String? = null
+)
+
+data class HuggingFaceAccountUi(
+    val isValidating: Boolean = false,
+    val isValid: Boolean = false,
+    val username: String? = null,
+    val fullName: String? = null,
+    val email: String? = null,
+    val emailVerified: Boolean = false,
+    val avatarUrl: String? = null,
+    val profileUrl: String? = null,
+    val isPro: Boolean = false,
+    val tokenName: String? = null,
+    val tokenRole: String? = null,
+    val message: String? = null
 )

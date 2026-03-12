@@ -1,43 +1,35 @@
 package com.fcm.nanochat.inference
 
-import android.content.Context
 import com.fcm.nanochat.data.SettingsSnapshot
+import com.google.mlkit.genai.common.DownloadStatus
+import com.google.mlkit.genai.common.FeatureStatus
+import com.google.mlkit.genai.common.GenAiException
+import com.google.mlkit.genai.prompt.Generation
+import com.google.mlkit.genai.prompt.GenerativeModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 
-class LocalInferenceClient(
-    private val context: Context
-) : InferenceClient {
+class LocalInferenceClient : InferenceClient {
     override suspend fun availability(settings: SettingsSnapshot): BackendAvailability {
-        if (!hasAiCorePackage()) {
-            return BackendAvailability.Unavailable(
-                "AICore is not available on this device. Install or enable Gemini Nano in Developer Options."
-            )
-        }
+        val status = runCatching { generationClient.checkStatus() }
+            .getOrElse { return BackendAvailability.Unavailable(availabilityErrorMessage(it)) }
 
-        val client = try {
-            generationClient
-        } catch (error: Throwable) {
-            return BackendAvailability.Unavailable(availabilityErrorMessage(error))
-        }
-
-        val status = try {
-            invokeNoArg(client, "checkStatus")
-        } catch (error: Throwable) {
-            return BackendAvailability.Unavailable(availabilityErrorMessage(error))
-        }
-
-        return when (enumName(status)) {
-            "AVAILABLE", "DOWNLOADABLE" -> BackendAvailability.Available
-            "DOWNLOADING" -> BackendAvailability.Unavailable(
-                "Gemini Nano is downloading in AICore. Keep device online and retry once download completes."
+        return when (status) {
+            FeatureStatus.AVAILABLE -> BackendAvailability.Available
+            FeatureStatus.DOWNLOADABLE -> BackendAvailability.Unavailable(
+                "Gemini Nano is not downloaded. Open Settings to download and enable on-device inference."
             )
 
-            "UNAVAILABLE" -> BackendAvailability.Unavailable(
-                "Gemini Nano is unavailable right now. Ensure AICore has finished setup and the bootloader is locked."
+            FeatureStatus.DOWNLOADING -> BackendAvailability.Unavailable(
+                "Gemini Nano is downloading. Keep the device online and retry after it finishes."
+            )
+
+            FeatureStatus.UNAVAILABLE -> BackendAvailability.Unavailable(
+                "Gemini Nano is unavailable on this device. Ensure AICore is enabled, updated, and the bootloader is locked."
             )
             else -> BackendAvailability.Unavailable(
-                "Unable to determine Gemini Nano availability (status=${enumName(status)})."
+                "Unable to determine Gemini Nano availability (status=$status)."
             )
         }
     }
@@ -55,10 +47,10 @@ class LocalInferenceClient(
             throw mapThrowableToInferenceException(error)
         }
 
-        runCatching { invokeNoArg(client, "warmup") }
+        runCatching { client.warmup() }
 
         val response = runCatching {
-            invokeSingleArg(client, "generateContent", prompt)
+            client.generateContent(prompt)
         }.getOrElse { error ->
             throw mapThrowableToInferenceException(error)
         }
@@ -71,21 +63,136 @@ class LocalInferenceClient(
         emit(text)
     }
 
-    private val generationClient: Any by lazy {
-        val generationClass = Class.forName("com.google.mlkit.genai.prompt.Generation")
-        val getClientMethod = generationClass.methods.firstOrNull {
-            it.name == "getClient" && it.parameterCount == 0
-        } ?: throw NoSuchMethodException("Generation.getClient() is unavailable.")
-
-        getClientMethod.invoke(null)
-            ?: throw IllegalStateException("Generation client is null.")
+    private val generationClient: GenerativeModel by lazy {
+        Generation.getClient()
     }
 
-    @Suppress("DEPRECATION")
-    private fun hasAiCorePackage(): Boolean {
-        return runCatching {
-            context.packageManager.getPackageInfo(AICORE_PACKAGE_NAME, 0)
-        }.isSuccess
+    suspend fun geminiStatus(): GeminiNanoStatus {
+        val status = runCatching { generationClient.checkStatus() }
+            .getOrElse { error ->
+                return GeminiNanoStatus(
+                    supported = false,
+                    downloaded = false,
+                    downloading = false,
+                    downloadable = false,
+                    bytesDownloaded = null,
+                    bytesToDownload = null,
+                    message = availabilityErrorMessage(error)
+                )
+            }
+
+        return when (status) {
+            FeatureStatus.AVAILABLE -> GeminiNanoStatus(
+                supported = true,
+                downloaded = true,
+                downloading = false,
+                downloadable = false,
+                bytesDownloaded = null,
+                bytesToDownload = null,
+                message = null
+            )
+
+            FeatureStatus.DOWNLOADABLE -> GeminiNanoStatus(
+                supported = true,
+                downloaded = false,
+                downloading = false,
+                downloadable = true,
+                bytesDownloaded = null,
+                bytesToDownload = null,
+                message = "Gemini Nano can be downloaded on this device."
+            )
+
+            FeatureStatus.DOWNLOADING -> GeminiNanoStatus(
+                supported = true,
+                downloaded = false,
+                downloading = true,
+                downloadable = true,
+                bytesDownloaded = null,
+                bytesToDownload = null,
+                message = "Gemini Nano is downloading. Keep the device online."
+            )
+
+            FeatureStatus.UNAVAILABLE -> GeminiNanoStatus(
+                supported = false,
+                downloaded = false,
+                downloading = false,
+                downloadable = false,
+                bytesDownloaded = null,
+                bytesToDownload = null,
+                message = "Gemini Nano is unavailable on this device. Ensure AICore is enabled and updated."
+            )
+
+            else -> GeminiNanoStatus(
+                supported = false,
+                downloaded = false,
+                downloading = false,
+                downloadable = false,
+                bytesDownloaded = null,
+                bytesToDownload = null,
+                message = "Unable to determine Gemini Nano status (status=$status)."
+            )
+        }
+    }
+
+    fun downloadModel(): Flow<GeminiNanoStatus> {
+        val initial = GeminiNanoStatus(
+            supported = true,
+            downloaded = false,
+            downloading = true,
+            downloadable = true,
+            bytesDownloaded = null,
+            bytesToDownload = null,
+            message = "Starting download"
+        )
+
+        return generationClient.download().map { status ->
+            when (status) {
+                is DownloadStatus.DownloadStarted -> GeminiNanoStatus(
+                    supported = true,
+                    downloaded = false,
+                    downloading = true,
+                    downloadable = true,
+                    bytesDownloaded = 0L,
+                    bytesToDownload = status.bytesToDownload,
+                    message = "Downloading Gemini Nano"
+                )
+
+                is DownloadStatus.DownloadProgress -> GeminiNanoStatus(
+                    supported = true,
+                    downloaded = false,
+                    downloading = true,
+                    downloadable = true,
+                    bytesDownloaded = status.totalBytesDownloaded,
+                    bytesToDownload = null,
+                    message = "Downloading Gemini Nano"
+                )
+
+                is DownloadStatus.DownloadCompleted -> GeminiNanoStatus(
+                    supported = true,
+                    downloaded = true,
+                    downloading = false,
+                    downloadable = false,
+                    bytesDownloaded = null,
+                    bytesToDownload = null,
+                    message = null
+                )
+
+                is DownloadStatus.DownloadFailed -> {
+                    val mapped = mapThrowableToInferenceException(status.e)
+                    GeminiNanoStatus(
+                        supported = true,
+                        downloaded = false,
+                        downloading = false,
+                        downloadable = true,
+                        bytesDownloaded = null,
+                        bytesToDownload = null,
+                        message = mapped.message ?: "Gemini Nano download failed."
+                    )
+                }
+
+                else -> initial
+            }
+        }
     }
 
     private fun availabilityErrorMessage(error: Throwable): String {
@@ -253,10 +360,6 @@ class LocalInferenceClient(
     }
 
     private fun isGenAiException(error: Throwable): Boolean {
-        return error.javaClass.name == "com.google.mlkit.genai.common.GenAiException"
-    }
-
-    private companion object {
-        const val AICORE_PACKAGE_NAME = "com.google.android.aicore"
+        return error is GenAiException || error.javaClass.name == "com.google.mlkit.genai.common.GenAiException"
     }
 }

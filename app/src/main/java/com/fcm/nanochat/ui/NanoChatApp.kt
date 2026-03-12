@@ -1,5 +1,6 @@
 package com.fcm.nanochat.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,6 +12,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -31,11 +33,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import com.fcm.nanochat.inference.InferenceMode
 import com.fcm.nanochat.model.ChatMessage
 import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.SettingsScreenState
+import com.fcm.nanochat.ui.SettingsSection.Connection
+import com.fcm.nanochat.ui.SettingsSection.DataHistory
+import com.fcm.nanochat.ui.SettingsSection.Home
+import com.fcm.nanochat.ui.SettingsSection.HuggingFaceConnection
+import com.fcm.nanochat.ui.SettingsSection.ModelControls
 import kotlinx.coroutines.launch
 
 private enum class AppDestination { Chat, Settings }
@@ -58,12 +65,15 @@ fun NanoChatApp(
     onModelNameChange: (String) -> Unit = {},
     onApiKeyChange: (String) -> Unit = {},
     onHuggingFaceTokenChange: (String) -> Unit = {},
+    onValidateHuggingFaceToken: () -> Unit = {},
     onTemperatureChange: (Double) -> Unit = {},
     onTopPChange: (Double) -> Unit = {},
     onContextLengthChange: (Int) -> Unit = {},
     onSaveSettings: () -> Unit = {},
     onClearHistory: () -> Unit = {},
     onRefreshStats: () -> Unit = {},
+    onRefreshGeminiStatus: () -> Unit = {},
+    onDownloadGeminiNano: () -> Unit = {},
     onDismissNotice: () -> Unit = {}
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -146,12 +156,15 @@ fun NanoChatApp(
                         onModelNameChange = onModelNameChange,
                         onApiKeyChange = onApiKeyChange,
                         onHuggingFaceTokenChange = onHuggingFaceTokenChange,
+                        onValidateHuggingFaceToken = onValidateHuggingFaceToken,
                         onTemperatureChange = onTemperatureChange,
                         onTopPChange = onTopPChange,
                         onContextLengthChange = onContextLengthChange,
                         onSaveSettings = onSaveSettings,
                         onClearHistory = onClearHistory,
-                        onRefreshStats = onRefreshStats
+                        onRefreshStats = onRefreshStats,
+                        onRefreshGeminiStatus = onRefreshGeminiStatus,
+                        onDownloadGeminiNano = onDownloadGeminiNano
                     )
                 }
             }
@@ -180,46 +193,88 @@ private fun SettingsPage(
     onModelNameChange: (String) -> Unit,
     onApiKeyChange: (String) -> Unit,
     onHuggingFaceTokenChange: (String) -> Unit,
+    onValidateHuggingFaceToken: () -> Unit,
     onTemperatureChange: (Double) -> Unit,
     onTopPChange: (Double) -> Unit,
     onContextLengthChange: (Int) -> Unit,
     onSaveSettings: () -> Unit,
     onClearHistory: () -> Unit,
-    onRefreshStats: () -> Unit
+    onRefreshStats: () -> Unit,
+    onRefreshGeminiStatus: () -> Unit,
+    onDownloadGeminiNano: () -> Unit
 ) {
+    var section by rememberSaveable { mutableStateOf(Home) }
+    val title = when (section) {
+        Home -> "Settings"
+        Connection -> "Connection"
+        ModelControls -> "Model controls"
+        HuggingFaceConnection -> "Hugging Face"
+        DataHistory -> "Data & history"
+    }
+
+    val navigateBack: () -> Unit = {
+        if (section != Home) section = Home else onBack()
+    }
+
+    BackHandler(onBack = navigateBack)
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
             androidx.compose.material3.TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
-                    TextButton(
-                        onClick = onBack
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                        Text("Back", modifier = Modifier.padding(start = 4.dp))
+                    IconButton(onClick = navigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
         },
         contentWindowInsets = ScaffoldDefaults.contentWindowInsets
     ) { inner ->
-        SettingsTab(
-            state = state,
-            modifier = Modifier
-                .padding(inner)
-                .fillMaxSize(),
-            onBaseUrlChange = onBaseUrlChange,
-            onModelNameChange = onModelNameChange,
-            onApiKeyChange = onApiKeyChange,
-            onHuggingFaceTokenChange = onHuggingFaceTokenChange,
-            onTemperatureChange = onTemperatureChange,
-            onTopPChange = onTopPChange,
-            onContextLengthChange = onContextLengthChange,
-            onSaveSettings = onSaveSettings,
-            onClearHistory = onClearHistory,
-            onRefreshStats = onRefreshStats
-        )
+        val contentModifier = Modifier
+            .padding(inner)
+
+        when (section) {
+            Home -> SettingsHome(
+                state = state,
+                modifier = contentModifier,
+                onNavigate = { section = it }
+            )
+
+            Connection -> ConnectionSettings(
+                state = state,
+                modifier = contentModifier,
+                onBaseUrlChange = onBaseUrlChange,
+                onModelNameChange = onModelNameChange,
+                onApiKeyChange = onApiKeyChange,
+                onRefreshGeminiStatus = onRefreshGeminiStatus,
+                onDownloadGeminiNano = onDownloadGeminiNano
+            )
+
+            ModelControls -> ModelControlsSettings(
+                state = state,
+                modifier = contentModifier,
+                onTemperatureChange = onTemperatureChange,
+                onTopPChange = onTopPChange,
+                onContextLengthChange = onContextLengthChange
+            )
+
+            HuggingFaceConnection -> HuggingFaceConnectionSettings(
+                state = state,
+                modifier = contentModifier,
+                onHuggingFaceTokenChange = onHuggingFaceTokenChange,
+                onValidateHuggingFaceToken = onValidateHuggingFaceToken,
+                onSaveSettings = onSaveSettings
+            )
+
+            DataHistory -> DataHistorySettings(
+                state = state,
+                modifier = contentModifier,
+                onRefreshStats = onRefreshStats,
+                onClearHistory = onClearHistory
+            )
+        }
     }
 }
 

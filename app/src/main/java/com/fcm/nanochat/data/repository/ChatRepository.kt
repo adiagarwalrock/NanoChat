@@ -7,10 +7,12 @@ import com.fcm.nanochat.data.db.ChatMessageEntity
 import com.fcm.nanochat.data.db.ChatSessionEntity
 import com.fcm.nanochat.inference.BackendAvailability
 import com.fcm.nanochat.inference.ChatTurn
+import com.fcm.nanochat.inference.GeminiNanoStatus
 import com.fcm.nanochat.inference.InferenceClient
 import com.fcm.nanochat.inference.InferenceClientSelector
 import com.fcm.nanochat.inference.InferenceMode
 import com.fcm.nanochat.inference.InferenceRequest
+import com.fcm.nanochat.inference.LocalInferenceClient
 import com.fcm.nanochat.model.ChatMessage
 import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatSession
@@ -22,7 +24,7 @@ import kotlinx.coroutines.flow.map
 class ChatRepository(
     private val database: AppDatabase,
     private val preferences: AppPreferences,
-    private val localInferenceClient: InferenceClient,
+    private val localInferenceClient: LocalInferenceClient,
     private val remoteInferenceClient: InferenceClient
 ) {
     fun observeSettings(): Flow<SettingsSnapshot> = preferences.settings
@@ -140,6 +142,14 @@ class ChatRepository(
     }
 
     suspend fun settingsSnapshot(): SettingsSnapshot = preferences.settings.first()
+
+    suspend fun geminiNanoStatus(): GeminiNanoStatus = localInferenceClient.geminiStatus()
+
+    fun downloadGeminiNano(): Flow<GeminiNanoStatus> = localInferenceClient.downloadModel()
+
+    suspend fun saveGeminiNanoModelSize(bytes: Long) {
+        preferences.updateGeminiNanoModelSize(bytes)
+    }
 
     suspend fun backendAvailability(mode: InferenceMode, settings: SettingsSnapshot): BackendAvailability =
         clientFor(mode).availability(settings)
