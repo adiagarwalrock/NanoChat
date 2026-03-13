@@ -37,6 +37,12 @@ class ModelManagerViewModel(
             .map { record ->
                 val model = record.allowlistedModel
                 val healthState = mapHealthState(record)
+                val diagnosticsMessage = when (val compatibility = record.compatibility) {
+                    LocalModelCompatibilityState.Ready -> null
+                    is LocalModelCompatibilityState.RuntimeUnavailable -> compatibility.reason
+                    is LocalModelCompatibilityState.DownloadedButNotActivatable -> compatibility.reason
+                    else -> record.errorMessage
+                }
                 ModelCardUi(
                     modelId = record.modelId,
                     displayName = record.displayName,
@@ -66,7 +72,7 @@ class ModelManagerViewModel(
                     downloadedBytes = record.downloadedBytes,
                     sizeOnDiskBytes = record.sizeBytes,
                     localPath = record.localPath,
-                    errorMessage = record.errorMessage
+                    errorMessage = diagnosticsMessage
                 )
             }
             .sortedWith(

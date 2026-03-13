@@ -61,8 +61,34 @@ class LocalModelCompatibilityEvaluator(
 
         if (installState == ModelInstallState.INSTALLED && !installedPath.isNullOrBlank()) {
             val file = File(installedPath)
-            if (!file.exists() || file.length() <= 0L) {
+            if (!file.exists() || !file.isFile || file.length() <= 0L) {
                 return LocalModelCompatibilityState.CorruptedModel
+            }
+
+            if (file.name.endsWith(".part", ignoreCase = true)) {
+                return LocalModelCompatibilityState.DownloadedButNotActivatable(
+                    "Startup validation failed. Selected file is a partial download: ${file.absolutePath}"
+                )
+            }
+
+            if (file.name != model.modelFile) {
+                return LocalModelCompatibilityState.DownloadedButNotActivatable(
+                    "Startup validation failed. Expected ${model.modelFile} but found ${file.name}."
+                )
+            }
+
+            if (model.fileType.isNotBlank() &&
+                !file.extension.equals(model.fileType, ignoreCase = true)
+            ) {
+                return LocalModelCompatibilityState.DownloadedButNotActivatable(
+                    "Startup validation failed. Expected *.${model.fileType} but found *.${file.extension}."
+                )
+            }
+
+            if (model.sizeInBytes > 0L && file.length() != model.sizeInBytes) {
+                return LocalModelCompatibilityState.DownloadedButNotActivatable(
+                    "Startup validation failed. Expected ${model.sizeInBytes} bytes but found ${file.length()}."
+                )
             }
 
             val runtime = runtimeProbe(model, installedPath)
@@ -108,7 +134,7 @@ class LocalModelCompatibilityEvaluator(
     private fun isAndroidSupported(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     private fun isFileTypeSupported(fileType: String): Boolean {
-        return fileType == "litertlm" || fileType == "task"
+        return fileType == "litertlm"
     }
 
     private fun isAbiSupported(model: AllowlistedModel): Boolean {

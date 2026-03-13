@@ -132,7 +132,7 @@ class RemoteInferenceClient(
                 if (delta.isEmpty()) return true
 
                 val sendResult = outputChannel.trySend(delta)
-                if (sendResult.isSuccess || call.isCanceled() || outputChannel.isClosedForSend) {
+                if (sendResult.isSuccess || call.isCanceled()) {
                     return true
                 }
 

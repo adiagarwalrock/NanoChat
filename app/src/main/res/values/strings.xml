@@ -100,6 +100,11 @@
     <string name="details_health_state">Health state</string>
     <string name="details_install_state">Install state</string>
     <string name="details_compatibility">Compatibility</string>
+    <string name="details_startup_validation">Startup validation</string>
+    <string name="details_startup_file_path">Startup file path</string>
+    <string name="details_detected_format">Detected format</string>
+    <string name="details_root_cause">Root cause</string>
+    <string name="details_not_available">Not available</string>
     <string name="details_good_for">Good for</string>
     <string name="details_not_ideal_for">Not ideal for</string>
     <string name="details_task_support">Task support</string>

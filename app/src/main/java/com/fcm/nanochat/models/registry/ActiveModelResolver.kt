@@ -49,7 +49,13 @@ object ActiveModelResolver {
         return ActiveModelResolution(
             activeRecord = record,
             shouldClearSelection = true,
-            message = toFriendlyResolverMessage(record.errorMessage)
+            message = toFriendlyResolverMessage(
+                record.errorMessage ?: when (val compatibility = record.compatibility) {
+                    is LocalModelCompatibilityState.RuntimeUnavailable -> compatibility.reason
+                    is LocalModelCompatibilityState.DownloadedButNotActivatable -> compatibility.reason
+                    else -> null
+                }
+            )
         )
     }
 
@@ -59,6 +65,13 @@ object ActiveModelResolver {
 
         val lowercase = message.lowercase()
         return when {
+            "startup_validation_failed" in lowercase ||
+                    "error building tflite model" in lowercase ||
+                    "flatbuffer" in lowercase ||
+                    "invocationtargetexception" in lowercase -> {
+                "Installed, but NanoChat could not start this model."
+            }
+
             "missing runtime option method" in lowercase || "settopk" in lowercase -> {
                 "This model could not start with the current on-device runtime."
             }

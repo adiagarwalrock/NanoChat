@@ -124,7 +124,7 @@ data class ModelCardUi(
     val isExperimental: Boolean,
     val installState: ModelInstallState,
     val compatibility: LocalModelCompatibilityState,
-    val healthState: LocalModelHealthState,
+    val healthState: LocalModelHealthState = LocalModelHealthState.NotInstalled,
     val isActive: Boolean,
     val isLegacy: Boolean,
     val storageLocation: ModelStorageLocation,

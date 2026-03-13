@@ -55,7 +55,14 @@ class AppContainer(context: Context) {
 
     private val compatibilityEvaluator =
         LocalModelCompatibilityEvaluator(appContext) { model, path ->
-            val probeError = runtimeManager.probe(path, model.defaultConfig)
+            val probeError = runtimeManager.probe(
+                modelId = model.id,
+                modelPath = path,
+                defaultConfig = model.defaultConfig,
+                expectedFileName = model.modelFile,
+                expectedFileType = model.fileType,
+                expectedSizeBytes = model.sizeInBytes
+            )
             if (probeError == null) {
                 RuntimeProbeResult.Ready
             } else {

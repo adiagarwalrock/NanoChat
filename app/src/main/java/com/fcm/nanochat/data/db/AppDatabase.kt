@@ -31,28 +31,28 @@ abstract class AppDatabase : RoomDatabase() {
                 .build()
 
         private val Migration1To2 = object : Migration(1, 2) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL(
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
                     "ALTER TABLE `chat_messages` " +
                             "ADD COLUMN `inferenceMode` TEXT NOT NULL DEFAULT 'REMOTE'"
                 )
-                database.execSQL(
+                db.execSQL(
                     "ALTER TABLE `chat_messages` " +
                             "ADD COLUMN `modelName` TEXT NOT NULL DEFAULT ''"
                 )
-                database.execSQL(
+                db.execSQL(
                     "ALTER TABLE `chat_messages` " +
                             "ADD COLUMN `temperature` REAL NOT NULL DEFAULT 0.7"
                 )
-                database.execSQL(
+                db.execSQL(
                     "ALTER TABLE `chat_messages` " +
                             "ADD COLUMN `topP` REAL NOT NULL DEFAULT 0.9"
                 )
-                database.execSQL(
+                db.execSQL(
                     "ALTER TABLE `chat_messages` " +
                             "ADD COLUMN `contextLength` INTEGER NOT NULL DEFAULT 4096"
                 )
-                database.execSQL(
+                db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_chat_messages_sessionId` " +
                             "ON `chat_messages` (`sessionId`)"
                 )
@@ -60,8 +60,8 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         private val Migration2To3 = object : Migration(2, 3) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL(
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_chat_messages_sessionId_createdAt_id` " +
                             "ON `chat_messages` (`sessionId`, `createdAt`, `id`)"
                 )
@@ -69,8 +69,8 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         private val Migration3To4 = object : Migration(3, 4) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL(
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `installed_models` (" +
                             "`modelId` TEXT NOT NULL, " +
                             "`displayName` TEXT NOT NULL, " +
@@ -87,11 +87,11 @@ abstract class AppDatabase : RoomDatabase() {
                             "PRIMARY KEY(`modelId`)" +
                             ")"
                 )
-                database.execSQL(
+                db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_installed_models_updatedAt` " +
                             "ON `installed_models` (`updatedAt`)"
                 )
-                database.execSQL(
+                db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_installed_models_installState` " +
                             "ON `installed_models` (`installState`)"
                 )

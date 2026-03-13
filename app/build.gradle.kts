@@ -90,8 +90,8 @@ dependencies {
     // ML Kit Prompt API on top of AICore
     implementation("com.google.mlkit:genai-prompt:1.0.0-beta1")
 
-    // MediaPipe LLM Inference — downloaded models
-    implementation("com.google.mediapipe:tasks-genai:0.10.22")
+    // LiteRT-LM runtime — downloaded models
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.9.0-alpha06")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

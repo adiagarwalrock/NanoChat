@@ -140,12 +140,16 @@ Performance & UX
 - Prefer snackbar retry over toasts for actionable errors; avoid noisy vibration/haptics.
 
 Model Downloads (future)
-- `Downloaded` inference mode and MediaPipe `tasks-genai` are planned; keep storage/backends extensible.
+
+- `Downloaded` inference mode uses LiteRT-LM packaged `.litertlm` artifacts; keep storage/backends
+  extensible.
 - Model catalog lives under `models/catalog`; manager stubs handle download/move/delete; no partial impls in milestone 1.
 - When enabling downloads, store HF token securely; copy rather than rename when moving across storage.
 
 Dependency Guidance
-- Versions pinned in `app/build.gradle.kts`; prefer Compose BOM. Revalidate AICore reflection + Mediapipe when upgrading.
+
+- Versions pinned in `app/build.gradle.kts`; prefer Compose BOM. Revalidate AICore reflection +
+  LiteRT-LM when upgrading.
 - OkHttp 4.12.0 present; if adding Retrofit/Ktor, ensure coexistence or intentionally replace; keep callbacks off main.
 
 Contribution & Hygiene

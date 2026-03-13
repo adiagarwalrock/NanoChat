@@ -768,6 +768,24 @@ private fun RedesignedDetailsSheet(
                         label = stringResource(id = R.string.details_compatibility),
                         value = model.compatibilitySummary()
                     )
+                    DetailRow(
+                        label = stringResource(id = R.string.details_startup_validation),
+                        value = model.startupValidationResult()
+                    )
+                    DetailRow(
+                        label = stringResource(id = R.string.details_startup_file_path),
+                        value = model.localPath?.takeIf { it.isNotBlank() }
+                            ?: stringResource(id = R.string.details_not_available)
+                    )
+                    DetailRow(
+                        label = stringResource(id = R.string.details_detected_format),
+                        value = model.detectedFileFormat()
+                    )
+                    DetailRow(
+                        label = stringResource(id = R.string.details_root_cause),
+                        value = model.rootCauseDetail()
+                            ?: stringResource(id = R.string.details_not_available)
+                    )
                 }
             }
 
@@ -1121,7 +1139,7 @@ private fun ModelCardUi.statusLine(): StatusLine {
         )
 
         is LocalModelHealthState.InstalledStartupFailed -> StatusLine(
-            label = "Installed with setup issues",
+            label = "Installed, but NanoChat could not start this model",
             supporting = toFriendlyError(state.message),
             tone = ModelBadgeTone.Warning
         )
@@ -1381,6 +1399,16 @@ private fun toFriendlyError(raw: String?): String {
             "This downloaded file may be incompatible with the current runtime."
         }
 
+        "startup_validation_failed" in lowercase ||
+                "flatbuffer" in lowercase ||
+                "error building tflite model" in lowercase -> {
+            "Installed, but NanoChat could not start this model."
+        }
+
+        "invocationtargetexception" in lowercase -> {
+            "Installed, but NanoChat could not start this model."
+        }
+
         "token" in lowercase -> {
             "Add a Hugging Face read token to continue setup."
         }
@@ -1403,6 +1431,65 @@ private fun humanBytes(bytes: Long): String {
     val prefix = "kMGTPE".getOrElse(exp - 1) { 'E' }
     val value = bytes / unit.pow(exp.toDouble())
     return "%.1f %sB".format(value, prefix)
+}
+
+private fun ModelCardUi.detectedFileFormat(): String {
+    val fromError = errorMessage
+        ?.substringAfter("format=", missingDelimiterValue = "")
+        ?.substringBefore(';')
+        ?.trim()
+        .orEmpty()
+    if (fromError.isNotBlank()) return fromError
+
+    val extension = localPath
+        ?.substringAfterLast('.', missingDelimiterValue = "")
+        ?.lowercase()
+        ?.ifBlank { null }
+        ?: modelFile.substringAfterLast('.', missingDelimiterValue = "").lowercase()
+
+    return when (extension) {
+        "litertlm" -> "litertlm-package"
+        "tflite" -> "tflite-flatbuffer"
+        "task" -> "mediapipe-task"
+        "" -> "unknown"
+        else -> extension
+    }
+}
+
+private fun ModelCardUi.startupValidationResult(): String {
+    return when (healthState) {
+        LocalModelHealthState.InstalledReady -> "Runnable"
+        LocalModelHealthState.InstalledNeedsValidation -> "Validation pending"
+        is LocalModelHealthState.InstalledStartupFailed -> "Startup failed"
+        LocalModelHealthState.RequiresToken -> "Blocked: token required"
+        LocalModelHealthState.RequiresLicenseApproval -> "Blocked: access approval required"
+        LocalModelHealthState.NotInstalled,
+        is LocalModelHealthState.Downloading,
+        is LocalModelHealthState.Paused,
+        is LocalModelHealthState.DownloadFailed -> "Not installed"
+
+        is LocalModelHealthState.NotCompatible,
+        LocalModelHealthState.UnsupportedForChat -> "Not compatible"
+    }
+}
+
+private fun ModelCardUi.rootCauseDetail(): String? {
+    val raw = errorMessage?.trim().orEmpty()
+    if (raw.isBlank()) return null
+
+    val parsed = raw.substringAfter("rootCause=", missingDelimiterValue = "")
+        .substringBefore(';')
+        .trim()
+    if (parsed.isNotBlank()) {
+        return parsed
+    }
+
+    val sentence = raw.substringAfter("Root cause:", missingDelimiterValue = "").trim()
+    if (sentence.isNotBlank()) {
+        return sentence
+    }
+
+    return raw
 }
 
 private val MarkdownLinkRegex = Regex("\\[([^\\]]+)]\\(([^)]+)\\)")

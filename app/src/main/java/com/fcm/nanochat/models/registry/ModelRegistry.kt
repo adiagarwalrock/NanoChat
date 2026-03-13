@@ -118,11 +118,13 @@ class ModelRegistry(
                         is LocalModelCompatibilityState.DownloadedButNotActivatable -> compatibility.reason
                         else -> ""
                     }
-                    val friendly = sanitizeCompatibilityReason(issueMessage)
-                    if (entity.errorMessage != friendly) {
+                    val persistedMessage = issueMessage.ifBlank {
+                        sanitizeCompatibilityReason(issueMessage)
+                    }
+                    if (entity.errorMessage != persistedMessage) {
                         installedModelDao.upsert(
                             entity.copy(
-                                errorMessage = friendly,
+                                errorMessage = persistedMessage,
                                 updatedAt = System.currentTimeMillis()
                             )
                         )
@@ -308,6 +310,13 @@ class ModelRegistry(
 
         val lowercase = text.lowercase()
         return when {
+            "startup_validation_failed" in lowercase ||
+                    "error building tflite model" in lowercase ||
+                    "flatbuffer" in lowercase ||
+                    "invocationtargetexception" in lowercase -> {
+                "Installed, but NanoChat could not start this model."
+            }
+
             "missing runtime option method" in lowercase ||
                     "settopk" in lowercase ||
                     "setmaxtokens" in lowercase ||

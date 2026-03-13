@@ -1,6 +1,8 @@
 package com.fcm.nanochat.models.download
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.util.Log
 import com.fcm.nanochat.data.AppPreferences
 import com.fcm.nanochat.data.db.InstalledModelDao
 import com.fcm.nanochat.data.db.InstalledModelEntity
@@ -18,6 +20,7 @@ import okhttp3.Request
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.util.Locale
 
 private const val HUGGING_FACE_WHOAMI_URL = "https://huggingface.co/api/whoami-v2"
 
@@ -251,6 +254,12 @@ class ModelDownloadCoordinator(
         }
         val attachAuthorization = (preflight as DownloadPreflightResult.Allowed).attachAuthorization
 
+        Log.d(
+            TAG,
+            "download_target modelId=${model.id} url=${model.downloadUrl} expectedFile=${model.modelFile} " +
+                    "expectedSizeBytes=${model.sizeInBytes} expectedExt=${model.fileType} tokenAttached=$attachAuthorization"
+        )
+
         val now = System.currentTimeMillis()
         val existing = installedModelDao.installedModel(modelId)
         val storageLocation = existing?.storageLocation ?: ModelStorageLocation.INTERNAL
@@ -297,7 +306,17 @@ class ModelDownloadCoordinator(
         val request = requestBuilder.build()
 
         try {
+            var resolvedDownloadUrl: String? = null
+            var responseContentType: String? = null
             httpClient.newCall(request).execute().use { response ->
+                resolvedDownloadUrl = response.request.url.toString()
+                responseContentType = response.header("Content-Type")
+                Log.d(
+                    TAG,
+                    "download_response modelId=${model.id} httpCode=${response.code} " +
+                            "contentType=${responseContentType.orEmpty()} resolvedUrl=${resolvedDownloadUrl.orEmpty()}"
+                )
+
                 if (!response.isSuccessful && response.code != 206) {
                     upsertFailure(
                         modelId,
@@ -369,6 +388,16 @@ class ModelDownloadCoordinator(
             finalDir.mkdirs()
             val finalFile = File(finalDir, model.modelFile)
             finalizeFile(tempFile, finalFile)
+
+            logInstalledArtifact(
+                modelId = model.id,
+                downloadUrl = resolvedDownloadUrl ?: model.downloadUrl,
+                contentType = responseContentType,
+                finalFile = finalFile,
+                expectedFileName = model.modelFile,
+                expectedSizeBytes = model.sizeInBytes,
+                expectedExtension = model.fileType
+            )
 
             installedModelDao.upsert(
                 queuedEntity.copy(
@@ -551,7 +580,7 @@ class ModelDownloadCoordinator(
         return when (authenticatedCode) {
             200, 206 -> DownloadPreflightResult.Allowed(attachAuthorization = true)
             401, 403 -> DownloadPreflightResult.Blocked(
-                "Your token is valid, but this account does not have access to this model."
+                "Your token is valid, but this account does not have access yet. Approve the model license/access on Hugging Face and retry."
             )
 
             -1 -> DownloadPreflightResult.Blocked(
@@ -643,8 +672,60 @@ class ModelDownloadCoordinator(
         return downloadUrl.contains("huggingface.co", ignoreCase = true)
     }
 
+    private fun logInstalledArtifact(
+        modelId: String,
+        downloadUrl: String,
+        contentType: String?,
+        finalFile: File,
+        expectedFileName: String,
+        expectedSizeBytes: Long,
+        expectedExtension: String
+    ) {
+        val actualSize = finalFile.length()
+        val actualExtension = finalFile.extension.lowercase(Locale.US)
+        val fileNameMatches = finalFile.name == expectedFileName
+        val sizeMatches = expectedSizeBytes <= 0L || actualSize == expectedSizeBytes
+        val extensionMatches = expectedExtension.isBlank() ||
+                actualExtension.equals(expectedExtension, ignoreCase = true)
+
+        Log.d(
+            TAG,
+            "download_artifact modelId=$modelId sourceUrl=$downloadUrl contentType=${contentType.orEmpty()} " +
+                    "fileName=${finalFile.name} path=${finalFile.absolutePath} sizeBytes=$actualSize ext=$actualExtension " +
+                    "matchesAllowlistName=$fileNameMatches matchesAllowlistSize=$sizeMatches " +
+                    "matchesAllowlistExtension=$extensionMatches"
+        )
+
+        if (isDebugBuild()) {
+            val magicHex = readMagicBytesHex(finalFile)
+            if (magicHex.isNotBlank()) {
+                Log.d(TAG, "download_artifact_magic modelId=$modelId bytes=$magicHex")
+            }
+        }
+    }
+
+    private fun readMagicBytesHex(file: File): String {
+        return runCatching {
+            val buffer = ByteArray(16)
+            FileInputStream(file).use { input ->
+                val read = input.read(buffer)
+                if (read <= 0) {
+                    ""
+                } else {
+                    buffer.copyOf(read).joinToString(" ") { byte ->
+                        "%02X".format(byte.toInt() and 0xFF)
+                    }
+                }
+            }
+        }.getOrDefault("")
+    }
+
     private fun safeId(modelId: String): String {
         return modelId.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+    }
+
+    private fun isDebugBuild(): Boolean {
+        return (appContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     }
 
     private fun toFriendlyFailure(raw: String): String {
@@ -675,5 +756,9 @@ class ModelDownloadCoordinator(
 
             else -> message
         }
+    }
+
+    private companion object {
+        const val TAG = "ModelDownloadCoordinator"
     }
 }

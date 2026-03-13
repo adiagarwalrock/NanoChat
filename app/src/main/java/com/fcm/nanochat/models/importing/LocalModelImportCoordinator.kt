@@ -17,13 +17,10 @@ class StubLocalModelImportCoordinator : LocalModelImportCoordinator {
             return ImportValidationResult.Invalid("No file was selected.")
         }
 
-        return if (
-            normalizedPath.endsWith(".litertlm", ignoreCase = true) ||
-            normalizedPath.endsWith(".task", ignoreCase = true)
-        ) {
+        return if (normalizedPath.endsWith(".litertlm", ignoreCase = true)) {
             ImportValidationResult.UnsupportedForNow
         } else {
-            ImportValidationResult.Invalid("Only .litertlm and .task files are supported.")
+            ImportValidationResult.Invalid("Only .litertlm files are supported.")
         }
     }
 }

@@ -24,7 +24,10 @@ class ModelRuntimeManager(
     suspend fun acquire(
         modelId: String,
         modelPath: String,
-        defaultConfig: AllowlistDefaultConfig
+        defaultConfig: AllowlistDefaultConfig,
+        expectedFileName: String? = null,
+        expectedFileType: String? = null,
+        expectedSizeBytes: Long = 0L
     ): RuntimeHandle {
         return mutex.withLock {
             val shouldReuse = activeRuntime != null &&
@@ -46,10 +49,14 @@ class ModelRuntimeManager(
 
             val initStart = System.currentTimeMillis()
             val runtime = runCatching {
-                MediaPipeLlmRuntimeFactory.create(
+                LiteRtLmRuntimeFactory.create(
                     context = appContext,
+                    modelId = modelId,
                     modelPath = modelPath,
-                    config = defaultConfig
+                    config = defaultConfig,
+                    expectedFileName = expectedFileName,
+                    expectedFileType = expectedFileType,
+                    expectedSizeBytes = expectedSizeBytes
                 )
             }.getOrElse { error ->
                 Log.e(TAG, "Failed to initialize local runtime", error)
@@ -78,14 +85,36 @@ class ModelRuntimeManager(
     }
 
     suspend fun probe(modelPath: String, defaultConfig: AllowlistDefaultConfig): String? {
+        return probe(
+            modelId = "unknown",
+            modelPath = modelPath,
+            defaultConfig = defaultConfig,
+            expectedFileName = null,
+            expectedFileType = null,
+            expectedSizeBytes = 0L
+        )
+    }
+
+    suspend fun probe(
+        modelId: String,
+        modelPath: String,
+        defaultConfig: AllowlistDefaultConfig,
+        expectedFileName: String?,
+        expectedFileType: String?,
+        expectedSizeBytes: Long
+    ): String? {
         return mutex.withLock {
-            if (!MediaPipeLlmRuntimeFactory.isRuntimeClassAvailable()) {
+            if (!LiteRtLmRuntimeFactory.isRuntimeClassAvailable()) {
                 return@withLock "Local runtime is unavailable on this build."
             }
-            MediaPipeLlmRuntimeFactory.probe(
+            LiteRtLmRuntimeFactory.probe(
                 context = appContext,
+                modelId = modelId,
                 modelPath = modelPath,
-                config = defaultConfig
+                config = defaultConfig,
+                expectedFileName = expectedFileName,
+                expectedFileType = expectedFileType,
+                expectedSizeBytes = expectedSizeBytes
             )
         }
     }

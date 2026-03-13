@@ -19,7 +19,7 @@ class DownloadIntegrityValidator {
         if (finalName.contains('/') || finalName.contains('\\')) {
             return ValidationResult.Failure("Model filename must not include directories.")
         }
-        if (!finalName.endsWith(".litertlm") && !finalName.endsWith(".task")) {
+        if (!finalName.endsWith(".litertlm")) {
             return ValidationResult.Failure("Model filename has an unsupported extension.")
         }
 

@@ -127,14 +127,20 @@ class DownloadedModelInferenceClient(
             )
         }
 
-        Log.d(TAG, "Starting local generation with modelId=$resolvedModelId")
+        Log.d(
+            TAG,
+            "Starting local generation modelId=$resolvedModelId path=$localPath installState=${record.installState}"
+        )
 
         val runtimeHandle = runCatching {
             runtimeManager.acquire(
                 modelId = resolvedModelId,
                 modelPath = localPath,
                 defaultConfig = model?.defaultConfig
-                    ?: request.settings.toFallbackDownloadedConfig()
+                    ?: request.settings.toFallbackDownloadedConfig(),
+                expectedFileName = model?.modelFile,
+                expectedFileType = model?.fileType,
+                expectedSizeBytes = model?.sizeInBytes ?: 0L
             )
         }.getOrElse { error ->
             Log.e(TAG, "Failed to initialize downloaded runtime", error)
@@ -193,7 +199,7 @@ class DownloadedModelInferenceClient(
                 },
                 generationDurationMs = generationDurationMs,
                 tokensPerSecond = tokensPerSecond,
-                backend = "litert-lm-mediapipe"
+                backend = "litert-lm"
             )
         )
     }
@@ -211,9 +217,7 @@ class DownloadedModelInferenceClient(
     ): String? {
         val preferredId = requestedActiveModelId?.trim()?.lowercase().orEmpty()
         val settingsId = settings.activeLocalModelId.trim().lowercase()
-        val fallbackId =
-            modelRegistry.activeModelStatus.value.modelId?.trim()?.lowercase().orEmpty()
-        val candidateId = preferredId.ifBlank { settingsId.ifBlank { fallbackId } }
+        val candidateId = preferredId.ifBlank { settingsId }
         return candidateId.ifBlank { null }
     }
 
@@ -251,6 +255,15 @@ class DownloadedModelInferenceClient(
                     "settopk" in lowercase ||
                     "setmaxtokens" in lowercase -> {
                 "This downloaded file may be incompatible with the current runtime."
+            }
+
+            "flatbuffer" in lowercase ||
+                    "error building tflite model" in lowercase -> {
+                "Installed, but NanoChat could not start this model."
+            }
+
+            "invocationtargetexception" in lowercase -> {
+                "Installed, but NanoChat could not start this model."
             }
 
             "missing" in lowercase && "file" in lowercase -> {
