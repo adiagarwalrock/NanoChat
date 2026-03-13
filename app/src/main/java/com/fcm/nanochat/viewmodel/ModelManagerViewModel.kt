@@ -10,13 +10,13 @@ import com.fcm.nanochat.model.RuntimeDiagnosticsUi
 import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
 import com.fcm.nanochat.models.registry.ModelInstallState
 import com.fcm.nanochat.models.registry.ModelStorageLocation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class ModelManagerViewModel(
@@ -124,6 +124,13 @@ class ModelManagerViewModel(
                 notice.update { "This model is not ready yet. Finish setup and try again." }
                 return@launch
             }
+
+            val chatReady = model.allowlistedModel?.recommendedForChat ?: true
+            if (!chatReady && !model.isLegacy) {
+                notice.update { "This model is not optimized for chat in NanoChat." }
+                return@launch
+            }
+
             localModelRepository.setActiveModel(modelId)
             notice.update { "Active local model updated." }
         }
@@ -188,17 +195,17 @@ class ModelManagerViewModelFactory(
 
 internal fun ModelCardUi.primaryActionLabel(): String {
     if (compatibility is LocalModelCompatibilityState.TokenRequired) {
-        return "Requires token"
+        return "Add token"
     }
 
     return when (installState) {
         ModelInstallState.NOT_INSTALLED -> "Download"
         ModelInstallState.QUEUED -> "Queued"
-        ModelInstallState.DOWNLOADING -> "Cancel"
-        ModelInstallState.PAUSED -> "Retry"
+        ModelInstallState.DOWNLOADING -> "Downloading"
+        ModelInstallState.PAUSED -> "Resume"
         ModelInstallState.FAILED -> "Retry"
         ModelInstallState.VALIDATING -> "Validating"
-        ModelInstallState.INSTALLED -> if (isActive) "Active" else "Use model"
+        ModelInstallState.INSTALLED -> if (isActive) "Selected" else "Use model"
         ModelInstallState.BROKEN -> "Retry"
         ModelInstallState.DELETING -> "Deleting"
         ModelInstallState.MOVING -> "Moving"

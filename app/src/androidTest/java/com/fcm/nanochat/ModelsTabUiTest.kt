@@ -50,7 +50,7 @@ class ModelsTabUiTest {
 
         composeRule.onNodeWithText("Model Library").assertIsDisplayed()
         composeRule.onNodeWithText("Qwen2.5-1.5B-Instruct").assertIsDisplayed()
-        composeRule.onNodeWithText("Downloadable").assertIsDisplayed()
+        composeRule.onNodeWithText("Not installed").assertIsDisplayed()
     }
 
     @Test
@@ -86,7 +86,7 @@ class ModelsTabUiTest {
             )
         }
 
-        composeRule.onNodeWithText("Needs more memory").assertIsDisplayed()
+        composeRule.onNodeWithText("Not compatible").assertIsDisplayed()
     }
 
     private fun sampleCard(

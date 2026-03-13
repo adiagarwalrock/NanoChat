@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
@@ -54,7 +53,8 @@ class ModelRegistry(
         preferences.updateActiveLocalModelId(normalized.ifBlank { null })
     }
 
-    suspend fun activeModelId(): String = preferences.settings.first().activeLocalModelId.trim().lowercase()
+    suspend fun activeModelId(): String =
+        preferences.settings.first().activeLocalModelId.trim().lowercase()
 
     suspend fun reconcileInstalledFiles() {
         val installed = installedModelDao.allInstalledModels()
@@ -102,8 +102,11 @@ class ModelRegistry(
                     records += buildLegacyRecord(legacy = legacy, activeId = activeId)
                 }
 
-            val sorted = records.sortedByDescending { it.isActive }
-                .sortedBy { it.displayName.lowercase() }
+            val sorted = records.sortedWith(
+                compareByDescending<InstalledModelRecord> { it.isActive }
+                    .thenByDescending { it.allowlistedModel?.recommendedForChat ?: true }
+                    .thenBy { it.displayName.lowercase() }
+            )
             sorted to activeId
         }.collect { (records, activeId) ->
             _records.value = records
@@ -144,7 +147,10 @@ class ModelRegistry(
         )
     }
 
-    private fun buildLegacyRecord(legacy: InstalledModelEntity, activeId: String): InstalledModelRecord {
+    private fun buildLegacyRecord(
+        legacy: InstalledModelEntity,
+        activeId: String
+    ): InstalledModelRecord {
         val file = File(legacy.localPath)
         val compatibility = when {
             legacy.installState == ModelInstallState.INSTALLED && file.exists() && file.length() > 0L -> {
@@ -191,8 +197,8 @@ class ModelRegistry(
 
         val active = resolution.activeRecord
         val ready = active != null &&
-            active.installState == ModelInstallState.INSTALLED &&
-            active.compatibility is LocalModelCompatibilityState.Ready
+                active.installState == ModelInstallState.INSTALLED &&
+                active.compatibility is LocalModelCompatibilityState.Ready
 
         _activeModelStatus.value = ActiveModelStatus(
             modelId = active?.modelId,
@@ -201,7 +207,8 @@ class ModelRegistry(
             message = if (ready) {
                 null
             } else {
-                resolution.message ?: active?.errorMessage ?: active?.let {
+                resolution.message ?: active?.errorMessage?.let(::sanitizeCompatibilityReason)
+                ?: active?.let {
                     compatibilityMessage(it.compatibility)
                 }
             }
@@ -214,11 +221,43 @@ class ModelRegistry(
             LocalModelCompatibilityState.Downloadable -> "Download this model to use it."
             is LocalModelCompatibilityState.NeedsMoreStorage -> "Not enough storage for this model."
             is LocalModelCompatibilityState.NeedsMoreRam -> "Not enough memory for this model."
-            is LocalModelCompatibilityState.UnsupportedDevice -> compatibility.reason
+            is LocalModelCompatibilityState.UnsupportedDevice -> {
+                sanitizeCompatibilityReason(compatibility.reason)
+            }
+
             LocalModelCompatibilityState.TokenRequired -> "This model requires a Hugging Face token."
-            is LocalModelCompatibilityState.DownloadedButNotActivatable -> compatibility.reason
+            is LocalModelCompatibilityState.DownloadedButNotActivatable -> {
+                sanitizeCompatibilityReason(compatibility.reason)
+            }
+
             LocalModelCompatibilityState.CorruptedModel -> "Model file appears corrupted."
-            is LocalModelCompatibilityState.RuntimeUnavailable -> compatibility.reason
+            is LocalModelCompatibilityState.RuntimeUnavailable -> {
+                sanitizeCompatibilityReason(compatibility.reason)
+            }
+        }
+    }
+
+    private fun sanitizeCompatibilityReason(raw: String): String {
+        val text = raw.trim()
+        if (text.isBlank()) return "This model is not ready."
+
+        val lowercase = text.lowercase()
+        return when {
+            "missing runtime option method" in lowercase ||
+                    "settopk" in lowercase ||
+                    "setmaxtokens" in lowercase -> {
+                "This model could not start on this device."
+            }
+
+            "missing" in lowercase && "file" in lowercase -> {
+                "This install appears incomplete. Try re-downloading."
+            }
+
+            "corrupt" in lowercase || "size mismatch" in lowercase -> {
+                "This downloaded file may be incompatible with the current runtime."
+            }
+
+            else -> text
         }
     }
 }

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -57,6 +58,7 @@ internal fun SessionsDrawer(
     onPinSession: (Long, Boolean) -> Unit,
     onDeleteSession: (Long) -> Unit,
     onRenameSession: (Long, String) -> Unit,
+    onOpenModels: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
     val pinned = state.sessions.filter { it.isPinned }
@@ -147,17 +149,48 @@ internal fun SessionsDrawer(
             }
         }
 
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surfaceContainer
-        ) {
-            TextButton(
-                onClick = onOpenSettings,
-                modifier = Modifier.fillMaxWidth()
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer
             ) {
-                Icon(Icons.Default.Settings, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = stringResource(id = R.string.settings))
+                TextButton(
+                    onClick = onOpenModels,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Storage, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = stringResource(id = R.string.manage_local_models))
+                }
+            }
+
+            val activeModelSubtitle = if (state.activeLocalModelName.isNullOrBlank()) {
+                stringResource(id = R.string.no_local_model_selected)
+            } else if (state.isLocalModelReady) {
+                state.activeLocalModelName
+            } else {
+                state.localModelStatusMessage ?: state.activeLocalModelName
+            }
+
+            Text(
+                text = activeModelSubtitle.orEmpty(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer
+            ) {
+                TextButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Settings, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = stringResource(id = R.string.settings))
+                }
             }
         }
     }

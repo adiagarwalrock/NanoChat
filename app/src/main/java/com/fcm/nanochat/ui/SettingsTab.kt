@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -80,7 +81,10 @@ import com.fcm.nanochat.R
 import com.fcm.nanochat.inference.RemoteConfigValidator
 import com.fcm.nanochat.model.GeminiNanoStatusUi
 import com.fcm.nanochat.model.HuggingFaceAccountUi
+import com.fcm.nanochat.model.ModelGalleryScreenState
 import com.fcm.nanochat.model.SettingsScreenState
+import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
+import com.fcm.nanochat.models.registry.ModelInstallState
 import java.text.NumberFormat
 import java.util.Locale
 import kotlin.math.abs
@@ -141,8 +145,10 @@ private val CardPadding = 20.dp
 @Composable
 internal fun SettingsHome(
     state: SettingsScreenState,
+    modelState: ModelGalleryScreenState,
     modifier: Modifier = Modifier,
-    onNavigate: (SettingsSection) -> Unit
+    onNavigate: (SettingsSection) -> Unit,
+    onOpenModelLibrary: () -> Unit
 ) {
     val activePreset = closestBehaviorPreset(state.temperature, state.topP)
     val remoteConfigured = RemoteConfigValidator.missingFields(
@@ -151,6 +157,16 @@ internal fun SettingsHome(
         apiKey = state.apiKey
     ).isEmpty()
     val onDeviceEnabled = state.geminiStatus.supported && state.geminiStatus.downloaded
+    val activeLocalModel = modelState.models.firstOrNull { it.modelId == modelState.activeModelId }
+    val localModelSubtitle = when {
+        activeLocalModel == null -> "No local model selected"
+        activeLocalModel.installState == ModelInstallState.INSTALLED &&
+                activeLocalModel.compatibility is LocalModelCompatibilityState.Ready -> {
+            "${activeLocalModel.displayName} · Ready"
+        }
+
+        else -> "${activeLocalModel.displayName} · Needs attention"
+    }
 
     LazyColumn(
         modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
@@ -190,6 +206,12 @@ internal fun SettingsHome(
 
         item {
             SettingsGroup(title = "Integrations") {
+                SettingsNavigationRow(
+                    icon = { Icon(Icons.Default.Storage, contentDescription = null) },
+                    title = "Local models",
+                    subtitle = localModelSubtitle,
+                    onClick = onOpenModelLibrary
+                )
                 SettingsNavigationRow(
                     icon = { Icon(Icons.Default.VpnKey, contentDescription = null) },
                     title = "Hugging Face",

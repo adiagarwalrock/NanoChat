@@ -15,18 +15,18 @@ class ModelCardActionLabelTest {
             compatibility = LocalModelCompatibilityState.TokenRequired
         )
 
-        assertEquals("Requires token", card.primaryActionLabel())
+        assertEquals("Add token", card.primaryActionLabel())
     }
 
     @Test
-    fun `installed active state maps to active`() {
+    fun `installed active state maps to selected`() {
         val card = card(
             installState = ModelInstallState.INSTALLED,
             compatibility = LocalModelCompatibilityState.Ready,
             isActive = true
         )
 
-        assertEquals("Active", card.primaryActionLabel())
+        assertEquals("Selected", card.primaryActionLabel())
     }
 
     @Test

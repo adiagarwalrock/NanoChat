@@ -7,16 +7,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Chat
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Button
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
@@ -101,6 +96,8 @@ fun NanoChatApp(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var destination by rememberSaveable { mutableStateOf(AppDestination.Chat) }
+    var modelsBackDestination by rememberSaveable { mutableStateOf(AppDestination.Chat) }
+    var settingsStartSection by rememberSaveable { mutableStateOf(Home) }
     var renameTargetId by rememberSaveable { mutableStateOf<Long?>(null) }
     var renameDraft by rememberSaveable { mutableStateOf("") }
 
@@ -133,7 +130,14 @@ fun NanoChatApp(
                         renameTargetId = id
                         renameDraft = currentTitle
                     },
+                    onOpenModels = {
+                        modelsBackDestination = AppDestination.Chat
+                        destination = AppDestination.Models
+                        onOpenModelGallery()
+                        scope.launch { drawerState.close() }
+                    },
                     onOpenSettings = {
+                        settingsStartSection = Home
                         destination = AppDestination.Settings
                         scope.launch { drawerState.close() }
                     }
@@ -145,47 +149,7 @@ fun NanoChatApp(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            bottomBar = {
-                NavigationBar {
-                    NavigationBarItem(
-                        selected = destination == AppDestination.Chat,
-                        onClick = { destination = AppDestination.Chat },
-                        icon = {
-                            Icon(
-                                Icons.Default.Chat,
-                                contentDescription = stringResource(id = R.string.tab_chat)
-                            )
-                        },
-                        label = { Text(stringResource(id = R.string.tab_chat)) }
-                    )
-                    NavigationBarItem(
-                        selected = destination == AppDestination.Models,
-                        onClick = {
-                            destination = AppDestination.Models
-                            onOpenModelGallery()
-                        },
-                        icon = {
-                            Icon(
-                                Icons.Default.Storage,
-                                contentDescription = stringResource(id = R.string.tab_models)
-                            )
-                        },
-                        label = { Text(stringResource(id = R.string.tab_models)) }
-                    )
-                    NavigationBarItem(
-                        selected = destination == AppDestination.Settings,
-                        onClick = { destination = AppDestination.Settings },
-                        icon = {
-                            Icon(
-                                Icons.Default.Settings,
-                                contentDescription = stringResource(id = R.string.tab_settings)
-                            )
-                        },
-                        label = { Text(stringResource(id = R.string.tab_settings)) }
-                    )
-                }
-            }
+            snackbarHost = { SnackbarHost(snackbarHostState) }
         ) { innerPadding ->
             when (destination) {
                 AppDestination.Chat -> {
@@ -201,6 +165,7 @@ fun NanoChatApp(
                         onRetryLast = onRetryLast,
                         onInferenceModeChange = onInferenceModeChange,
                         onOpenModelGallery = {
+                            modelsBackDestination = AppDestination.Chat
                             destination = AppDestination.Models
                             onOpenModelGallery()
                         },
@@ -213,26 +178,44 @@ fun NanoChatApp(
                 }
 
                 AppDestination.Models -> {
-                    ModelsTab(
+                    ModelsPage(
                         state = modelState,
                         modifier = Modifier.padding(innerPadding),
-                        onRefresh = onRefreshAllowlist,
-                        onDownload = onDownloadModel,
-                        onCancelDownload = onCancelModelDownload,
-                        onRetryDownload = onRetryModelDownload,
+                        onBack = {
+                            destination = modelsBackDestination
+                            if (modelsBackDestination != AppDestination.Settings) {
+                                settingsStartSection = Home
+                            }
+                        },
+                        onOpenHuggingFaceSettings = {
+                            settingsStartSection = HuggingFaceConnection
+                            destination = AppDestination.Settings
+                        },
+                        onRefreshAllowlist = onRefreshAllowlist,
+                        onDownloadModel = onDownloadModel,
+                        onCancelModelDownload = onCancelModelDownload,
+                        onRetryModelDownload = onRetryModelDownload,
                         onUseModel = onUseModel,
                         onDeleteModel = onDeleteModel,
-                        onMoveStorage = onMoveModelStorage,
+                        onMoveModelStorage = onMoveModelStorage,
                         onImportLocalModel = onImportLocalModel,
-                        onClearNotice = onDismissModelNotice
+                        onDismissModelNotice = onDismissModelNotice
                     )
                 }
 
                 AppDestination.Settings -> {
                     SettingsPage(
                         state = settingsState,
+                        modelState = modelState,
                         modifier = Modifier.padding(innerPadding),
+                        startSection = settingsStartSection,
                         onBack = { destination = AppDestination.Chat },
+                        onOpenModelLibrary = {
+                            modelsBackDestination = AppDestination.Settings
+                            settingsStartSection = Home
+                            destination = AppDestination.Models
+                            onOpenModelGallery()
+                        },
                         onBaseUrlChange = onBaseUrlChange,
                         onModelNameChange = onModelNameChange,
                         onApiKeyChange = onApiKeyChange,
@@ -266,10 +249,67 @@ fun NanoChatApp(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsPage(
-    state: SettingsScreenState,
+private fun ModelsPage(
+    state: ModelGalleryScreenState,
     modifier: Modifier = Modifier,
     onBack: () -> Unit,
+    onOpenHuggingFaceSettings: () -> Unit,
+    onRefreshAllowlist: () -> Unit,
+    onDownloadModel: (String) -> Unit,
+    onCancelModelDownload: (String) -> Unit,
+    onRetryModelDownload: (String) -> Unit,
+    onUseModel: (String) -> Unit,
+    onDeleteModel: (String) -> Unit,
+    onMoveModelStorage: (String, com.fcm.nanochat.models.registry.ModelStorageLocation) -> Unit,
+    onImportLocalModel: () -> Unit,
+    onDismissModelNotice: () -> Unit
+) {
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        topBar = {
+            androidx.compose.material3.TopAppBar(
+                title = {
+                    Text(
+                        text = stringResource(id = R.string.local_models),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        },
+        contentWindowInsets = ScaffoldDefaults.contentWindowInsets
+    ) { inner ->
+        ModelsTab(
+            state = state,
+            modifier = Modifier.padding(inner),
+            onRefresh = onRefreshAllowlist,
+            onDownload = onDownloadModel,
+            onCancelDownload = onCancelModelDownload,
+            onRetryDownload = onRetryModelDownload,
+            onUseModel = onUseModel,
+            onDeleteModel = onDeleteModel,
+            onMoveStorage = onMoveModelStorage,
+            onImportLocalModel = onImportLocalModel,
+            onOpenHuggingFaceSettings = onOpenHuggingFaceSettings,
+            onClearNotice = onDismissModelNotice
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsPage(
+    state: SettingsScreenState,
+    modelState: ModelGalleryScreenState,
+    modifier: Modifier = Modifier,
+    startSection: SettingsSection,
+    onBack: () -> Unit,
+    onOpenModelLibrary: () -> Unit,
     onBaseUrlChange: (String) -> Unit,
     onModelNameChange: (String) -> Unit,
     onApiKeyChange: (String) -> Unit,
@@ -284,7 +324,7 @@ private fun SettingsPage(
     onRefreshGeminiStatus: () -> Unit,
     onDownloadGeminiNano: () -> Unit
 ) {
-    var section by rememberSaveable { mutableStateOf(Home) }
+    var section by rememberSaveable(startSection) { mutableStateOf(startSection) }
     val title = when (section) {
         Home -> "Settings"
         AiConfiguration -> "AI configuration"
@@ -328,8 +368,10 @@ private fun SettingsPage(
         when (section) {
             Home -> SettingsHome(
                 state = state,
+                modelState = modelState,
                 modifier = contentModifier,
-                onNavigate = { section = it }
+                onNavigate = { section = it },
+                onOpenModelLibrary = onOpenModelLibrary
             )
 
             AiConfiguration -> AiConfigurationSettings(

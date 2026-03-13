@@ -82,7 +82,9 @@ class ModelDownloadCoordinator(
                 installedModelDao.upsert(
                     deleting.copy(
                         installState = ModelInstallState.BROKEN,
-                        errorMessage = error.message ?: "Unable to delete model.",
+                        errorMessage = toFriendlyFailure(
+                            error.message ?: "Unable to delete model."
+                        ),
                         updatedAt = System.currentTimeMillis()
                     )
                 )
@@ -138,7 +140,9 @@ class ModelDownloadCoordinator(
                 installedModelDao.upsert(
                     existing.copy(
                         installState = ModelInstallState.FAILED,
-                        errorMessage = error.message ?: "Unable to move model file.",
+                        errorMessage = toFriendlyFailure(
+                            error.message ?: "Unable to move model file."
+                        ),
                         updatedAt = System.currentTimeMillis()
                     )
                 )
@@ -171,7 +175,7 @@ class ModelDownloadCoordinator(
             modelTempDirectory().listFiles()
                 ?.filter { file ->
                     file.isFile && file.name.endsWith(".part") &&
-                        file.name.removeSuffix(".part") !in activeIds
+                            file.name.removeSuffix(".part") !in activeIds
                 }
                 ?.forEach { orphan ->
                     runCatching { orphan.delete() }
@@ -287,7 +291,8 @@ class ModelDownloadCoordinator(
                 )
             )
 
-            when (val validation = integrityValidator.validate(tempFile, model.modelFile, model.sizeInBytes)) {
+            when (val validation =
+                integrityValidator.validate(tempFile, model.modelFile, model.sizeInBytes)) {
                 ValidationResult.Success -> Unit
                 is ValidationResult.Failure -> {
                     upsertFailure(modelId, validation.message)
@@ -325,7 +330,7 @@ class ModelDownloadCoordinator(
                 )
             }
         } catch (error: Throwable) {
-            upsertFailure(modelId, error.message ?: "Model download failed.")
+            upsertFailure(modelId, toFriendlyFailure(error.message ?: "Model download failed."))
         }
     }
 
@@ -420,5 +425,27 @@ class ModelDownloadCoordinator(
 
     private fun safeId(modelId: String): String {
         return modelId.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+    }
+
+    private fun toFriendlyFailure(raw: String): String {
+        val message = raw.trim()
+        if (message.isBlank()) return "Unable to complete the model download."
+
+        val lowercase = message.lowercase()
+        return when {
+            "enospc" in lowercase || "no space left" in lowercase -> {
+                "Not enough storage to complete this download."
+            }
+
+            "socket" in lowercase || "timeout" in lowercase || "connection" in lowercase -> {
+                "Download failed due to a network issue. Try again."
+            }
+
+            "401" in lowercase || "403" in lowercase -> {
+                "Download failed. Verify your Hugging Face token and access permissions."
+            }
+
+            else -> message
+        }
     }
 }

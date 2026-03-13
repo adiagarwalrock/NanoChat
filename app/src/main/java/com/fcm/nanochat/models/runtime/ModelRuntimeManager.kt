@@ -1,6 +1,7 @@
 package com.fcm.nanochat.models.runtime
 
 import android.content.Context
+import android.util.Log
 import com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -27,28 +28,40 @@ class ModelRuntimeManager(
     ): RuntimeHandle {
         return mutex.withLock {
             val shouldReuse = activeRuntime != null &&
-                activeModelId == modelId &&
-                activeModelPath == modelPath
+                    activeModelId == modelId &&
+                    activeModelPath == modelPath
             if (shouldReuse) {
+                Log.d(TAG, "Reusing local runtime for modelId=$modelId")
                 return@withLock RuntimeHandle(
                     runtime = checkNotNull(activeRuntime),
                     initDurationMs = 0L
                 )
             }
 
+            Log.d(TAG, "Preparing local runtime modelId=$modelId")
             activeRuntime?.close()
+            activeRuntime = null
+            activeModelId = null
+            activeModelPath = null
 
             val initStart = System.currentTimeMillis()
-            val runtime = MediaPipeLlmRuntimeFactory.create(
-                context = appContext,
-                modelPath = modelPath,
-                config = defaultConfig
-            )
+            val runtime = runCatching {
+                MediaPipeLlmRuntimeFactory.create(
+                    context = appContext,
+                    modelPath = modelPath,
+                    config = defaultConfig
+                )
+            }.getOrElse { error ->
+                Log.e(TAG, "Failed to initialize local runtime", error)
+                throw error
+            }
             val initDuration = System.currentTimeMillis() - initStart
 
             activeModelId = modelId
             activeModelPath = modelPath
             activeRuntime = runtime
+
+            Log.d(TAG, "Local runtime ready modelId=$modelId initMs=$initDuration")
 
             RuntimeHandle(runtime = runtime, initDurationMs = initDuration)
         }
@@ -56,6 +69,7 @@ class ModelRuntimeManager(
 
     suspend fun release() {
         mutex.withLock {
+            Log.d(TAG, "Releasing local runtime modelId=${activeModelId.orEmpty()}")
             activeRuntime?.close()
             activeRuntime = null
             activeModelId = null
@@ -74,5 +88,9 @@ class ModelRuntimeManager(
                 config = defaultConfig
             )
         }
+    }
+
+    private companion object {
+        const val TAG = "ModelRuntimeManager"
     }
 }

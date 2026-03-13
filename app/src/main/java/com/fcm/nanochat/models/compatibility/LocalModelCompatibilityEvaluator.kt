@@ -41,7 +41,7 @@ class LocalModelCompatibilityEvaluator(
 
         if (!isChatSuitable(model)) {
             return LocalModelCompatibilityState.UnsupportedDevice(
-                "This model is not optimized for chat tasks."
+                "This model is not optimized for chat in NanoChat."
             )
         }
 
@@ -116,7 +116,14 @@ class LocalModelCompatibilityEvaluator(
     private fun isAbiSupported(model: AllowlistedModel): Boolean {
         val supported = model.supportedAbis
         if (supported.isEmpty()) return true
-        return Build.SUPPORTED_ABIS.any { abi -> supported.any { it.equals(abi, ignoreCase = true) } }
+        return Build.SUPPORTED_ABIS.any { abi ->
+            supported.any {
+                it.equals(
+                    abi,
+                    ignoreCase = true
+                )
+            }
+        }
     }
 
     private fun isChatSuitable(model: AllowlistedModel): Boolean {

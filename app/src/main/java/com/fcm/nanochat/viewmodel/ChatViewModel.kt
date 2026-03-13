@@ -54,7 +54,7 @@ class ChatViewModel(
                 modelId = null,
                 displayName = null,
                 ready = false,
-                message = "Choose a local model from the Models tab."
+                message = "Choose a local model from Model Library."
             )
         )
 

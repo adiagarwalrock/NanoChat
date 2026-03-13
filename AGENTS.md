@@ -4,8 +4,10 @@ For agentic coders in /mnt/d/NanoChat. Kotlin official style; Material You expre
 Quick Context (from Plans)
 - App: Android single-module app `app`, Compose-only UI, package `com.fcm.nanochat`.
 - Tooling: Java/Kotlin 17, Kotlin 2.1.10, KSP 2.1.10-1.0.29, AGP 9.1.0, Compose BOM 2024.12.01, minSdk 31, target/compile 35.
-- Tabs: Chat, Models (stub for downloaded models), Settings; bottom nav in `NanoChatApp`.
-- Backends: `InferenceMode` supports `AICORE` (Gemini Nano via AICore reflection) and `REMOTE` (OpenAI-compatible SSE). Downloaded models planned; keep selectors extendable.
+- Navigation: chat-first shell. Chat is the primary surface; Models and Settings are secondary
+  screens accessed via drawer/settings flows (no bottom nav).
+- Backends: `InferenceMode` supports `AICORE`, `DOWNLOADED` (LiteRT / MediaPipe runtime for local
+  files), and `REMOTE` (OpenAI-compatible SSE).
 - Persistence: Room for sessions/messages; DataStore for non-secret settings; EncryptedSharedPreferences for secrets.
 - Key files: MainActivity, NanoChatApp, ChatViewModel, SettingsViewModel, ChatRepository, InferenceClient*, PromptFormatter, StreamingMessageAssembler, AppPreferences, ui/theme.
 
@@ -54,14 +56,17 @@ Lint & Formatting
 
 Architecture Snapshot
 - DI: simple `AppContainer` in `NanoChatApplication`; ViewModel factories per screen.
-- Data: Room entities `ChatSessionEntity`, `ChatMessageEntity`; DAOs for session/message; explicit
-  migrations are in place (`1->2`, `2->3`) with indexed message ordering.
+- Data: Room entities `ChatSessionEntity`, `ChatMessageEntity`, `InstalledModelEntity`; DAOs for
+  session/message/model install; explicit
+  migrations are in place (`1->2`, `2->3`, `3->4`).
 - Preferences: `AppPreferences` merges DataStore (non-secret) + EncryptedSharedPreferences (secrets) into `SettingsSnapshot` Flow.
 - Domain: `InferenceClient` interface with availability + streamChat; selector + formatter + assembler implement backend semantics.
 - UI: Compose Material 3 screens in `ui/`; state from `ChatScreenState` and `SettingsScreenState` flows.
 
 Data & Persistence Rules
-- History window defaults: 10 turns AICORE, 20 turns REMOTE (`ChatRepository.recentTurnsFor`).
+
+- History window defaults: 10 turns AICORE, 20 turns DOWNLOADED/REMOTE (
+  `ChatRepository.recentTurnsFor`).
 - Session titles trimmed to 32 chars with ellipsis; reuse helper.
 - DAO calls are suspend; never block main thread.
 - Time source: `System.currentTimeMillis()` consistently.
@@ -69,8 +74,11 @@ Data & Persistence Rules
 
 File Structure Snapshot (PRD)
 - `app/src/main/java/com/fcm/nanochat/` root.
-- Key packages: `data/` (AppPreferences, db entities/daos/database), `inference/` (InferenceClient + AICore/Remote), `models/` (catalog + download manager stubs), `viewmodel/`, `ui/screens/`.
-- Models tab is stub-only in milestone 1; downloaded-model management planned (MediaPipe tasks).
+- Key packages: `data/` (AppPreferences, db entities/daos/database, repositories), `inference/` (
+  AICore/Downloaded/Remote clients), `models/` (allowlist, compatibility, download, registry,
+  runtime), `viewmodel/`, `ui/`.
+- Models tab is production-oriented for allowlisted local model download, activation, and
+  diagnostics.
 
 Inference & Networking
 - Remote client: OkHttp SSE to `baseUrl/chat/completions`; headers `Authorization: Bearer <apiKey>`, `Accept: text/event-stream`; `stream=true`; build messages from history + prompt (ChatML style from PRD).

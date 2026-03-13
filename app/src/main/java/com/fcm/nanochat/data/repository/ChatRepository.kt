@@ -34,7 +34,8 @@ class ChatRepository(
 
     fun observePinnedSessionIds(): Flow<Set<Long>> = preferences.pinnedSessionIds
 
-    fun observeActiveLocalModelStatus(): Flow<ActiveModelStatus> = localModelRepository.activeModelStatus
+    fun observeActiveLocalModelStatus(): Flow<ActiveModelStatus> =
+        localModelRepository.activeModelStatus
 
     fun observeSessions(): Flow<List<ChatSession>> =
         database.sessionDao().observeSessions().map { sessions ->
@@ -170,7 +171,7 @@ class ChatRepository(
     }
 
     suspend fun backendAvailability(mode: InferenceMode, settings: SettingsSnapshot): BackendAvailability =
-        buildClient(mode, settings.activeLocalModelId).availability(settings)
+        buildClient(mode).availability(settings)
 
     suspend fun recentTurnsFor(mode: InferenceMode, sessionId: Long): List<ChatTurn> {
         val limit = ChatDefaults.historyWindowFor(mode)
@@ -187,7 +188,7 @@ class ChatRepository(
         prompt: String,
         settings: SettingsSnapshot
     ): Flow<String> {
-        return buildClient(mode, settings.activeLocalModelId).streamChat(
+        return buildClient(mode).streamChat(
             InferenceRequest(
                 history = history,
                 prompt = prompt,
@@ -196,8 +197,7 @@ class ChatRepository(
         )
     }
 
-    @Suppress("UNUSED_PARAMETER")
-    fun buildClient(mode: InferenceMode, activeDownloadedModelId: String?): InferenceClient {
+    fun buildClient(mode: InferenceMode): InferenceClient {
         return InferenceClientSelector.select(
             mode = mode,
             local = localInferenceClient,

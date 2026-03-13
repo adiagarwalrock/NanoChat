@@ -1,5 +1,7 @@
 package com.fcm.nanochat.models.registry
 
+import com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig
+import com.fcm.nanochat.models.allowlist.AllowlistedModel
 import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -42,15 +44,31 @@ class ActiveModelResolverTest {
         assertTrue(resolution.message?.contains("broken") == true)
     }
 
+    @Test
+    fun `resolve clears non-chat allowlisted model`() {
+        val record = sampleRecord(
+            modelId = "model-a",
+            installState = ModelInstallState.INSTALLED,
+            compatibility = LocalModelCompatibilityState.Ready,
+            allowlistedModel = sampleAllowlistedModel(recommendedForChat = false)
+        )
+
+        val resolution = ActiveModelResolver.resolve("model-a", listOf(record))
+
+        assertTrue(resolution.shouldClearSelection)
+        assertTrue(resolution.message?.contains("not optimized") == true)
+    }
+
     private fun sampleRecord(
         modelId: String,
         installState: ModelInstallState,
-        compatibility: LocalModelCompatibilityState
+        compatibility: LocalModelCompatibilityState,
+        allowlistedModel: AllowlistedModel? = null
     ): InstalledModelRecord {
         return InstalledModelRecord(
             modelId = modelId,
             displayName = "Model",
-            allowlistedModel = null,
+            allowlistedModel = allowlistedModel,
             installState = installState,
             storageLocation = ModelStorageLocation.INTERNAL,
             localPath = "/tmp/model",
@@ -61,6 +79,42 @@ class ActiveModelResolverTest {
             compatibility = compatibility,
             isLegacy = false,
             isActive = true
+        )
+    }
+
+    private fun sampleAllowlistedModel(recommendedForChat: Boolean): AllowlistedModel {
+        return AllowlistedModel(
+            id = "model-a",
+            displayName = "Model A",
+            name = "Model A",
+            modelId = "org/model-a",
+            modelFile = "model-a.litertlm",
+            description = "Test",
+            sizeInBytes = 1_024,
+            minDeviceMemoryInGb = 6,
+            commitHash = "main",
+            defaultConfig = AllowlistDefaultConfig(
+                topK = 40,
+                topP = 0.9,
+                temperature = 0.7,
+                maxTokens = 1024,
+                accelerators = "cpu"
+            ),
+            taskTypes = listOf("llm_prompt_lab"),
+            bestForTaskTypes = listOf("llm_prompt_lab"),
+            llmSupportImage = false,
+            llmSupportAudio = false,
+            backendType = "litert-lm",
+            sourceRepo = "org/model-a",
+            requiresHfToken = false,
+            isExperimental = false,
+            supportedUseCases = listOf("prompt_lab"),
+            recommendedForChat = recommendedForChat,
+            memoryTier = "mid",
+            acceleratorHints = listOf("cpu"),
+            downloadUrl = "https://example.com/model-a.litertlm",
+            fileType = "litertlm",
+            supportedAbis = emptyList()
         )
     }
 }

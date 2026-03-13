@@ -768,7 +768,7 @@ private fun LocalModelEmptyState(
                 textAlign = TextAlign.Center
             )
             Text(
-                text = "Open Models to download or activate an allowlisted LiteRT model.",
+                text = "Open Model Library to download or activate an allowlisted local model.",
                 style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
