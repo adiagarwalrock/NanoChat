@@ -27,7 +27,7 @@ class DownloadedModelInferenceClient(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override suspend fun availability(settings: SettingsSnapshot): BackendAvailability {
-        val activeModelId = resolveActiveModelId(settings)
+        val activeModelId = resolveActiveModelId(settings, settings.activeLocalModelId)
             ?: return BackendAvailability.Unavailable(
                 "No local model selected. Open Model Library and choose one."
             )
@@ -84,6 +84,10 @@ class DownloadedModelInferenceClient(
                 BackendAvailability.Unavailable(toFriendlyRuntimeError(compatibility.reason))
             }
 
+            LocalModelCompatibilityState.UnsupportedForChat -> {
+                BackendAvailability.Unavailable("This model is not designed for chat in NanoChat.")
+            }
+
             is LocalModelCompatibilityState.DownloadedButNotActivatable -> {
                 BackendAvailability.Unavailable(toFriendlyRuntimeError(compatibility.reason))
             }
@@ -108,7 +112,7 @@ class DownloadedModelInferenceClient(
             }
         }
 
-        val activeModelId = resolveActiveModelId(request.settings)
+        val activeModelId = resolveActiveModelId(request.settings, request.activeDownloadedModelId)
             ?: throw InferenceException.Configuration("No local model selected.")
         val record = resolveActiveModelRecord(activeModelId)
             ?: throw InferenceException.BackendUnavailable(
@@ -201,11 +205,15 @@ class DownloadedModelInferenceClient(
         }
     }
 
-    private fun resolveActiveModelId(settings: SettingsSnapshot): String? {
-        val preferredId = settings.activeLocalModelId.trim().lowercase()
+    private fun resolveActiveModelId(
+        settings: SettingsSnapshot,
+        requestedActiveModelId: String?
+    ): String? {
+        val preferredId = requestedActiveModelId?.trim()?.lowercase().orEmpty()
+        val settingsId = settings.activeLocalModelId.trim().lowercase()
         val fallbackId =
             modelRegistry.activeModelStatus.value.modelId?.trim()?.lowercase().orEmpty()
-        val candidateId = preferredId.ifBlank { fallbackId }
+        val candidateId = preferredId.ifBlank { settingsId.ifBlank { fallbackId } }
         return candidateId.ifBlank { null }
     }
 

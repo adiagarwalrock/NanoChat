@@ -57,6 +57,15 @@ class ModelRegistry(
         preferences.settings.first().activeLocalModelId.trim().lowercase()
 
     suspend fun reconcileInstalledFiles() {
+        val snapshot = allowlistRepository.snapshot.value.let { current ->
+            if (current.models.isNotEmpty() || current.version.value.isNotBlank()) {
+                current
+            } else {
+                allowlistRepository.snapshot.first { it.models.isNotEmpty() || it.version.value.isNotBlank() }
+            }
+        }
+        val allowlistedById = snapshot.models.associateBy { it.id }
+        val tokenPresent = preferences.settings.first().huggingFaceToken.isNotBlank()
         val installed = installedModelDao.allInstalledModels()
         installed.forEach { entity ->
             if (entity.installState != ModelInstallState.INSTALLED) return@forEach
@@ -69,6 +78,58 @@ class ModelRegistry(
                         updatedAt = System.currentTimeMillis()
                     )
                 )
+                return@forEach
+            }
+
+            val allowlisted = allowlistedById[entity.modelId.lowercase()] ?: return@forEach
+            val compatibility = compatibilityEvaluator.evaluate(
+                model = allowlisted,
+                installedPath = entity.localPath,
+                installState = ModelInstallState.INSTALLED,
+                tokenPresent = tokenPresent
+            )
+
+            when (compatibility) {
+                LocalModelCompatibilityState.Ready -> {
+                    if (!entity.errorMessage.isNullOrBlank()) {
+                        installedModelDao.upsert(
+                            entity.copy(
+                                errorMessage = null,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
+
+                LocalModelCompatibilityState.CorruptedModel -> {
+                    installedModelDao.upsert(
+                        entity.copy(
+                            installState = ModelInstallState.BROKEN,
+                            errorMessage = "Model file appears corrupted.",
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                }
+
+                is LocalModelCompatibilityState.RuntimeUnavailable,
+                is LocalModelCompatibilityState.DownloadedButNotActivatable -> {
+                    val issueMessage = when (compatibility) {
+                        is LocalModelCompatibilityState.RuntimeUnavailable -> compatibility.reason
+                        is LocalModelCompatibilityState.DownloadedButNotActivatable -> compatibility.reason
+                        else -> ""
+                    }
+                    val friendly = sanitizeCompatibilityReason(issueMessage)
+                    if (entity.errorMessage != friendly) {
+                        installedModelDao.upsert(
+                            entity.copy(
+                                errorMessage = friendly,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
+
+                else -> Unit
             }
         }
     }
@@ -225,6 +286,10 @@ class ModelRegistry(
                 sanitizeCompatibilityReason(compatibility.reason)
             }
 
+            LocalModelCompatibilityState.UnsupportedForChat -> {
+                "This model is not designed for chat in NanoChat."
+            }
+
             LocalModelCompatibilityState.TokenRequired -> "This model requires a Hugging Face token."
             is LocalModelCompatibilityState.DownloadedButNotActivatable -> {
                 sanitizeCompatibilityReason(compatibility.reason)
@@ -245,8 +310,9 @@ class ModelRegistry(
         return when {
             "missing runtime option method" in lowercase ||
                     "settopk" in lowercase ||
-                    "setmaxtokens" in lowercase -> {
-                "This model could not start on this device."
+                    "setmaxtokens" in lowercase ||
+                    "runtime unavailable" in lowercase -> {
+                "This model could not be started with the current local runtime."
             }
 
             "missing" in lowercase && "file" in lowercase -> {

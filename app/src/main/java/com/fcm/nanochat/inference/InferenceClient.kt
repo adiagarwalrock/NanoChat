@@ -18,7 +18,8 @@ data class ChatTurn(
 data class InferenceRequest(
     val history: List<ChatTurn>,
     val prompt: String,
-    val settings: SettingsSnapshot
+    val settings: SettingsSnapshot,
+    val activeDownloadedModelId: String? = null
 )
 
 sealed interface BackendAvailability {

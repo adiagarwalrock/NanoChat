@@ -40,9 +40,7 @@ class LocalModelCompatibilityEvaluator(
         }
 
         if (!isChatSuitable(model)) {
-            return LocalModelCompatibilityState.UnsupportedDevice(
-                "This model is not optimized for chat in NanoChat."
-            )
+            return LocalModelCompatibilityState.UnsupportedForChat
         }
 
         if (model.requiresHfToken && !tokenPresent) {

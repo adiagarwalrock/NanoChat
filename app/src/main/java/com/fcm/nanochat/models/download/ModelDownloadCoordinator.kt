@@ -19,6 +19,13 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 
+private const val HUGGING_FACE_WHOAMI_URL = "https://huggingface.co/api/whoami-v2"
+
+private sealed interface DownloadPreflightResult {
+    data class Allowed(val attachAuthorization: Boolean) : DownloadPreflightResult
+    data class Blocked(val message: String) : DownloadPreflightResult
+}
+
 class ModelDownloadCoordinator(
     context: Context,
     private val httpClient: OkHttpClient,
@@ -154,31 +161,79 @@ class ModelDownloadCoordinator(
         scope.launch {
             modelTempDirectory().mkdirs()
 
-            installedModelDao.allInstalledModels().forEach { entity ->
-                if (entity.installState == ModelInstallState.INSTALLED) {
-                    val file = File(entity.localPath)
-                    if (!file.exists() || file.length() <= 0L) {
-                        installedModelDao.upsert(
-                            entity.copy(
-                                installState = ModelInstallState.BROKEN,
-                                errorMessage = "Model file is missing.",
-                                updatedAt = System.currentTimeMillis()
+            val installedEntities = installedModelDao.allInstalledModels()
+            installedEntities.forEach { entity ->
+                when (entity.installState) {
+                    ModelInstallState.INSTALLED -> {
+                        val file = File(entity.localPath)
+                        if (!file.exists() || file.length() <= 0L) {
+                            installedModelDao.upsert(
+                                entity.copy(
+                                    installState = ModelInstallState.BROKEN,
+                                    errorMessage = "Model file is missing.",
+                                    updatedAt = System.currentTimeMillis()
+                                )
                             )
-                        )
+                        }
                     }
+
+                    ModelInstallState.DOWNLOADING,
+                    ModelInstallState.QUEUED,
+                    ModelInstallState.VALIDATING -> {
+                        val temp = tempFile(entity.modelId)
+                        if (temp.exists() && temp.length() > 0L) {
+                            installedModelDao.upsert(
+                                entity.copy(
+                                    installState = ModelInstallState.PAUSED,
+                                    downloadedBytes = temp.length(),
+                                    errorMessage = "Download paused.",
+                                    updatedAt = System.currentTimeMillis()
+                                )
+                            )
+                        }
+                    }
+
+                    else -> Unit
                 }
             }
 
-            val activeIds = installedModelDao.allInstalledModels()
+            val knownTempIds = installedEntities
                 .map { safeId(it.modelId) }
-                .toSet()
+                .toMutableSet()
+            val allowlistedBySafeId = allowlistRepository.snapshot.value.models
+                .associateBy { model -> safeId(model.id) }
+
             modelTempDirectory().listFiles()
-                ?.filter { file ->
-                    file.isFile && file.name.endsWith(".part") &&
-                            file.name.removeSuffix(".part") !in activeIds
-                }
-                ?.forEach { orphan ->
-                    runCatching { orphan.delete() }
+                ?.filter { file -> file.isFile && file.name.endsWith(".part") }
+                ?.forEach { partial ->
+                    val safeModelId = partial.name.removeSuffix(".part")
+                    if (safeModelId in knownTempIds) {
+                        return@forEach
+                    }
+
+                    val allowlistedModel = allowlistedBySafeId[safeModelId]
+                    if (allowlistedModel != null && partial.length() > 0L) {
+                        val now = System.currentTimeMillis()
+                        installedModelDao.upsert(
+                            InstalledModelEntity(
+                                modelId = allowlistedModel.id,
+                                displayName = allowlistedModel.displayName,
+                                modelFileName = allowlistedModel.modelFile,
+                                localPath = "",
+                                sizeBytes = allowlistedModel.sizeInBytes,
+                                downloadedBytes = partial.length(),
+                                installState = ModelInstallState.PAUSED,
+                                storageLocation = ModelStorageLocation.INTERNAL,
+                                allowlistVersion = allowlistRepository.snapshot.value.version.value,
+                                errorMessage = "Download paused.",
+                                createdAt = now,
+                                updatedAt = now
+                            )
+                        )
+                        knownTempIds += safeModelId
+                    } else {
+                        runCatching { partial.delete() }
+                    }
                 }
         }
     }
@@ -189,10 +244,12 @@ class ModelDownloadCoordinator(
 
         val settings = preferences.settings.first()
         val token = settings.huggingFaceToken.trim()
-        if (model.requiresHfToken && token.isBlank()) {
-            upsertFailure(modelId, "Hugging Face token is required for this download.")
+        val preflight = preflightDownloadAccess(model.downloadUrl, model.requiresHfToken, token)
+        if (preflight is DownloadPreflightResult.Blocked) {
+            upsertFailure(modelId, preflight.message)
             return
         }
+        val attachAuthorization = (preflight as DownloadPreflightResult.Allowed).attachAuthorization
 
         val now = System.currentTimeMillis()
         val existing = installedModelDao.installedModel(modelId)
@@ -230,7 +287,7 @@ class ModelDownloadCoordinator(
             .header("Accept", "application/octet-stream")
             .get()
 
-        if (model.requiresHfToken) {
+        if (attachAuthorization) {
             requestBuilder.header("Authorization", "Bearer $token")
         }
         if (resumeBytes > 0L) {
@@ -242,7 +299,14 @@ class ModelDownloadCoordinator(
         try {
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful && response.code != 206) {
-                    upsertFailure(modelId, "Download failed (HTTP ${response.code}).")
+                    upsertFailure(
+                        modelId,
+                        downloadHttpErrorMessage(
+                            httpCode = response.code,
+                            downloadUrl = model.downloadUrl,
+                            tokenPresent = token.isNotBlank()
+                        )
+                    )
                     return
                 }
 
@@ -423,6 +487,162 @@ class ModelDownloadCoordinator(
         }
     }
 
+    private fun preflightDownloadAccess(
+        downloadUrl: String,
+        requiresToken: Boolean,
+        token: String
+    ): DownloadPreflightResult {
+        if (!isHuggingFaceUrl(downloadUrl)) {
+            return DownloadPreflightResult.Allowed(attachAuthorization = false)
+        }
+
+        if (requiresToken && token.isBlank()) {
+            return DownloadPreflightResult.Blocked(
+                "Add a Hugging Face read token to download this model."
+            )
+        }
+
+        val anonymousCode = runCatching {
+            requestHuggingFaceFile(downloadUrl, token = null)
+        }.getOrElse { -1 }
+
+        if (anonymousCode == 200 || anonymousCode == 206) {
+            return DownloadPreflightResult.Allowed(attachAuthorization = false)
+        }
+
+        val shouldTryToken = token.isNotBlank() &&
+                (requiresToken || anonymousCode == 401 || anonymousCode == 403)
+
+        if (!shouldTryToken) {
+            return when {
+                anonymousCode == 401 || anonymousCode == 403 -> {
+                    DownloadPreflightResult.Blocked(
+                        "Add a Hugging Face read token to download this model."
+                    )
+                }
+
+                anonymousCode < 0 -> {
+                    DownloadPreflightResult.Blocked(
+                        "NanoChat could not verify model access. Check your connection and try again."
+                    )
+                }
+
+                else -> {
+                    DownloadPreflightResult.Blocked(
+                        downloadHttpErrorMessage(
+                            httpCode = anonymousCode,
+                            downloadUrl = downloadUrl,
+                            tokenPresent = false
+                        )
+                    )
+                }
+            }
+        }
+
+        val tokenValidation = validateHuggingFaceToken(token)
+        if (tokenValidation is DownloadPreflightResult.Blocked) {
+            return tokenValidation
+        }
+
+        val authenticatedCode = runCatching {
+            requestHuggingFaceFile(downloadUrl, token = token)
+        }.getOrElse { -1 }
+
+        return when (authenticatedCode) {
+            200, 206 -> DownloadPreflightResult.Allowed(attachAuthorization = true)
+            401, 403 -> DownloadPreflightResult.Blocked(
+                "Your token is valid, but this account does not have access to this model."
+            )
+
+            -1 -> DownloadPreflightResult.Blocked(
+                "NanoChat could not verify model access. Check your connection and try again."
+            )
+
+            else -> DownloadPreflightResult.Blocked(
+                downloadHttpErrorMessage(
+                    httpCode = authenticatedCode,
+                    downloadUrl = downloadUrl,
+                    tokenPresent = true
+                )
+            )
+        }
+    }
+
+    private fun validateHuggingFaceToken(token: String): DownloadPreflightResult {
+        val request = Request.Builder()
+            .url(HUGGING_FACE_WHOAMI_URL)
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .get()
+            .build()
+
+        return runCatching {
+            httpClient.newCall(request).execute().use { response ->
+                when {
+                    response.isSuccessful -> {
+                        DownloadPreflightResult.Allowed(attachAuthorization = true)
+                    }
+
+                    response.code == 401 -> {
+                        DownloadPreflightResult.Blocked(
+                            "Add a valid Hugging Face read token to download this model."
+                        )
+                    }
+
+                    else -> {
+                        DownloadPreflightResult.Blocked(
+                            "NanoChat could not validate your Hugging Face token right now."
+                        )
+                    }
+                }
+            }
+        }.getOrElse {
+            DownloadPreflightResult.Blocked(
+                "NanoChat could not validate your Hugging Face token right now."
+            )
+        }
+    }
+
+    private fun requestHuggingFaceFile(downloadUrl: String, token: String?): Int {
+        val requestBuilder = Request.Builder()
+            .url(downloadUrl)
+            .header("Accept", "application/octet-stream")
+            .header("Range", "bytes=0-0")
+            .get()
+
+        if (!token.isNullOrBlank()) {
+            requestBuilder.header("Authorization", "Bearer $token")
+        }
+
+        val request = requestBuilder.build()
+        return httpClient.newCall(request).execute().use { response ->
+            response.code
+        }
+    }
+
+    private fun downloadHttpErrorMessage(
+        httpCode: Int,
+        downloadUrl: String,
+        tokenPresent: Boolean
+    ): String {
+        return when {
+            isHuggingFaceUrl(downloadUrl) && (httpCode == 401 || httpCode == 403) && !tokenPresent -> {
+                "Add a Hugging Face read token to download this model."
+            }
+
+            isHuggingFaceUrl(downloadUrl) && (httpCode == 401 || httpCode == 403) -> {
+                "Requires Hugging Face access approval."
+            }
+
+            httpCode in 400..599 -> "Download failed (HTTP $httpCode)."
+            else -> "Download failed."
+        }
+    }
+
+    private fun isHuggingFaceUrl(downloadUrl: String): Boolean {
+        return downloadUrl.contains("huggingface.co", ignoreCase = true)
+    }
+
     private fun safeId(modelId: String): String {
         return modelId.replace(Regex("[^a-zA-Z0-9._-]"), "_")
     }
@@ -430,6 +650,14 @@ class ModelDownloadCoordinator(
     private fun toFriendlyFailure(raw: String): String {
         val message = raw.trim()
         if (message.isBlank()) return "Unable to complete the model download."
+
+        if (
+            message.startsWith("Add a Hugging Face", ignoreCase = true) ||
+            message.startsWith("Your token is valid", ignoreCase = true) ||
+            message.startsWith("Requires Hugging Face", ignoreCase = true)
+        ) {
+            return message
+        }
 
         val lowercase = message.lowercase()
         return when {
@@ -442,7 +670,7 @@ class ModelDownloadCoordinator(
             }
 
             "401" in lowercase || "403" in lowercase -> {
-                "Download failed. Verify your Hugging Face token and access permissions."
+                "This model requires Hugging Face access approval or a valid read token."
             }
 
             else -> message

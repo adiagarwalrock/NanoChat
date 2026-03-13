@@ -171,7 +171,7 @@ class ChatRepository(
     }
 
     suspend fun backendAvailability(mode: InferenceMode, settings: SettingsSnapshot): BackendAvailability =
-        buildClient(mode).availability(settings)
+        buildClient(mode, settings.activeLocalModelId).availability(settings)
 
     suspend fun recentTurnsFor(mode: InferenceMode, sessionId: Long): List<ChatTurn> {
         val limit = ChatDefaults.historyWindowFor(mode)
@@ -188,16 +188,18 @@ class ChatRepository(
         prompt: String,
         settings: SettingsSnapshot
     ): Flow<String> {
-        return buildClient(mode).streamChat(
+        return buildClient(mode, settings.activeLocalModelId).streamChat(
             InferenceRequest(
                 history = history,
                 prompt = prompt,
-                settings = settings
+                settings = settings,
+                activeDownloadedModelId = settings.activeLocalModelId
             )
         )
     }
 
-    fun buildClient(mode: InferenceMode): InferenceClient {
+    @Suppress("UNUSED_PARAMETER")
+    fun buildClient(mode: InferenceMode, activeDownloadedModelId: String? = null): InferenceClient {
         return InferenceClientSelector.select(
             mode = mode,
             local = localInferenceClient,

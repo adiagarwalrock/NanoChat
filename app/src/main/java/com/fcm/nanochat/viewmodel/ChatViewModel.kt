@@ -175,6 +175,12 @@ class ChatViewModel(
 
     fun setInferenceMode(mode: InferenceMode) {
         viewModelScope.launch {
+            if (
+                settings.value.inferenceMode == InferenceMode.DOWNLOADED &&
+                mode != InferenceMode.DOWNLOADED
+            ) {
+                sendJob?.cancel()
+            }
             repository.setInferenceMode(mode)
             if (mode == InferenceMode.DOWNLOADED && !activeLocalModelStatus.value.ready) {
                 notice.value = activeLocalModelStatus.value.message

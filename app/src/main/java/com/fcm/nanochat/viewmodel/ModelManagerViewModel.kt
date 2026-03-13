@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.fcm.nanochat.data.repository.LocalModelRepository
+import com.fcm.nanochat.model.LocalModelHealthState
 import com.fcm.nanochat.model.ModelCardUi
 import com.fcm.nanochat.model.ModelGalleryScreenState
 import com.fcm.nanochat.model.RuntimeDiagnosticsUi
@@ -35,6 +36,7 @@ class ModelManagerViewModel(
         val cardItems = records
             .map { record ->
                 val model = record.allowlistedModel
+                val healthState = mapHealthState(record)
                 ModelCardUi(
                     modelId = record.modelId,
                     displayName = record.displayName,
@@ -57,6 +59,7 @@ class ModelManagerViewModel(
                     isExperimental = model?.isExperimental ?: false,
                     installState = record.installState,
                     compatibility = record.compatibility,
+                    healthState = healthState,
                     isActive = record.isActive,
                     isLegacy = record.isLegacy,
                     storageLocation = record.storageLocation,
@@ -116,18 +119,18 @@ class ModelManagerViewModel(
     fun useModel(modelId: String) {
         viewModelScope.launch {
             val model = localModelRepository.records.value.firstOrNull { it.modelId == modelId }
-            if (
-                model == null ||
-                model.installState != ModelInstallState.INSTALLED ||
-                model.compatibility !is LocalModelCompatibilityState.Ready
-            ) {
+            if (model == null) {
                 notice.update { "This model is not ready yet. Finish setup and try again." }
                 return@launch
             }
 
-            val chatReady = model.allowlistedModel?.recommendedForChat ?: true
-            if (!chatReady && !model.isLegacy) {
+            val healthState = mapHealthState(model)
+            if (healthState is LocalModelHealthState.UnsupportedForChat) {
                 notice.update { "This model is not optimized for chat in NanoChat." }
+                return@launch
+            }
+            if (healthState !is LocalModelHealthState.InstalledReady) {
+                notice.update { "This model is not ready yet. Finish setup and try again." }
                 return@launch
             }
 
@@ -169,6 +172,158 @@ class ModelManagerViewModel(
         notice.value = null
     }
 
+    private fun mapHealthState(record: com.fcm.nanochat.models.registry.InstalledModelRecord): LocalModelHealthState {
+        val compatibility = record.compatibility
+        val issueMessage = record.errorMessage?.trim().orEmpty()
+
+        return when (record.installState) {
+            ModelInstallState.NOT_INSTALLED -> {
+                when {
+                    compatibility is LocalModelCompatibilityState.TokenRequired -> {
+                        LocalModelHealthState.RequiresToken
+                    }
+
+                    compatibility is LocalModelCompatibilityState.UnsupportedForChat -> {
+                        LocalModelHealthState.UnsupportedForChat
+                    }
+
+                    compatibility is LocalModelCompatibilityState.NeedsMoreRam -> {
+                        LocalModelHealthState.NotCompatible(
+                            "Requires ${compatibility.requiredGb} GB RAM."
+                        )
+                    }
+
+                    compatibility is LocalModelCompatibilityState.NeedsMoreStorage -> {
+                        LocalModelHealthState.NotCompatible("Not enough free storage.")
+                    }
+
+                    compatibility is LocalModelCompatibilityState.UnsupportedDevice -> {
+                        LocalModelHealthState.NotCompatible(compatibility.reason)
+                    }
+
+                    indicatesLicenseApproval(issueMessage) -> {
+                        LocalModelHealthState.RequiresLicenseApproval
+                    }
+
+                    else -> LocalModelHealthState.NotInstalled
+                }
+            }
+
+            ModelInstallState.QUEUED,
+            ModelInstallState.DOWNLOADING -> {
+                LocalModelHealthState.Downloading(
+                    downloadedBytes = record.downloadedBytes,
+                    totalBytes = record.sizeBytes
+                )
+            }
+
+            ModelInstallState.PAUSED -> {
+                LocalModelHealthState.Paused(
+                    downloadedBytes = record.downloadedBytes,
+                    totalBytes = record.sizeBytes
+                )
+            }
+
+            ModelInstallState.FAILED -> {
+                when {
+                    compatibility is LocalModelCompatibilityState.TokenRequired -> {
+                        LocalModelHealthState.RequiresToken
+                    }
+
+                    indicatesLicenseApproval(issueMessage) -> {
+                        LocalModelHealthState.RequiresLicenseApproval
+                    }
+
+                    else -> {
+                        LocalModelHealthState.DownloadFailed(
+                            message = issueMessage.ifBlank { "Download failed." }
+                        )
+                    }
+                }
+            }
+
+            ModelInstallState.VALIDATING,
+            ModelInstallState.MOVING,
+            ModelInstallState.DELETING -> LocalModelHealthState.InstalledNeedsValidation
+
+            ModelInstallState.INSTALLED -> {
+                when {
+                    compatibility is LocalModelCompatibilityState.Ready -> {
+                        LocalModelHealthState.InstalledReady
+                    }
+
+                    compatibility is LocalModelCompatibilityState.TokenRequired -> {
+                        LocalModelHealthState.RequiresToken
+                    }
+
+                    compatibility is LocalModelCompatibilityState.UnsupportedForChat -> {
+                        LocalModelHealthState.UnsupportedForChat
+                    }
+
+                    compatibility is LocalModelCompatibilityState.NeedsMoreRam -> {
+                        LocalModelHealthState.NotCompatible(
+                            "Requires ${compatibility.requiredGb} GB RAM."
+                        )
+                    }
+
+                    compatibility is LocalModelCompatibilityState.NeedsMoreStorage -> {
+                        LocalModelHealthState.NotCompatible("Not enough free storage.")
+                    }
+
+                    compatibility is LocalModelCompatibilityState.UnsupportedDevice -> {
+                        LocalModelHealthState.NotCompatible(compatibility.reason)
+                    }
+
+                    compatibility is LocalModelCompatibilityState.CorruptedModel -> {
+                        LocalModelHealthState.InstalledStartupFailed("This model file appears corrupted.")
+                    }
+
+                    compatibility is LocalModelCompatibilityState.RuntimeUnavailable -> {
+                        LocalModelHealthState.InstalledStartupFailed(
+                            compatibility.reason.ifBlank {
+                                "NanoChat could not start this model on your device."
+                            }
+                        )
+                    }
+
+                    compatibility is LocalModelCompatibilityState.DownloadedButNotActivatable -> {
+                        LocalModelHealthState.InstalledStartupFailed(
+                            compatibility.reason.ifBlank {
+                                "NanoChat could not start this model on your device."
+                            }
+                        )
+                    }
+
+                    indicatesLicenseApproval(issueMessage) -> {
+                        LocalModelHealthState.RequiresLicenseApproval
+                    }
+
+                    else -> {
+                        LocalModelHealthState.InstalledStartupFailed(
+                            issueMessage.ifBlank {
+                                "NanoChat could not start this model on your device."
+                            }
+                        )
+                    }
+                }
+            }
+
+            ModelInstallState.BROKEN -> {
+                LocalModelHealthState.InstalledStartupFailed(
+                    message = issueMessage.ifBlank { "This model file appears corrupted." }
+                )
+            }
+        }
+    }
+
+    private fun indicatesLicenseApproval(message: String): Boolean {
+        if (message.isBlank()) return false
+        val lowercase = message.lowercase()
+        return "access approval" in lowercase ||
+                "does not have access" in lowercase ||
+                "license" in lowercase
+    }
+
     private fun com.fcm.nanochat.models.runtime.LocalRuntimeMetrics.toUi(): RuntimeDiagnosticsUi {
         return RuntimeDiagnosticsUi(
             modelId = modelId,
@@ -194,20 +349,17 @@ class ModelManagerViewModelFactory(
 }
 
 internal fun ModelCardUi.primaryActionLabel(): String {
-    if (compatibility is LocalModelCompatibilityState.TokenRequired) {
-        return "Add token"
-    }
-
-    return when (installState) {
-        ModelInstallState.NOT_INSTALLED -> "Download"
-        ModelInstallState.QUEUED -> "Queued"
-        ModelInstallState.DOWNLOADING -> "Downloading"
-        ModelInstallState.PAUSED -> "Resume"
-        ModelInstallState.FAILED -> "Retry"
-        ModelInstallState.VALIDATING -> "Validating"
-        ModelInstallState.INSTALLED -> if (isActive) "Selected" else "Use model"
-        ModelInstallState.BROKEN -> "Retry"
-        ModelInstallState.DELETING -> "Deleting"
-        ModelInstallState.MOVING -> "Moving"
+    return when (healthState) {
+        LocalModelHealthState.NotInstalled -> "Download"
+        is LocalModelHealthState.Downloading -> "Downloading"
+        is LocalModelHealthState.Paused -> "Resume"
+        is LocalModelHealthState.DownloadFailed -> "Retry"
+        LocalModelHealthState.InstalledNeedsValidation -> "Continue setup"
+        LocalModelHealthState.InstalledReady -> if (isActive) "Selected" else "Use model"
+        is LocalModelHealthState.InstalledStartupFailed -> "Continue setup"
+        LocalModelHealthState.RequiresToken -> "Add token"
+        LocalModelHealthState.RequiresLicenseApproval -> "Continue setup"
+        is LocalModelHealthState.NotCompatible -> "View details"
+        LocalModelHealthState.UnsupportedForChat -> "View details"
     }
 }

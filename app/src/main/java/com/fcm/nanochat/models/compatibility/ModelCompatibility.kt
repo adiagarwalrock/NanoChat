@@ -14,6 +14,7 @@ sealed interface LocalModelCompatibilityState {
     ) : LocalModelCompatibilityState
 
     data class UnsupportedDevice(val reason: String) : LocalModelCompatibilityState
+    data object UnsupportedForChat : LocalModelCompatibilityState
     data object TokenRequired : LocalModelCompatibilityState
     data class DownloadedButNotActivatable(val reason: String) : LocalModelCompatibilityState
     data object CorruptedModel : LocalModelCompatibilityState
