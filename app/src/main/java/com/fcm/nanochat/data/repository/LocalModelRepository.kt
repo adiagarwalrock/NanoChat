@@ -13,9 +13,11 @@ import com.fcm.nanochat.models.registry.ModelStorageLocation
 import com.fcm.nanochat.models.runtime.InMemoryLocalRuntimeTelemetry
 import com.fcm.nanochat.models.runtime.LocalRuntimeMetrics
 import com.fcm.nanochat.models.runtime.ModelRuntimeManager
+import com.fcm.nanochat.models.runtime.RuntimeLoadPhase
 import com.fcm.nanochat.models.runtime.RuntimeLoadState
 import com.fcm.nanochat.models.runtime.RuntimeReleaseReason
 import kotlinx.coroutines.flow.StateFlow
+import java.io.File
 
 class LocalModelRepository(
     private val allowlistRepository: AllowlistRepository,
@@ -35,7 +37,15 @@ class LocalModelRepository(
     }
 
     suspend fun setActiveModel(modelId: String?) {
-        modelRegistry.setActiveModel(modelId)
+        val normalized = modelId?.trim()?.lowercase().orEmpty().ifBlank { null }
+        val previous = modelRegistry.activeModelId().ifBlank { null }
+
+        if (previous == normalized) {
+            return
+        }
+
+        modelRegistry.setActiveModel(normalized)
+        runtimeManager.release()
     }
 
     fun downloadModel(modelId: String) {
@@ -70,6 +80,11 @@ class LocalModelRepository(
         val normalized = modelId.trim().lowercase()
         if (normalized.isBlank()) return "No local model selected."
 
+        val activeModelId = modelRegistry.activeModelId()
+        if (activeModelId != normalized) {
+            return "Select this model before loading it into memory."
+        }
+
         val record = records.value.firstOrNull { it.modelId == normalized }
             ?: return "Selected local model is unavailable."
 
@@ -80,6 +95,10 @@ class LocalModelRepository(
         val model = record.allowlistedModel
         val localPath = record.localPath?.trim().orEmpty()
         if (localPath.isBlank()) {
+            return "Selected local model file is missing. Re-download the model."
+        }
+        val modelFile = File(localPath)
+        if (!modelFile.exists() || modelFile.length() <= 0L) {
             return "Selected local model file is missing. Re-download the model."
         }
 
@@ -109,6 +128,13 @@ class LocalModelRepository(
         val activeModelId = modelRegistry.activeModelId()
         if (activeModelId != normalized) {
             return "Only the selected model can be ejected from memory."
+        }
+
+        val loadState = runtimeManager.loadState.value
+        val loadedModelId = loadState.modelId?.trim()?.lowercase().orEmpty()
+        val isLoaded = loadState.phase == RuntimeLoadPhase.LOADED && loadedModelId == normalized
+        if (!isLoaded) {
+            return "Selected local model is not loaded in memory."
         }
 
         runtimeManager.release(reason = RuntimeReleaseReason.EJECTED)

@@ -16,6 +16,7 @@ import com.fcm.nanochat.models.registry.ModelInstallState
 import com.fcm.nanochat.models.registry.ModelStorageLocation
 import com.fcm.nanochat.models.runtime.RuntimeLoadPhase
 import com.fcm.nanochat.models.runtime.RuntimeLoadState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -173,7 +174,7 @@ class ModelManagerViewModel(
     }
 
     fun useModel(modelId: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val model = localModelRepository.records.value.firstOrNull { it.modelId == modelId }
             if (model == null) {
                 notice.update { "This model is not ready yet. Finish setup and try again." }
@@ -191,12 +192,20 @@ class ModelManagerViewModel(
             }
 
             localModelRepository.setActiveModel(modelId)
-            localModelRepository.prepareModelInMemory(modelId)
+        }
+    }
+
+    fun loadModel(modelId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val error = localModelRepository.prepareModelInMemory(modelId)
+            if (!error.isNullOrBlank()) {
+                notice.update { error }
+            }
         }
     }
 
     fun ejectModel(modelId: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val error = localModelRepository.ejectModelFromMemory(modelId)
             if (!error.isNullOrBlank()) {
                 notice.update { error }
@@ -457,14 +466,15 @@ class ModelManagerViewModel(
             displayName = model.displayName,
             memoryState = model.memoryState,
             statusText = when (model.memoryState) {
-                LocalModelMemoryState.NotSelected -> "Not selected"
-                LocalModelMemoryState.SelectedNotLoaded -> "Selected, not loaded"
-                LocalModelMemoryState.LoadingIntoMemory -> "Loading into memory"
-                LocalModelMemoryState.LoadedInMemory -> "Loaded in memory"
-                LocalModelMemoryState.InUse -> "In use"
-                LocalModelMemoryState.EjectedFromMemory -> "Ejected from memory"
-                LocalModelMemoryState.NeedsReload -> "Needs reload"
-                LocalModelMemoryState.FailedToLoad -> "Failed to load"
+                LocalModelMemoryState.NotSelected -> "not selected"
+                LocalModelMemoryState.SelectedNotLoaded -> "selected, not loaded"
+                LocalModelMemoryState.LoadingIntoMemory -> "loading into memory"
+                LocalModelMemoryState.LoadedInMemory -> "loaded in memory"
+                LocalModelMemoryState.InUse -> "in use"
+                LocalModelMemoryState.EjectedFromMemory,
+                LocalModelMemoryState.NeedsReload -> "selected, not loaded"
+
+                LocalModelMemoryState.FailedToLoad -> "failed to load"
             },
             metricsText = metricsText
         )

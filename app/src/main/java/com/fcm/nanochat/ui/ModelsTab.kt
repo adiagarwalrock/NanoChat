@@ -1,10 +1,15 @@
 package com.fcm.nanochat.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -116,6 +122,7 @@ internal fun ModelsTab(
     onCancelDownload: (String) -> Unit,
     onRetryDownload: (String) -> Unit,
     onUseModel: (String) -> Unit,
+    onLoadModel: (String) -> Unit,
     onEjectModel: (String) -> Unit,
     onDeleteModel: (String) -> Unit,
     onMoveStorage: (String, ModelStorageLocation) -> Unit,
@@ -190,7 +197,7 @@ internal fun ModelsTab(
 
         when (state.phase) {
             com.fcm.nanochat.model.ModelLibraryPhase.Loading -> {
-                items(3) {
+                item {
                     LoadingModelCard()
                 }
             }
@@ -226,6 +233,7 @@ internal fun ModelsTab(
                             onCancelDownload = { onCancelDownload(model.modelId) },
                             onRetryDownload = { onRetryDownload(model.modelId) },
                             onUseModel = { onUseModel(model.modelId) },
+                            onLoadModel = { onLoadModel(model.modelId) },
                             onEjectModel = { onEjectModel(model.modelId) },
                             onDeleteModel = { onDeleteModel(model.modelId) },
                             onMoveStorage = {
@@ -251,7 +259,11 @@ internal fun ModelsTab(
                         )
                     }
                     item {
-                        AnimatedVisibility(visible = otherExpanded) {
+                        AnimatedVisibility(
+                            visible = otherExpanded,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 otherModels.forEach { model ->
                                     SimplifiedModelCard(
@@ -262,6 +274,7 @@ internal fun ModelsTab(
                                         onCancelDownload = { onCancelDownload(model.modelId) },
                                         onRetryDownload = { onRetryDownload(model.modelId) },
                                         onUseModel = { onUseModel(model.modelId) },
+                                        onLoadModel = { onLoadModel(model.modelId) },
                                         onEjectModel = { onEjectModel(model.modelId) },
                                         onDeleteModel = { onDeleteModel(model.modelId) },
                                         onMoveStorage = {
@@ -326,6 +339,7 @@ internal fun ModelsTab(
             onCancelDownload = { onCancelDownload(detailsModel.modelId) },
             onRetryDownload = { onRetryDownload(detailsModel.modelId) },
             onUseModel = { onUseModel(detailsModel.modelId) },
+            onLoadModel = { onLoadModel(detailsModel.modelId) },
             onEjectModel = { onEjectModel(detailsModel.modelId) },
             onDeleteModel = { onDeleteModel(detailsModel.modelId) },
             onMoveStorage = {
@@ -403,7 +417,7 @@ private fun ActiveModelSummaryStrip(
             )
 
             Text(
-                text = "${summary.displayName} - ${summary.statusText}",
+                text = "${summary.displayName} · ${summary.statusText}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -609,41 +623,41 @@ private fun PinnedToolsHeader(
 ) {
     var sortMenuExpanded by remember { mutableStateOf(false) }
 
-    Column(
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .padding(top = 6.dp, bottom = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(top = 6.dp, bottom = 8.dp)
     ) {
-        androidx.compose.material3.TextField(
-            value = query,
-            onValueChange = onQueryChange,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            leadingIcon = {
-                Icon(Icons.Default.Search, contentDescription = null)
-            },
-            placeholder = { Text(text = stringResource(id = R.string.search_models)) },
-            shape = RoundedCornerShape(28.dp),
-            colors = androidx.compose.material3.TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
-            )
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            androidx.compose.material3.TextField(
+                value = query,
+                onValueChange = onQueryChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = null)
+                },
+                placeholder = { Text(text = stringResource(id = R.string.search_models)) },
+                shape = RoundedCornerShape(20.dp),
+                colors = androidx.compose.material3.TextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                    unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                    disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
+                )
+            )
+
             Row(
                 modifier = Modifier
-                    .weight(1f)
+                    .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -656,23 +670,40 @@ private fun PinnedToolsHeader(
                 }
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
-
-            TextButton(onClick = { sortMenuExpanded = true }) {
-                Text(text = stringResource(id = selectedSort.labelRes))
-            }
-            DropdownMenu(
-                expanded = sortMenuExpanded,
-                onDismissRequest = { sortMenuExpanded = false }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                ModelSort.entries.forEach { sort ->
-                    DropdownMenuItem(
-                        text = { Text(text = stringResource(id = sort.labelRes)) },
-                        onClick = {
-                            sortMenuExpanded = false
-                            onSortChange(sort)
+                Text(
+                    text = stringResource(id = R.string.sort_models),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
+                    OutlinedButton(onClick = { sortMenuExpanded = true }) {
+                        Text(text = stringResource(id = selectedSort.labelRes))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowDown,
+                            contentDescription = null
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = sortMenuExpanded,
+                        onDismissRequest = { sortMenuExpanded = false }
+                    ) {
+                        ModelSort.entries.forEach { sort ->
+                            DropdownMenuItem(
+                                text = { Text(text = stringResource(id = sort.labelRes)) },
+                                onClick = {
+                                    sortMenuExpanded = false
+                                    onSortChange(sort)
+                                }
+                            )
                         }
-                    )
+                    }
                 }
             }
         }
@@ -710,6 +741,7 @@ private fun SimplifiedModelCard(
     onCancelDownload: () -> Unit,
     onRetryDownload: () -> Unit,
     onUseModel: () -> Unit,
+    onLoadModel: () -> Unit,
     onEjectModel: () -> Unit,
     onDeleteModel: () -> Unit,
     onMoveStorage: () -> Unit
@@ -739,11 +771,13 @@ private fun SimplifiedModelCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = model.displayName,
+                            modifier = Modifier.weight(1f, fill = false),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
@@ -767,33 +801,35 @@ private fun SimplifiedModelCard(
                 }
 
                 if (actionPlan.allowOverflow) {
-                    IconButton(onClick = { menuExpanded = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = null)
-                    }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(text = stringResource(id = R.string.move_storage)) },
-                            leadingIcon = {
-                                Icon(Icons.Default.SwapHoriz, contentDescription = null)
-                            },
-                            onClick = {
-                                menuExpanded = false
-                                onMoveStorage()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(text = stringResource(id = R.string.delete_model)) },
-                            leadingIcon = {
-                                Icon(Icons.Default.Delete, contentDescription = null)
-                            },
-                            onClick = {
-                                menuExpanded = false
-                                onDeleteModel()
-                            }
-                        )
+                    Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = null)
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(text = stringResource(id = R.string.move_storage)) },
+                                leadingIcon = {
+                                    Icon(Icons.Default.SwapHoriz, contentDescription = null)
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onMoveStorage()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(text = stringResource(id = R.string.delete_model)) },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Delete, contentDescription = null)
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onDeleteModel()
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -850,8 +886,8 @@ private fun SimplifiedModelCard(
                             ActionType.Resume,
                             ActionType.Retry -> onRetryDownload()
 
-                            ActionType.Use,
-                            ActionType.Load -> onUseModel()
+                            ActionType.Use -> onUseModel()
+                            ActionType.Load -> onLoadModel()
 
                             ActionType.Eject -> onEjectModel()
                             ActionType.AddToken -> onOpenHuggingFaceSettings()
@@ -909,6 +945,7 @@ private fun RedesignedDetailsSheet(
     onCancelDownload: () -> Unit,
     onRetryDownload: () -> Unit,
     onUseModel: () -> Unit,
+    onLoadModel: () -> Unit,
     onEjectModel: () -> Unit,
     onDeleteModel: () -> Unit,
     onMoveStorage: () -> Unit
@@ -972,8 +1009,8 @@ private fun RedesignedDetailsSheet(
                                 ActionType.Resume,
                                 ActionType.Retry -> onRetryDownload()
 
-                                ActionType.Use,
-                                ActionType.Load -> onUseModel()
+                                ActionType.Use -> onUseModel()
+                                ActionType.Load -> onLoadModel()
 
                                 ActionType.Eject -> onEjectModel()
                                 ActionType.AddToken -> onOpenHuggingFaceSettings()
@@ -1242,6 +1279,8 @@ private fun ModelStatusBadge(text: String, tone: ModelBadgeTone) {
             text = text,
             style = MaterialTheme.typography.labelSmall,
             color = fg,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
         )
     }
@@ -1500,17 +1539,9 @@ private fun ModelCardUi.actionPlan(): ActionPlan {
     if (healthState == LocalModelHealthState.InstalledReady && isActive) {
         return when (memoryState) {
             com.fcm.nanochat.model.LocalModelMemoryState.SelectedNotLoaded,
-            com.fcm.nanochat.model.LocalModelMemoryState.NeedsReload -> ActionPlan(
-                primaryLabel = "Load",
-                primaryAction = ActionType.Load,
-                primaryEnabled = true,
-                secondaryLabel = "Eject",
-                secondaryAction = ActionType.Eject,
-                secondaryEnabled = true,
-                allowOverflow = true
-            )
-
-            com.fcm.nanochat.model.LocalModelMemoryState.EjectedFromMemory -> ActionPlan(
+            com.fcm.nanochat.model.LocalModelMemoryState.NeedsReload,
+            com.fcm.nanochat.model.LocalModelMemoryState.EjectedFromMemory,
+            com.fcm.nanochat.model.LocalModelMemoryState.NotSelected -> ActionPlan(
                 primaryLabel = "Load",
                 primaryAction = ActionType.Load,
                 primaryEnabled = true,
@@ -1518,7 +1549,14 @@ private fun ModelCardUi.actionPlan(): ActionPlan {
             )
 
             com.fcm.nanochat.model.LocalModelMemoryState.LoadingIntoMemory -> ActionPlan(
-                primaryLabel = "Loading",
+                primaryLabel = "Loading...",
+                primaryAction = ActionType.None,
+                primaryEnabled = false,
+                allowOverflow = true
+            )
+
+            com.fcm.nanochat.model.LocalModelMemoryState.LoadedInMemory -> ActionPlan(
+                primaryLabel = "Loaded",
                 primaryAction = ActionType.None,
                 primaryEnabled = false,
                 secondaryLabel = "Eject",
@@ -1527,9 +1565,8 @@ private fun ModelCardUi.actionPlan(): ActionPlan {
                 allowOverflow = true
             )
 
-            com.fcm.nanochat.model.LocalModelMemoryState.LoadedInMemory,
             com.fcm.nanochat.model.LocalModelMemoryState.InUse -> ActionPlan(
-                primaryLabel = "Loaded",
+                primaryLabel = "In use",
                 primaryAction = ActionType.None,
                 primaryEnabled = false,
                 secondaryLabel = "Eject",
@@ -1542,22 +1579,18 @@ private fun ModelCardUi.actionPlan(): ActionPlan {
                 primaryLabel = "Retry load",
                 primaryAction = ActionType.Load,
                 primaryEnabled = true,
-                secondaryLabel = "Eject",
-                secondaryAction = ActionType.Eject,
-                secondaryEnabled = true,
-                allowOverflow = true
-            )
-
-            com.fcm.nanochat.model.LocalModelMemoryState.NotSelected -> ActionPlan(
-                primaryLabel = "Load",
-                primaryAction = ActionType.Load,
-                primaryEnabled = true,
-                secondaryLabel = "Eject",
-                secondaryAction = ActionType.Eject,
-                secondaryEnabled = true,
                 allowOverflow = true
             )
         }
+    }
+
+    if (healthState == LocalModelHealthState.InstalledReady && !isActive) {
+        return ActionPlan(
+            primaryLabel = "Use model",
+            primaryAction = ActionType.Use,
+            primaryEnabled = true,
+            allowOverflow = true
+        )
     }
 
     return when (healthState) {
@@ -1597,26 +1630,6 @@ private fun ModelCardUi.actionPlan(): ActionPlan {
             primaryEnabled = true
         )
 
-        LocalModelHealthState.InstalledReady -> {
-            if (isActive) {
-                ActionPlan(
-                    primaryLabel = "Load",
-                    primaryAction = ActionType.Load,
-                    primaryEnabled = true,
-                    secondaryLabel = "Eject",
-                    secondaryAction = ActionType.Eject,
-                    allowOverflow = true
-                )
-            } else {
-                ActionPlan(
-                    primaryLabel = "Use model",
-                    primaryAction = ActionType.Use,
-                    primaryEnabled = true,
-                    allowOverflow = true
-                )
-            }
-        }
-
         is LocalModelHealthState.InstalledStartupFailed -> ActionPlan(
             primaryLabel = "Continue setup",
             primaryAction = ActionType.OpenDetails,
@@ -1647,6 +1660,13 @@ private fun ModelCardUi.actionPlan(): ActionPlan {
             primaryLabel = "View details",
             primaryAction = ActionType.OpenDetails,
             primaryEnabled = true
+        )
+
+        LocalModelHealthState.InstalledReady -> ActionPlan(
+            primaryLabel = "Use model",
+            primaryAction = ActionType.Use,
+            primaryEnabled = true,
+            allowOverflow = true
         )
     }
 }
