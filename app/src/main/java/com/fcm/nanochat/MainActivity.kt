@@ -13,6 +13,8 @@ import com.fcm.nanochat.ui.NanoChatApp
 import com.fcm.nanochat.ui.theme.NanoChatTheme
 import com.fcm.nanochat.viewmodel.ChatViewModel
 import com.fcm.nanochat.viewmodel.ChatViewModelFactory
+import com.fcm.nanochat.viewmodel.ModelManagerViewModel
+import com.fcm.nanochat.viewmodel.ModelManagerViewModelFactory
 import com.fcm.nanochat.viewmodel.SettingsViewModel
 import com.fcm.nanochat.viewmodel.SettingsViewModelFactory
 
@@ -35,14 +37,20 @@ class MainActivity : ComponentActivity() {
                         container.httpClient
                     )
                 )
+                val modelManagerViewModel: ModelManagerViewModel = viewModel(
+                    factory = ModelManagerViewModelFactory(container.localModelRepository)
+                )
 
                 val chatState by chatViewModel.uiState.collectAsStateWithLifecycle()
                 val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
+                val modelState by modelManagerViewModel.uiState.collectAsStateWithLifecycle()
 
                 NanoChatApp(
                     chatState = chatState,
+                    modelState = modelState,
                     settingsState = settingsState,
                     onSendMessage = chatViewModel::sendMessage,
+                    onStopGeneration = chatViewModel::stopGeneration,
                     onMessageDraftChange = chatViewModel::updateDraft,
                     onSelectSession = chatViewModel::selectSession,
                     onCreateSession = chatViewModel::createSession,
@@ -52,6 +60,16 @@ class MainActivity : ComponentActivity() {
                     onDeleteSession = chatViewModel::deleteSession,
                     onPinSession = chatViewModel::setSessionPinned,
                     onDeleteMessage = chatViewModel::deleteMessage,
+                    onOpenModelGallery = {},
+                    onRefreshAllowlist = modelManagerViewModel::refreshAllowlist,
+                    onDownloadModel = modelManagerViewModel::downloadModel,
+                    onCancelModelDownload = modelManagerViewModel::cancelDownload,
+                    onRetryModelDownload = modelManagerViewModel::retryDownload,
+                    onUseModel = modelManagerViewModel::useModel,
+                    onDeleteModel = modelManagerViewModel::deleteModel,
+                    onMoveModelStorage = modelManagerViewModel::moveStorage,
+                    onImportLocalModel = modelManagerViewModel::importLocalModel,
+                    onDismissModelNotice = modelManagerViewModel::clearNotice,
                     onBaseUrlChange = settingsViewModel::updateBaseUrl,
                     onModelNameChange = settingsViewModel::updateModelName,
                     onApiKeyChange = settingsViewModel::updateApiKey,

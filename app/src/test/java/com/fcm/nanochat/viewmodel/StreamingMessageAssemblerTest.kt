@@ -17,6 +17,17 @@ class StreamingMessageAssemblerTest {
     }
 
     @Test
+    fun `downloaded mode appends deltas`() {
+        val assembler = StreamingMessageAssembler()
+
+        assembler.append(InferenceMode.DOWNLOADED, "Nan")
+        val result = assembler.append(InferenceMode.DOWNLOADED, "oChat")
+
+        assertEquals("NanoChat", result)
+        assertEquals("NanoChat", assembler.current())
+    }
+
+    @Test
     fun `aicore mode replaces with buffered final chunk`() {
         val assembler = StreamingMessageAssembler()
 

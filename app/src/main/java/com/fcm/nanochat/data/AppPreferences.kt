@@ -20,6 +20,7 @@ private val Context.dataStore by preferencesDataStore(name = "nanochat_preferenc
 
 data class SettingsSnapshot(
     val inferenceMode: InferenceMode = InferenceMode.REMOTE,
+    val activeLocalModelId: String = "",
     val baseUrl: String = "",
     val modelName: String = "",
     val apiKey: String = "",
@@ -29,6 +30,12 @@ data class SettingsSnapshot(
     val contextLength: Int = 4096,
     val geminiNanoModelSizeBytes: Long = 0,
     val huggingFaceAccountJson: String = ""
+)
+
+data class AllowlistCacheSnapshot(
+    val version: String = "",
+    val json: String = "",
+    val refreshedAtEpochMs: Long = 0L
 )
 
 class AppPreferences(context: Context) {
@@ -41,6 +48,7 @@ class AppPreferences(context: Context) {
         appContext.dataStore.data.map { preferences ->
             SettingsSnapshot(
                 inferenceMode = parseInferenceMode(preferences[Keys.inferenceMode]),
+                activeLocalModelId = preferences[Keys.activeLocalModelId].orEmpty(),
                 baseUrl = preferences[Keys.baseUrl].orEmpty(),
                 modelName = preferences[Keys.modelName].orEmpty(),
                 apiKey = readSecret(SecretKeys.apiKey),
@@ -50,6 +58,15 @@ class AppPreferences(context: Context) {
                 contextLength = preferences[Keys.contextLength] ?: DEFAULT_CONTEXT_LENGTH,
                 geminiNanoModelSizeBytes = preferences[Keys.geminiNanoModelSizeBytes] ?: 0,
                 huggingFaceAccountJson = preferences[Keys.huggingFaceAccountJson] ?: ""
+            )
+        }
+
+    val allowlistCache: Flow<AllowlistCacheSnapshot> =
+        appContext.dataStore.data.map { preferences ->
+            AllowlistCacheSnapshot(
+                version = preferences[Keys.allowlistVersion].orEmpty(),
+                json = preferences[Keys.allowlistJson].orEmpty(),
+                refreshedAtEpochMs = preferences[Keys.allowlistLastRefreshEpochMs] ?: 0L
             )
         }
 
@@ -67,6 +84,13 @@ class AppPreferences(context: Context) {
 
     suspend fun updateBaseUrl(value: String) {
         appContext.dataStore.edit { it[Keys.baseUrl] = normalizeBaseUrl(value) }
+    }
+
+    suspend fun updateActiveLocalModelId(value: String?) {
+        appContext.dataStore.edit { preferences ->
+            val normalized = value?.trim().orEmpty()
+            preferences[Keys.activeLocalModelId] = normalized
+        }
     }
 
     suspend fun updateModelName(value: String) {
@@ -130,6 +154,18 @@ class AppPreferences(context: Context) {
         appContext.dataStore.edit { it[Keys.huggingFaceAccountJson] = json }
     }
 
+    suspend fun updateAllowlistCache(
+        version: String,
+        json: String,
+        refreshedAtEpochMs: Long = System.currentTimeMillis()
+    ) {
+        appContext.dataStore.edit { preferences ->
+            preferences[Keys.allowlistVersion] = version.trim()
+            preferences[Keys.allowlistJson] = json
+            preferences[Keys.allowlistLastRefreshEpochMs] = refreshedAtEpochMs
+        }
+    }
+
     suspend fun updateGeminiNanoModelSize(bytes: Long) {
         if (bytes <= 0) return
         appContext.dataStore.edit { it[Keys.geminiNanoModelSizeBytes] = bytes }
@@ -178,6 +214,8 @@ class AppPreferences(context: Context) {
 
     private object Keys {
         val inferenceMode: Preferences.Key<String> = stringPreferencesKey("inference_mode")
+        val activeLocalModelId: Preferences.Key<String> =
+            stringPreferencesKey("active_local_model_id")
         val baseUrl: Preferences.Key<String> = stringPreferencesKey("base_url")
         val modelName: Preferences.Key<String> = stringPreferencesKey("model_name")
         val pinnedSessionIds: Preferences.Key<Set<String>> = stringSetPreferencesKey("pinned_session_ids")
@@ -188,6 +226,12 @@ class AppPreferences(context: Context) {
             longPreferencesKey("gemini_nano_model_size_bytes")
         val huggingFaceAccountJson: Preferences.Key<String> =
             stringPreferencesKey("hugging_face_account_json")
+        val allowlistVersion: Preferences.Key<String> =
+            stringPreferencesKey("allowlist_version")
+        val allowlistJson: Preferences.Key<String> =
+            stringPreferencesKey("allowlist_json")
+        val allowlistLastRefreshEpochMs: Preferences.Key<Long> =
+            longPreferencesKey("allowlist_last_refresh_epoch_ms")
     }
 
     private object SecretKeys {

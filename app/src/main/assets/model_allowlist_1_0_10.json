@@ -1,0 +1,171 @@
+{
+  "version": "1_0_10",
+  "models": [
+    {
+      "name": "Qwen2.5-1.5B-Instruct",
+      "modelId": "litert-community/Qwen2.5-1.5B-Instruct",
+      "modelFile": "Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm",
+      "description": "Balanced on-device chat model with low memory requirements.",
+      "sizeInBytes": 1597931520,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "19edb84c69a0212f29a6ef17ba0d6f278b6a1614",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat"
+      ],
+      "llmSupportImage": false,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "summarization"
+      ],
+      "memoryTier": "mid"
+    },
+    {
+      "name": "Qwen2.5-3B-Instruct",
+      "modelId": "litert-community/Qwen2.5-3B-Instruct",
+      "modelFile": "Qwen2.5-3B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm",
+      "description": "Higher quality Qwen model for deeper reasoning at modest speed.",
+      "sizeInBytes": 2863001600,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 32,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat"
+      ],
+      "llmSupportImage": false,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "reasoning"
+      ],
+      "memoryTier": "high"
+    },
+    {
+      "name": "DeepSeek-R1-Distill-Qwen-1.5B",
+      "modelId": "litert-community/DeepSeek-R1-Distill-Qwen-1.5B",
+      "modelFile": "DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm",
+      "description": "Reasoning-focused local model optimized for step-by-step responses.",
+      "sizeInBytes": 1833451520,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "e34bb88632342d1f9640bad579a45134eb1cf988",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat"
+      ],
+      "llmSupportImage": false,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "analysis"
+      ],
+      "memoryTier": "mid"
+    },
+    {
+      "name": "Gemma-3n-E2B-it",
+      "modelId": "google/gemma-3n-E2B-it-litert-lm",
+      "modelFile": "gemma-3n-E2B-it-int4.litertlm",
+      "description": "Multimodal Gemma model supporting chat, image, and audio prompts.",
+      "sizeInBytes": 3655827456,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "ba9ca88da013b537b6ed38108be609b8db1c3a16",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 4096,
+        "accelerators": "cpu,gpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_ask_image",
+        "llm_ask_audio"
+      ],
+      "bestForTaskTypes": [
+        "llm_ask_image",
+        "llm_ask_audio"
+      ],
+      "llmSupportImage": true,
+      "llmSupportAudio": true,
+      "requiresHfToken": true,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "vision",
+        "audio"
+      ],
+      "memoryTier": "high"
+    },
+    {
+      "name": "Gemma-3n-E4B-it",
+      "modelId": "google/gemma-3n-E4B-it-litert-lm",
+      "modelFile": "gemma-3n-E4B-it-int4.litertlm",
+      "description": "Higher-capacity Gemma 3n variant for strongest local response quality.",
+      "sizeInBytes": 4919541760,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "297ed75955702dec3503e00c2c2ecbbf475300bc",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 4096,
+        "accelerators": "cpu,gpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_ask_image",
+        "llm_ask_audio"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat"
+      ],
+      "llmSupportImage": true,
+      "llmSupportAudio": true,
+      "requiresHfToken": true,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "vision",
+        "audio"
+      ],
+      "memoryTier": "high",
+      "isExperimental": true
+    }
+  ]
+}

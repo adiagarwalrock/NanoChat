@@ -7,7 +7,8 @@ class StreamingMessageAssembler {
 
     fun append(mode: InferenceMode, chunk: String): String {
         return when (mode) {
-            InferenceMode.REMOTE -> {
+            InferenceMode.REMOTE,
+            InferenceMode.DOWNLOADED -> {
                 builder.append(chunk)
                 builder.toString()
             }

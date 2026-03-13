@@ -1,6 +1,10 @@
 package com.fcm.nanochat.model
 
 import com.fcm.nanochat.inference.InferenceMode
+import com.fcm.nanochat.models.allowlist.AllowlistSourceType
+import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
+import com.fcm.nanochat.models.registry.ModelInstallState
+import com.fcm.nanochat.models.registry.ModelStorageLocation
 
 enum class ChatRole {
     USER,
@@ -33,6 +37,9 @@ data class ChatScreenState(
     val messages: List<ChatMessage> = emptyList(),
     val draft: String = "",
     val inferenceMode: InferenceMode = InferenceMode.REMOTE,
+    val activeLocalModelName: String? = null,
+    val isLocalModelReady: Boolean = false,
+    val localModelStatusMessage: String? = null,
     val isSending: Boolean = false,
     val notice: String? = null
 )
@@ -82,4 +89,55 @@ data class HuggingFaceAccountUi(
     val tokenName: String? = null,
     val tokenRole: String? = null,
     val message: String? = null
+)
+
+data class ModelGalleryScreenState(
+    val allowlistVersion: String = "",
+    val allowlistSource: AllowlistSourceType = AllowlistSourceType.BUNDLED,
+    val allowlistRefreshedAtEpochMs: Long = 0L,
+    val activeModelId: String? = null,
+    val models: List<ModelCardUi> = emptyList(),
+    val runtimeMetrics: RuntimeDiagnosticsUi? = null,
+    val notice: String? = null,
+    val isRefreshing: Boolean = false
+)
+
+data class ModelCardUi(
+    val modelId: String,
+    val displayName: String,
+    val description: String,
+    val modelFile: String,
+    val sourceRepo: String,
+    val sizeInBytes: Long,
+    val minDeviceMemoryInGb: Int,
+    val taskTypes: List<String>,
+    val bestForTaskTypes: List<String>,
+    val llmSupportImage: Boolean,
+    val llmSupportAudio: Boolean,
+    val defaultTopK: Int = 40,
+    val defaultTopP: Double = 0.9,
+    val defaultTemperature: Double = 0.7,
+    val defaultMaxTokens: Int = 1024,
+    val acceleratorHints: List<String> = emptyList(),
+    val requiresHfToken: Boolean,
+    val recommendedForChat: Boolean,
+    val isExperimental: Boolean,
+    val installState: ModelInstallState,
+    val compatibility: LocalModelCompatibilityState,
+    val isActive: Boolean,
+    val isLegacy: Boolean,
+    val storageLocation: ModelStorageLocation,
+    val downloadedBytes: Long,
+    val sizeOnDiskBytes: Long,
+    val localPath: String?,
+    val errorMessage: String?
+)
+
+data class RuntimeDiagnosticsUi(
+    val modelId: String,
+    val initDurationMs: Long,
+    val timeToFirstTokenMs: Long,
+    val generationDurationMs: Long,
+    val tokensPerSecond: Double,
+    val backend: String
 )

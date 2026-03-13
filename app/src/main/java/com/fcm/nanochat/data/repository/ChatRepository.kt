@@ -17,6 +17,7 @@ import com.fcm.nanochat.model.ChatMessage
 import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatSession
 import com.fcm.nanochat.model.UsageStats
+import com.fcm.nanochat.models.registry.ActiveModelStatus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -24,12 +25,16 @@ import kotlinx.coroutines.flow.map
 class ChatRepository(
     private val database: AppDatabase,
     private val preferences: AppPreferences,
+    private val localModelRepository: LocalModelRepository,
     private val localInferenceClient: LocalInferenceClient,
+    private val downloadedInferenceClient: InferenceClient,
     private val remoteInferenceClient: InferenceClient
 ) {
     fun observeSettings(): Flow<SettingsSnapshot> = preferences.settings
 
     fun observePinnedSessionIds(): Flow<Set<Long>> = preferences.pinnedSessionIds
+
+    fun observeActiveLocalModelStatus(): Flow<ActiveModelStatus> = localModelRepository.activeModelStatus
 
     fun observeSessions(): Flow<List<ChatSession>> =
         database.sessionDao().observeSessions().map { sessions ->
@@ -124,7 +129,15 @@ class ChatRepository(
     }
 
     suspend fun setInferenceMode(mode: InferenceMode) {
+        val previous = preferences.settings.first().inferenceMode
+        if (previous == InferenceMode.DOWNLOADED && mode != InferenceMode.DOWNLOADED) {
+            downloadedInferenceClient.release()
+        }
         preferences.updateInferenceMode(mode)
+    }
+
+    fun releaseDownloadedRuntime() {
+        downloadedInferenceClient.release()
     }
 
     suspend fun updateSettings(
@@ -157,7 +170,7 @@ class ChatRepository(
     }
 
     suspend fun backendAvailability(mode: InferenceMode, settings: SettingsSnapshot): BackendAvailability =
-        clientFor(mode).availability(settings)
+        buildClient(mode, settings.activeLocalModelId).availability(settings)
 
     suspend fun recentTurnsFor(mode: InferenceMode, sessionId: Long): List<ChatTurn> {
         val limit = ChatDefaults.historyWindowFor(mode)
@@ -174,7 +187,7 @@ class ChatRepository(
         prompt: String,
         settings: SettingsSnapshot
     ): Flow<String> {
-        return clientFor(mode).streamChat(
+        return buildClient(mode, settings.activeLocalModelId).streamChat(
             InferenceRequest(
                 history = history,
                 prompt = prompt,
@@ -183,12 +196,20 @@ class ChatRepository(
         )
     }
 
-    fun clientFor(mode: InferenceMode): InferenceClient =
-        InferenceClientSelector.select(mode, localInferenceClient, remoteInferenceClient)
+    @Suppress("UNUSED_PARAMETER")
+    fun buildClient(mode: InferenceMode, activeDownloadedModelId: String?): InferenceClient {
+        return InferenceClientSelector.select(
+            mode = mode,
+            local = localInferenceClient,
+            downloaded = downloadedInferenceClient,
+            remote = remoteInferenceClient
+        )
+    }
 
     suspend fun clearAllData() {
         preferences.clearPinnedSessions()
-        database.clearAllTables()
+        database.messageDao().deleteAll()
+        database.sessionDao().deleteAll()
     }
 
     suspend fun usageStats(): UsageStats {

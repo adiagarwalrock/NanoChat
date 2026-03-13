@@ -35,4 +35,19 @@ class PromptFormatterTest {
         assertTrue(prompt.contains("Assistant: Sure"))
         assertTrue(prompt.endsWith("Assistant:"))
     }
+
+    @Test
+    fun `flattenForDownloadedModel emits chatml structure`() {
+        val prompt = PromptFormatter.flattenForDownloadedModel(
+            history = listOf(
+                ChatTurn(ChatRole.USER, "Hello"),
+                ChatTurn(ChatRole.ASSISTANT, "Hi there")
+            ),
+            prompt = "How are you?"
+        )
+
+        assertTrue(prompt.contains("<|user|>\nHello"))
+        assertTrue(prompt.contains("<|assistant|>\nHi there"))
+        assertTrue(prompt.endsWith("<|assistant|>"))
+    }
 }

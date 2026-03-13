@@ -12,6 +12,7 @@ import com.fcm.nanochat.model.ChatMessage
 import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.ChatSession
+import com.fcm.nanochat.models.registry.ActiveModelStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -44,6 +45,18 @@ class ChatViewModel(
 
     private val pinnedSessionIds = repository.observePinnedSessionIds()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    private val activeLocalModelStatus = repository.observeActiveLocalModelStatus()
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            ActiveModelStatus(
+                modelId = null,
+                displayName = null,
+                ready = false,
+                message = "Choose a local model from the Models tab."
+            )
+        )
 
     private val activeSessionId = combine(selectedSessionId, sessions) { selected, sessionList ->
         if (selected != null && sessionList.any { it.id == selected }) {
@@ -91,18 +104,23 @@ class ChatViewModel(
         sessionState,
         draft,
         settings,
-        isSending,
-        notice
-    ) { sessionUi, draftValue, settingsValue, isSendingValue, noticeValue ->
+        activeLocalModelStatus,
+        isSending
+    ) { sessionUi, draftValue, settingsValue, activeLocalModel, isSendingValue ->
         ChatScreenState(
             sessions = sessionUi.sessions,
             selectedSessionId = sessionUi.selectedSessionId,
             messages = sessionUi.messages,
             draft = draftValue,
             inferenceMode = settingsValue.inferenceMode,
+            activeLocalModelName = activeLocalModel.displayName,
+            isLocalModelReady = activeLocalModel.ready,
+            localModelStatusMessage = activeLocalModel.message,
             isSending = isSendingValue,
-            notice = noticeValue
+            notice = null
         )
+    }.combine(notice) { baseState, noticeValue ->
+        baseState.copy(notice = noticeValue)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatScreenState())
 
     init {
@@ -158,6 +176,10 @@ class ChatViewModel(
     fun setInferenceMode(mode: InferenceMode) {
         viewModelScope.launch {
             repository.setInferenceMode(mode)
+            if (mode == InferenceMode.DOWNLOADED && !activeLocalModelStatus.value.ready) {
+                notice.value = activeLocalModelStatus.value.message
+                return@launch
+            }
             when (val availability = repository.backendAvailability(mode, settings.value)) {
                 is BackendAvailability.Unavailable -> notice.value = availability.message
                 BackendAvailability.Available -> notice.value = null
@@ -179,6 +201,14 @@ class ChatViewModel(
         val prompt = draft.value.trim()
         val sessionId = activeSessionId.value ?: return
         if (prompt.isBlank() || isSending.value) return
+
+        if (
+            settings.value.inferenceMode == InferenceMode.DOWNLOADED &&
+            !activeLocalModelStatus.value.ready
+        ) {
+            notice.value = activeLocalModelStatus.value.message
+            return
+        }
 
         val requestId = ++activeRequestId
         sendJob?.cancel()
@@ -212,7 +242,7 @@ class ChatViewModel(
                 repository.streamResponse(mode, history, prompt, snapshot).collect { delta ->
                     val content = assembler.append(mode, delta)
                     if (
-                        mode == InferenceMode.REMOTE &&
+                        mode != InferenceMode.AICORE &&
                         shouldPersistStreamSnapshot(content, lastPersistTimeMs, lastPersistedLength)
                     ) {
                         repository.updateAssistantMessage(createdAssistantMessageId, content)
@@ -240,6 +270,15 @@ class ChatViewModel(
                 }
             }
         }
+    }
+
+    fun stopGeneration() {
+        if (!isSending.value) return
+        sendJob?.cancel()
+        if (settings.value.inferenceMode == InferenceMode.DOWNLOADED) {
+            repository.releaseDownloadedRuntime()
+        }
+        isSending.value = false
     }
 
     private fun shouldPersistStreamSnapshot(

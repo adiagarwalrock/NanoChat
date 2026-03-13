@@ -7,11 +7,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Button
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
@@ -33,9 +38,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import com.fcm.nanochat.R
 import com.fcm.nanochat.inference.InferenceMode
 import com.fcm.nanochat.model.ChatScreenState
+import com.fcm.nanochat.model.ModelGalleryScreenState
 import com.fcm.nanochat.model.SettingsScreenState
 import com.fcm.nanochat.ui.SettingsSection.AiConfiguration
 import com.fcm.nanochat.ui.SettingsSection.Connection
@@ -45,14 +53,16 @@ import com.fcm.nanochat.ui.SettingsSection.HuggingFaceConnection
 import com.fcm.nanochat.ui.SettingsSection.ModelControls
 import kotlinx.coroutines.launch
 
-private enum class AppDestination { Chat, Settings }
+private enum class AppDestination { Chat, Models, Settings }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NanoChatApp(
     chatState: ChatScreenState = ChatScreenState(),
+    modelState: ModelGalleryScreenState = ModelGalleryScreenState(),
     settingsState: SettingsScreenState = SettingsScreenState(),
     onSendMessage: () -> Unit = {},
+    onStopGeneration: () -> Unit = {},
     onMessageDraftChange: (String) -> Unit = {},
     onSelectSession: (Long) -> Unit = {},
     onCreateSession: () -> Unit = {},
@@ -62,6 +72,16 @@ fun NanoChatApp(
     onDeleteSession: (Long) -> Unit = {},
     onPinSession: (Long, Boolean) -> Unit = { _, _ -> },
     onDeleteMessage: (Long) -> Unit = {},
+    onOpenModelGallery: () -> Unit = {},
+    onRefreshAllowlist: () -> Unit = {},
+    onDownloadModel: (String) -> Unit = {},
+    onCancelModelDownload: (String) -> Unit = {},
+    onRetryModelDownload: (String) -> Unit = {},
+    onUseModel: (String) -> Unit = {},
+    onDeleteModel: (String) -> Unit = {},
+    onMoveModelStorage: (String, com.fcm.nanochat.models.registry.ModelStorageLocation) -> Unit = { _, _ -> },
+    onImportLocalModel: () -> Unit = {},
+    onDismissModelNotice: () -> Unit = {},
     onBaseUrlChange: (String) -> Unit = {},
     onModelNameChange: (String) -> Unit = {},
     onApiKeyChange: (String) -> Unit = {},
@@ -125,7 +145,47 @@ fun NanoChatApp(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
-            snackbarHost = { SnackbarHost(snackbarHostState) }
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            bottomBar = {
+                NavigationBar {
+                    NavigationBarItem(
+                        selected = destination == AppDestination.Chat,
+                        onClick = { destination = AppDestination.Chat },
+                        icon = {
+                            Icon(
+                                Icons.Default.Chat,
+                                contentDescription = stringResource(id = R.string.tab_chat)
+                            )
+                        },
+                        label = { Text(stringResource(id = R.string.tab_chat)) }
+                    )
+                    NavigationBarItem(
+                        selected = destination == AppDestination.Models,
+                        onClick = {
+                            destination = AppDestination.Models
+                            onOpenModelGallery()
+                        },
+                        icon = {
+                            Icon(
+                                Icons.Default.Storage,
+                                contentDescription = stringResource(id = R.string.tab_models)
+                            )
+                        },
+                        label = { Text(stringResource(id = R.string.tab_models)) }
+                    )
+                    NavigationBarItem(
+                        selected = destination == AppDestination.Settings,
+                        onClick = { destination = AppDestination.Settings },
+                        icon = {
+                            Icon(
+                                Icons.Default.Settings,
+                                contentDescription = stringResource(id = R.string.tab_settings)
+                            )
+                        },
+                        label = { Text(stringResource(id = R.string.tab_settings)) }
+                    )
+                }
+            }
         ) { innerPadding ->
             when (destination) {
                 AppDestination.Chat -> {
@@ -135,15 +195,36 @@ fun NanoChatApp(
                         modifier = Modifier.padding(innerPadding),
                         onOpenSessions = { scope.launch { drawerState.open() } },
                         onSendMessage = onSendMessage,
+                        onStopGeneration = onStopGeneration,
                         onMessageDraftChange = onMessageDraftChange,
                         onCreateSession = onCreateSession,
                         onRetryLast = onRetryLast,
                         onInferenceModeChange = onInferenceModeChange,
+                        onOpenModelGallery = {
+                            destination = AppDestination.Models
+                            onOpenModelGallery()
+                        },
                         onTemperatureChange = onTemperatureChange,
                         onTopPChange = onTopPChange,
                         onContextLengthChange = onContextLengthChange,
                         onMessageInfo = {},
                         onDeleteMessage = { message -> onDeleteMessage(message.id) }
+                    )
+                }
+
+                AppDestination.Models -> {
+                    ModelsTab(
+                        state = modelState,
+                        modifier = Modifier.padding(innerPadding),
+                        onRefresh = onRefreshAllowlist,
+                        onDownload = onDownloadModel,
+                        onCancelDownload = onCancelModelDownload,
+                        onRetryDownload = onRetryModelDownload,
+                        onUseModel = onUseModel,
+                        onDeleteModel = onDeleteModel,
+                        onMoveStorage = onMoveModelStorage,
+                        onImportLocalModel = onImportLocalModel,
+                        onClearNotice = onDismissModelNotice
                     )
                 }
 

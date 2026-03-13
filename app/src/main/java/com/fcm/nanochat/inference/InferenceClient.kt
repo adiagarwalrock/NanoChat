@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 
 enum class InferenceMode {
     AICORE,
+    DOWNLOADED,
     REMOTE
 }
 
@@ -36,4 +37,6 @@ sealed class InferenceException(message: String, cause: Throwable? = null) :
 interface InferenceClient {
     suspend fun availability(settings: SettingsSnapshot): BackendAvailability
     fun streamChat(request: InferenceRequest): Flow<String>
+
+    fun release() = Unit
 }

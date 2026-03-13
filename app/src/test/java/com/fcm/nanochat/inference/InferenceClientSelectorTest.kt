@@ -10,19 +10,35 @@ class InferenceClientSelectorTest {
     @Test
     fun `select returns local client for AICORE`() {
         val local = FakeClient("local")
+        val downloaded = FakeClient("downloaded")
         val remote = FakeClient("remote")
 
-        val selected = InferenceClientSelector.select(InferenceMode.AICORE, local, remote)
+        val selected =
+            InferenceClientSelector.select(InferenceMode.AICORE, local, downloaded, remote)
 
         assertSame(local, selected)
     }
 
     @Test
-    fun `select returns remote client for REMOTE`() {
+    fun `select returns downloaded client for DOWNLOADED`() {
         val local = FakeClient("local")
+        val downloaded = FakeClient("downloaded")
         val remote = FakeClient("remote")
 
-        val selected = InferenceClientSelector.select(InferenceMode.REMOTE, local, remote)
+        val selected =
+            InferenceClientSelector.select(InferenceMode.DOWNLOADED, local, downloaded, remote)
+
+        assertSame(downloaded, selected)
+    }
+
+    @Test
+    fun `select returns remote client for REMOTE`() {
+        val local = FakeClient("local")
+        val downloaded = FakeClient("downloaded")
+        val remote = FakeClient("remote")
+
+        val selected =
+            InferenceClientSelector.select(InferenceMode.REMOTE, local, downloaded, remote)
 
         assertSame(remote, selected)
     }

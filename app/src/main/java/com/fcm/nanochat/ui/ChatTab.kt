@@ -51,8 +51,10 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -123,10 +125,12 @@ internal fun ChatTab(
     modifier: Modifier = Modifier,
     onOpenSessions: () -> Unit,
     onSendMessage: () -> Unit,
+    onStopGeneration: () -> Unit,
     onMessageDraftChange: (String) -> Unit,
     onCreateSession: () -> Unit,
     onRetryLast: () -> Unit,
     onInferenceModeChange: (InferenceMode) -> Unit,
+    onOpenModelGallery: () -> Unit,
     onTemperatureChange: (Double) -> Unit,
     onTopPChange: (Double) -> Unit,
     onContextLengthChange: (Int) -> Unit,
@@ -153,9 +157,11 @@ internal fun ChatTab(
                 modifier = contentModifier,
                 onOpenSessions = onOpenSessions,
                 onSendMessage = onSendMessage,
+                onStopGeneration = onStopGeneration,
                 onMessageDraftChange = onMessageDraftChange,
                 onRetryLast = onRetryLast,
                 onInferenceModeChange = onInferenceModeChange,
+                onOpenModelGallery = onOpenModelGallery,
                 onTemperatureChange = onTemperatureChange,
                 onTopPChange = onTopPChange,
                 onContextLengthChange = onContextLengthChange,
@@ -179,9 +185,11 @@ internal fun ChatTab(
                     modifier = contentModifier,
                     onOpenSessions = onOpenSessions,
                     onSendMessage = onSendMessage,
+                    onStopGeneration = onStopGeneration,
                     onMessageDraftChange = onMessageDraftChange,
                     onRetryLast = onRetryLast,
                     onInferenceModeChange = onInferenceModeChange,
+                    onOpenModelGallery = onOpenModelGallery,
                     onTemperatureChange = onTemperatureChange,
                     onTopPChange = onTopPChange,
                     onContextLengthChange = onContextLengthChange,
@@ -202,9 +210,11 @@ private fun ChatTabContent(
     modifier: Modifier = Modifier,
     onOpenSessions: () -> Unit,
     onSendMessage: () -> Unit,
+    onStopGeneration: () -> Unit,
     onMessageDraftChange: (String) -> Unit,
     onRetryLast: () -> Unit,
     onInferenceModeChange: (InferenceMode) -> Unit,
+    onOpenModelGallery: () -> Unit,
     onTemperatureChange: (Double) -> Unit,
     onTopPChange: (Double) -> Unit,
     onContextLengthChange: (Int) -> Unit,
@@ -251,14 +261,37 @@ private fun ChatTabContent(
             ChatTopBar(
                 selectedMode = state.inferenceMode,
                 modelName = settingsState.modelName,
+                activeLocalModelName = state.activeLocalModelName,
                 onInferenceModeChange = onInferenceModeChange,
                 onOpenSessions = onOpenSessions
             )
 
+            if (state.inferenceMode == InferenceMode.DOWNLOADED) {
+                LocalModelStatusSurface(
+                    modelName = state.activeLocalModelName,
+                    isReady = state.isLocalModelReady,
+                    message = state.localModelStatusMessage,
+                    onOpenModelGallery = onOpenModelGallery,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                )
+            }
+
             if (state.messages.isEmpty()) {
                 Box(modifier = Modifier.weight(1f)) {
                     if (!imeVisible) {
-                        EmptyConversation(modifier = Modifier.fillMaxSize())
+                        if (
+                            state.inferenceMode == InferenceMode.DOWNLOADED &&
+                            !state.isLocalModelReady
+                        ) {
+                            LocalModelEmptyState(
+                                modifier = Modifier.fillMaxSize(),
+                                onOpenModelGallery = onOpenModelGallery
+                            )
+                        } else {
+                            EmptyConversation(modifier = Modifier.fillMaxSize())
+                        }
                     }
                 }
             } else {
@@ -288,6 +321,7 @@ private fun ChatTabContent(
                 onOpenControls = { controlsVisible = true },
                 onDraftChange = onMessageDraftChange,
                 onSend = onSendMessage,
+                onStop = onStopGeneration,
                 onRetry = onRetryLast,
                 modifier = Modifier
                     .onSizeChanged { composerHeightPx = it.height }
@@ -456,6 +490,7 @@ private fun LabeledSlider(
 private fun ChatTopBar(
     selectedMode: InferenceMode,
     modelName: String,
+    activeLocalModelName: String?,
     onInferenceModeChange: (InferenceMode) -> Unit,
     onOpenSessions: () -> Unit
 ) {
@@ -465,16 +500,16 @@ private fun ChatTopBar(
         .trim()
         .ifBlank { stringResource(id = R.string.default_model_label) }
 
-    val selectedLabel = if (selectedMode == InferenceMode.REMOTE) {
-        cleanModel
-    } else {
-        stringResource(id = R.string.gemini_nano_title)
+    val selectedLabel = when (selectedMode) {
+        InferenceMode.AICORE -> stringResource(id = R.string.gemini_nano_title)
+        InferenceMode.DOWNLOADED -> activeLocalModelName ?: "Downloaded model"
+        InferenceMode.REMOTE -> cleanModel
     }
 
-    val statusDotColor = if (selectedMode == InferenceMode.REMOTE) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.secondary
+    val statusDotColor = when (selectedMode) {
+        InferenceMode.AICORE -> MaterialTheme.colorScheme.secondary
+        InferenceMode.DOWNLOADED -> MaterialTheme.colorScheme.tertiary
+        InferenceMode.REMOTE -> MaterialTheme.colorScheme.primary
     }
 
     val chevronRotation by animateFloatAsState(
@@ -578,6 +613,22 @@ private fun ChatTopBar(
                         DropdownMenuItem(
                             text = {
                                 Column {
+                                    Text(text = activeLocalModelName ?: "Downloaded model")
+                                    Text(
+                                        text = "Local model",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
+                            onClick = {
+                                expanded = false
+                                onInferenceModeChange(InferenceMode.DOWNLOADED)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Column {
                                     Text(text = cleanModel)
                                     Text(
                                         text = stringResource(id = R.string.remote_mode),
@@ -633,6 +684,98 @@ private fun EmptyConversation(modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 24.dp)
             )
+        }
+    }
+}
+
+@Composable
+private fun LocalModelStatusSurface(
+    modelName: String?,
+    isReady: Boolean,
+    message: String?,
+    onOpenModelGallery: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = if (isReady) {
+            MaterialTheme.colorScheme.secondaryContainer
+        } else {
+            MaterialTheme.colorScheme.errorContainer
+        }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = if (isReady) {
+                        "Running on ${modelName.orEmpty().ifBlank { "local model" }}"
+                    } else {
+                        "Local model not ready"
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (isReady) {
+                        MaterialTheme.colorScheme.onSecondaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onErrorContainer
+                    }
+                )
+                if (!message.isNullOrBlank()) {
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isReady) {
+                            MaterialTheme.colorScheme.onSecondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onErrorContainer
+                        }
+                    )
+                }
+            }
+            TextButton(onClick = onOpenModelGallery) {
+                Text("Model library")
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocalModelEmptyState(
+    modifier: Modifier = Modifier,
+    onOpenModelGallery: () -> Unit
+) {
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(horizontal = 24.dp)
+        ) {
+            Text(
+                text = "Select a local model to start on-device chat",
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = "Open Models to download or activate an allowlisted LiteRT model.",
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(onClick = onOpenModelGallery) {
+                Text("Open model library")
+            }
         }
     }
 }
@@ -977,6 +1120,7 @@ private fun Composer(
     onOpenControls: () -> Unit,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
+    onStop: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -991,11 +1135,15 @@ private fun Composer(
 
     val sendContainerColor = if (sendEnabled) {
         MaterialTheme.colorScheme.primaryContainer
+    } else if (isSending) {
+        MaterialTheme.colorScheme.errorContainer
     } else {
         MaterialTheme.colorScheme.surfaceContainerHighest
     }
     val sendContentColor = if (sendEnabled) {
         MaterialTheme.colorScheme.onPrimaryContainer
+    } else if (isSending) {
+        MaterialTheme.colorScheme.onErrorContainer
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
@@ -1072,14 +1220,20 @@ private fun Composer(
                     tonalElevation = if (sendEnabled) 3.dp else 0.dp
                 ) {
                     IconButton(
-                        onClick = onSend,
-                        enabled = sendEnabled,
+                        onClick = {
+                            if (isSending) onStop() else onSend()
+                        },
+                        enabled = isSending || sendEnabled,
                         interactionSource = sendInteractionSource,
                         modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.ArrowUpward,
-                            contentDescription = stringResource(id = R.string.send_message),
+                            imageVector = if (isSending) Icons.Default.Stop else Icons.Default.ArrowUpward,
+                            contentDescription = if (isSending) {
+                                "Stop generation"
+                            } else {
+                                stringResource(id = R.string.send_message)
+                            },
                             tint = sendContentColor
                         )
                     }

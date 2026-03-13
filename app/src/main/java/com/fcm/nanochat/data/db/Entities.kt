@@ -6,6 +6,8 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.fcm.nanochat.inference.InferenceMode
 import com.fcm.nanochat.model.ChatRole
+import com.fcm.nanochat.models.registry.ModelInstallState
+import com.fcm.nanochat.models.registry.ModelStorageLocation
 
 @Entity(tableName = "chat_sessions")
 data class ChatSessionEntity(
@@ -40,6 +42,28 @@ data class ChatMessageEntity(
     val temperature: Double,
     val topP: Double,
     val contextLength: Int,
+    val createdAt: Long,
+    val updatedAt: Long
+)
+
+@Entity(
+    tableName = "installed_models",
+    indices = [
+        Index(value = ["updatedAt"]),
+        Index(value = ["installState"])
+    ]
+)
+data class InstalledModelEntity(
+    @PrimaryKey val modelId: String,
+    val displayName: String,
+    val modelFileName: String,
+    val localPath: String,
+    val sizeBytes: Long,
+    val downloadedBytes: Long,
+    val installState: ModelInstallState,
+    val storageLocation: ModelStorageLocation,
+    val allowlistVersion: String,
+    val errorMessage: String?,
     val createdAt: Long,
     val updatedAt: Long
 )
