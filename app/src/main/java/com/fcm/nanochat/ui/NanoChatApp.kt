@@ -73,7 +73,6 @@ fun NanoChatApp(
     onCancelModelDownload: (String) -> Unit = {},
     onRetryModelDownload: (String) -> Unit = {},
     onUseModel: (String) -> Unit = {},
-    onLoadModel: (String) -> Unit = {},
     onEjectModel: (String) -> Unit = {},
     onDeleteModel: (String) -> Unit = {},
     onMoveModelStorage: (String, com.fcm.nanochat.models.registry.ModelStorageLocation) -> Unit = { _, _ -> },
@@ -91,8 +90,7 @@ fun NanoChatApp(
     onClearHistory: () -> Unit = {},
     onRefreshStats: () -> Unit = {},
     onRefreshGeminiStatus: () -> Unit = {},
-    onDownloadGeminiNano: () -> Unit = {},
-    onDismissNotice: () -> Unit = {}
+    onDownloadGeminiNano: () -> Unit = {}
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -102,12 +100,6 @@ fun NanoChatApp(
     var settingsStartSection by rememberSaveable { mutableStateOf(Home) }
     var renameTargetId by rememberSaveable { mutableStateOf<Long?>(null) }
     var renameDraft by rememberSaveable { mutableStateOf("") }
-
-    LaunchedEffect(chatState.notice) {
-        val currentNotice = chatState.notice ?: return@LaunchedEffect
-        snackbarHostState.showSnackbar(currentNotice)
-        onDismissNotice()
-    }
 
     LaunchedEffect(modelState.notice) {
         val currentNotice = modelState.notice ?: return@LaunchedEffect
@@ -204,7 +196,6 @@ fun NanoChatApp(
                         onCancelModelDownload = onCancelModelDownload,
                         onRetryModelDownload = onRetryModelDownload,
                         onUseModel = onUseModel,
-                        onLoadModel = onLoadModel,
                         onEjectModel = onEjectModel,
                         onDeleteModel = onDeleteModel,
                         onMoveModelStorage = onMoveModelStorage,
@@ -268,7 +259,6 @@ private fun ModelsPage(
     onCancelModelDownload: (String) -> Unit,
     onRetryModelDownload: (String) -> Unit,
     onUseModel: (String) -> Unit,
-    onLoadModel: (String) -> Unit,
     onEjectModel: (String) -> Unit,
     onDeleteModel: (String) -> Unit,
     onMoveModelStorage: (String, com.fcm.nanochat.models.registry.ModelStorageLocation) -> Unit,
@@ -302,7 +292,6 @@ private fun ModelsPage(
             onCancelDownload = onCancelModelDownload,
             onRetryDownload = onRetryModelDownload,
             onUseModel = onUseModel,
-            onLoadModel = onLoadModel,
             onEjectModel = onEjectModel,
             onDeleteModel = onDeleteModel,
             onMoveStorage = onMoveModelStorage,

@@ -66,7 +66,6 @@ class MainActivity : ComponentActivity() {
                     onCancelModelDownload = modelManagerViewModel::cancelDownload,
                     onRetryModelDownload = modelManagerViewModel::retryDownload,
                     onUseModel = modelManagerViewModel::useModel,
-                    onLoadModel = modelManagerViewModel::loadModel,
                     onEjectModel = modelManagerViewModel::ejectModel,
                     onDeleteModel = modelManagerViewModel::deleteModel,
                     onMoveModelStorage = modelManagerViewModel::moveStorage,
@@ -84,8 +83,7 @@ class MainActivity : ComponentActivity() {
                     onClearHistory = settingsViewModel::clearAllHistory,
                     onRefreshStats = settingsViewModel::refreshStats,
                     onRefreshGeminiStatus = settingsViewModel::refreshGeminiStatus,
-                    onDownloadGeminiNano = settingsViewModel::downloadGeminiNano,
-                    onDismissNotice = chatViewModel::clearNotice
+                    onDownloadGeminiNano = settingsViewModel::downloadGeminiNano
                 )
             }
         }

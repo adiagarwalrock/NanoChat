@@ -108,6 +108,7 @@ data class ModelGalleryScreenState(
 enum class ModelLibraryPhase {
     Loading,
     Ready,
+    Empty,
     Error
 }
 

@@ -10,8 +10,7 @@ import java.io.File
 import kotlin.math.floor
 
 class LocalModelCompatibilityEvaluator(
-    context: Context,
-    private val runtimeProbe: suspend (AllowlistedModel, String) -> RuntimeProbeResult
+    context: Context
 ) {
     private val appContext = context.applicationContext
 
@@ -91,13 +90,7 @@ class LocalModelCompatibilityEvaluator(
                 )
             }
 
-            val runtime = runtimeProbe(model, installedPath)
-            return when (runtime) {
-                RuntimeProbeResult.Ready -> LocalModelCompatibilityState.Ready
-                is RuntimeProbeResult.Unavailable -> LocalModelCompatibilityState.RuntimeUnavailable(
-                    runtime.reason
-                )
-            }
+            return LocalModelCompatibilityState.Ready
         }
 
         val availableStorage = availableStorageBytes()
@@ -154,9 +147,4 @@ class LocalModelCompatibilityEvaluator(
         if (model.recommendedForChat) return true
         return model.taskTypes.any { it.contains("chat", ignoreCase = true) }
     }
-}
-
-sealed interface RuntimeProbeResult {
-    data object Ready : RuntimeProbeResult
-    data class Unavailable(val reason: String) : RuntimeProbeResult
 }

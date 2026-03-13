@@ -12,7 +12,6 @@ import com.fcm.nanochat.models.allowlist.BundledAllowlistSource
 import com.fcm.nanochat.models.allowlist.CachedAllowlistSource
 import com.fcm.nanochat.models.allowlist.RemoteAllowlistSource
 import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityEvaluator
-import com.fcm.nanochat.models.compatibility.RuntimeProbeResult
 import com.fcm.nanochat.models.download.DownloadIntegrityValidator
 import com.fcm.nanochat.models.download.ModelDownloadCoordinator
 import com.fcm.nanochat.models.importing.StubLocalModelImportCoordinator
@@ -53,22 +52,7 @@ class AppContainer(context: Context) {
     private val runtimeTelemetry = InMemoryLocalRuntimeTelemetry()
     private val runtimeManager = ModelRuntimeManager(appContext)
 
-    private val compatibilityEvaluator =
-        LocalModelCompatibilityEvaluator(appContext) { model, path ->
-            val probeError = runtimeManager.probe(
-                modelId = model.id,
-                modelPath = path,
-                defaultConfig = model.defaultConfig,
-                expectedFileName = model.modelFile,
-                expectedFileType = model.fileType,
-                expectedSizeBytes = model.sizeInBytes
-            )
-            if (probeError == null) {
-                RuntimeProbeResult.Ready
-            } else {
-                RuntimeProbeResult.Unavailable(probeError)
-            }
-        }
+    private val compatibilityEvaluator = LocalModelCompatibilityEvaluator(appContext)
 
     private val modelRegistry = ModelRegistry(
         allowlistRepository = allowlistRepository,

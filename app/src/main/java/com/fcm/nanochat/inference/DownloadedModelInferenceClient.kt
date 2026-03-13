@@ -9,14 +9,17 @@ import com.fcm.nanochat.models.registry.ModelRegistry
 import com.fcm.nanochat.models.runtime.LocalRuntimeMetrics
 import com.fcm.nanochat.models.runtime.LocalRuntimeTelemetry
 import com.fcm.nanochat.models.runtime.ModelRuntimeManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.coroutineContext
 
 class DownloadedModelInferenceClient(
@@ -62,59 +65,49 @@ class DownloadedModelInferenceClient(
 
         return when (val compatibility = record.compatibility) {
             LocalModelCompatibilityState.Ready -> {
-                if (!record.isActive) {
-                    BackendAvailability.Available
-                } else {
-                    val runtimeState = runtimeManager.loadState.value
-                    val runtimeModelId = runtimeState.modelId?.trim()?.lowercase().orEmpty()
-                    val selectedModelId = record.modelId.trim().lowercase()
+                val runtimeState = runtimeManager.loadState.value
+                val runtimeModelId = runtimeState.modelId?.trim()?.lowercase().orEmpty()
+                val selectedModelId = record.modelId.trim().lowercase()
 
-                    when (runtimeState.phase) {
-                        com.fcm.nanochat.models.runtime.RuntimeLoadPhase.LOADING -> {
-                            if (runtimeModelId == selectedModelId) {
-                                BackendAvailability.Unavailable(
-                                    "Selected local model is loading into memory."
-                                )
-                            } else {
-                                BackendAvailability.Unavailable(
-                                    "Selected local model is not loaded in memory. Open Model Library and press Load."
-                                )
-                            }
+                when (runtimeState.phase) {
+                    com.fcm.nanochat.models.runtime.RuntimeLoadPhase.LOADING -> {
+                        if (runtimeModelId == selectedModelId) {
+                            BackendAvailability.Unavailable(
+                                "Selected local model is being prepared for local chat."
+                            )
+                        } else {
+                            BackendAvailability.Unavailable(
+                                "Selected local model is not ready yet. NanoChat is preparing it now."
+                            )
                         }
+                    }
 
-                        com.fcm.nanochat.models.runtime.RuntimeLoadPhase.LOADED -> {
-                            if (runtimeModelId == selectedModelId) {
-                                BackendAvailability.Available
-                            } else {
-                                BackendAvailability.Unavailable(
-                                    "Selected local model is not loaded in memory. Open Model Library and press Load."
-                                )
-                            }
+                    com.fcm.nanochat.models.runtime.RuntimeLoadPhase.LOADED -> {
+                        if (runtimeModelId == selectedModelId) {
+                            BackendAvailability.Available
+                        } else {
+                            BackendAvailability.Unavailable(
+                                "Selected local model is not ready yet. NanoChat is preparing it now."
+                            )
                         }
+                    }
 
-                        com.fcm.nanochat.models.runtime.RuntimeLoadPhase.EJECTED,
-                        com.fcm.nanochat.models.runtime.RuntimeLoadPhase.IDLE -> {
-                            if (runtimeModelId.isBlank() || runtimeModelId == selectedModelId) {
-                                BackendAvailability.Unavailable(
-                                    "Selected local model is not loaded in memory. Open Model Library and press Load."
-                                )
-                            } else {
-                                BackendAvailability.Unavailable(
-                                    "Selected local model is not loaded in memory. Open Model Library and press Load."
-                                )
-                            }
-                        }
+                    com.fcm.nanochat.models.runtime.RuntimeLoadPhase.EJECTED,
+                    com.fcm.nanochat.models.runtime.RuntimeLoadPhase.IDLE -> {
+                        BackendAvailability.Unavailable(
+                            "Selected local model is not ready yet. NanoChat is preparing it now."
+                        )
+                    }
 
-                        com.fcm.nanochat.models.runtime.RuntimeLoadPhase.FAILED -> {
-                            if (runtimeModelId.isBlank() || runtimeModelId == selectedModelId) {
-                                BackendAvailability.Unavailable(
-                                    "Selected local model failed to load into memory. Open Model Library and retry load."
-                                )
-                            } else {
-                                BackendAvailability.Unavailable(
-                                    "Selected local model is not loaded in memory. Open Model Library and press Load."
-                                )
-                            }
+                    com.fcm.nanochat.models.runtime.RuntimeLoadPhase.FAILED -> {
+                        if (runtimeModelId.isBlank() || runtimeModelId == selectedModelId) {
+                            BackendAvailability.Unavailable(
+                                "Selected local model failed to prepare for local chat. Tap Use model to retry."
+                            )
+                        } else {
+                            BackendAvailability.Unavailable(
+                                "Selected local model is not ready yet. NanoChat is preparing it now."
+                            )
                         }
                     }
                 }
@@ -207,25 +200,36 @@ class DownloadedModelInferenceClient(
         val formattedPrompt = PromptFormatter.flattenForDownloadedModel(
             history = request.history,
             prompt = request.prompt,
-            maxTurns = 20
+            maxTurns = 20,
+            modelId = resolvedModelId
         )
 
         val generationStart = System.currentTimeMillis()
-        val generated = runCatching {
+        val generated = try {
             withContext(Dispatchers.IO) {
-                runtimeHandle.runtime.generate(formattedPrompt)
+                withTimeout(LOCAL_GENERATION_TIMEOUT_MS) {
+                    runtimeHandle.runtime.generate(formattedPrompt)
+                }
             }
-        }.getOrElse { error ->
+        } catch (timeout: TimeoutCancellationException) {
+            Log.w(TAG, "Downloaded runtime generation timed out modelId=$resolvedModelId")
+            scope.launch { runtimeManager.release() }
+            throw InferenceException.BackendUnavailable(
+                "Local generation timed out before producing visible output. Try again or reselect this model."
+            )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
             Log.e(TAG, "Downloaded runtime generation failed", error)
             scope.launch { runtimeManager.release() }
             throw InferenceException.BackendUnavailable(toFriendlyRuntimeError(error.message))
         }
         val generatedAt = System.currentTimeMillis()
 
-        val normalized = generated.trim()
+        val normalized = GeneratedTextSanitizer.sanitize(generated)
         if (normalized.isBlank()) {
             throw InferenceException.BackendUnavailable(
-                "Local model returned an empty response. Try another prompt."
+                "Local model produced no visible text. Try again, or choose another local model."
             )
         }
 
@@ -285,9 +289,16 @@ class DownloadedModelInferenceClient(
     }
 
     private fun String.streamingChunks(): List<String> {
+        if (isBlank()) return emptyList()
         if (length <= 24) return listOf(this)
-        return split(Regex("(?<=\\s)"))
+
+        val tokenChunks = split(Regex("(?<=\\s)"))
             .filter { it.isNotEmpty() }
+        if (tokenChunks.size > 1) {
+            return tokenChunks
+        }
+
+        return chunked(24)
     }
 
     private fun SettingsSnapshot.toFallbackDownloadedConfig(): com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig {
@@ -341,5 +352,6 @@ class DownloadedModelInferenceClient(
 
     private companion object {
         const val TAG = "DownloadedInference"
+        const val LOCAL_GENERATION_TIMEOUT_MS = 30_000L
     }
 }

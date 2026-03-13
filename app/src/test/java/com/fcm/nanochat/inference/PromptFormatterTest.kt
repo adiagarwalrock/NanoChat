@@ -50,4 +50,20 @@ class PromptFormatterTest {
         assertTrue(prompt.contains("<|assistant|>\nHi there"))
         assertTrue(prompt.endsWith("<|assistant|>"))
     }
+
+    @Test
+    fun `flattenForDownloadedModel uses speaker format for deepseek and qwen`() {
+        val prompt = PromptFormatter.flattenForDownloadedModel(
+            history = listOf(
+                ChatTurn(ChatRole.USER, "Hello"),
+                ChatTurn(ChatRole.ASSISTANT, "Hi there")
+            ),
+            prompt = "How are you?",
+            modelId = "deepseek-r1-distill-qwen-1.5b"
+        )
+
+        assertTrue(prompt.contains("User: Hello"))
+        assertTrue(prompt.contains("Assistant: Hi there"))
+        assertTrue(prompt.endsWith("Assistant:"))
+    }
 }

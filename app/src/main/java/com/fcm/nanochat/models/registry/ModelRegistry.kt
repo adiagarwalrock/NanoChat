@@ -3,6 +3,7 @@ package com.fcm.nanochat.models.registry
 import com.fcm.nanochat.data.AppPreferences
 import com.fcm.nanochat.data.db.InstalledModelDao
 import com.fcm.nanochat.data.db.InstalledModelEntity
+import com.fcm.nanochat.inference.InferenceMode
 import com.fcm.nanochat.models.allowlist.AllowlistRepository
 import com.fcm.nanochat.models.allowlist.AllowlistedModel
 import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityEvaluator
@@ -29,6 +30,9 @@ class ModelRegistry(
     private val _records = MutableStateFlow<List<InstalledModelRecord>>(emptyList())
     val records: StateFlow<List<InstalledModelRecord>> = _records.asStateFlow()
 
+    private val _recordsHydrated = MutableStateFlow(false)
+    val recordsHydrated: StateFlow<Boolean> = _recordsHydrated.asStateFlow()
+
     private val _activeModelStatus = MutableStateFlow(
         ActiveModelStatus(
             modelId = null,
@@ -51,6 +55,10 @@ class ModelRegistry(
     suspend fun setActiveModel(modelId: String?) {
         val normalized = modelId?.trim()?.lowercase().orEmpty()
         preferences.updateActiveLocalModelId(normalized.ifBlank { null })
+    }
+
+    suspend fun setInferenceMode(mode: InferenceMode) {
+        preferences.updateInferenceMode(mode)
     }
 
     suspend fun activeModelId(): String =
@@ -118,9 +126,7 @@ class ModelRegistry(
                         is LocalModelCompatibilityState.DownloadedButNotActivatable -> compatibility.reason
                         else -> ""
                     }
-                    val persistedMessage = issueMessage.ifBlank {
-                        sanitizeCompatibilityReason(issueMessage)
-                    }
+                    val persistedMessage = sanitizeCompatibilityReason(issueMessage)
                     if (entity.errorMessage != persistedMessage) {
                         installedModelDao.upsert(
                             entity.copy(
@@ -173,6 +179,9 @@ class ModelRegistry(
             sorted to activeId
         }.collect { (records, activeId) ->
             _records.value = records
+            if (!_recordsHydrated.value) {
+                _recordsHydrated.value = true
+            }
             updateActiveStatus(records, activeId)
         }
     }

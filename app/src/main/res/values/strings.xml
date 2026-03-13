@@ -12,6 +12,7 @@
     <string name="empty_chat_title">How can I help today?</string>
     <string name="empty_chat_subtitle">Ask anything to start a conversation.</string>
     <string name="assistant_thinking">Thinking</string>
+    <string name="assistant_no_response_yet">No response yet. You can retry.</string>
     <string name="composer_placeholder">Message NanoChat</string>
     <string name="send_message">Send message</string>
     <string name="retry_last">Retry last</string>
@@ -107,6 +108,7 @@
     <string name="details_section_use">Usage</string>
     <string name="details_section_requirements">Requirements</string>
     <string name="details_section_source_and_file">Source and file</string>
+    <string name="details_section_actions">Actions</string>
     <string name="details_section_diagnostics">Diagnostics</string>
     <string name="details_health_state">Health state</string>
     <string name="details_install_state">Install state</string>

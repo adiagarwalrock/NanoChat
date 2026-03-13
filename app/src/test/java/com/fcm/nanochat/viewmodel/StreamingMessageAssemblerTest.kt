@@ -37,4 +37,15 @@ class StreamingMessageAssemblerTest {
         assertEquals("final answer", result)
         assertEquals("final answer", assembler.current())
     }
+
+    @Test
+    fun `assembler removes assistant control tokens`() {
+        val assembler = StreamingMessageAssembler()
+
+        assembler.append(InferenceMode.DOWNLOADED, "<|assistant|>\n")
+        val result = assembler.append(InferenceMode.DOWNLOADED, "Assistant: Hello there")
+
+        assertEquals("Hello there", result)
+        assertEquals("Hello there", assembler.current())
+    }
 }

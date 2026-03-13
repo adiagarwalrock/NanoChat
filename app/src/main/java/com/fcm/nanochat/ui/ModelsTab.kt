@@ -23,16 +23,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SdStorage
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -50,13 +47,16 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -92,12 +92,10 @@ private enum class ActionType {
     Resume,
     Retry,
     Use,
-    Load,
     Eject,
     AddToken,
     Cancel,
     Delete,
-    Move,
     OpenDetails,
     None
 }
@@ -108,8 +106,18 @@ private data class ActionPlan(
     val primaryEnabled: Boolean,
     val secondaryLabel: String? = null,
     val secondaryAction: ActionType = ActionType.None,
-    val secondaryEnabled: Boolean = true,
-    val allowOverflow: Boolean = false
+    val secondaryEnabled: Boolean = true
+)
+
+private enum class PendingActionType {
+    Download,
+    Delete,
+    Use
+}
+
+private data class PendingModelAction(
+    val type: PendingActionType,
+    val startedAtEpochMs: Long = System.currentTimeMillis()
 )
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
@@ -122,7 +130,6 @@ internal fun ModelsTab(
     onCancelDownload: (String) -> Unit,
     onRetryDownload: (String) -> Unit,
     onUseModel: (String) -> Unit,
-    onLoadModel: (String) -> Unit,
     onEjectModel: (String) -> Unit,
     onDeleteModel: (String) -> Unit,
     onMoveStorage: (String, ModelStorageLocation) -> Unit,
@@ -134,6 +141,46 @@ internal fun ModelsTab(
     var selectedFilter by rememberSaveable { mutableStateOf(ModelFilter.All) }
     var selectedSort by rememberSaveable { mutableStateOf(ModelSort.Recommended) }
     var otherExpanded by rememberSaveable { mutableStateOf(false) }
+    val pendingActions = remember { mutableStateMapOf<String, PendingModelAction>() }
+
+    LaunchedEffect(state.models, state.phase) {
+        val now = System.currentTimeMillis()
+        val staleModelIds = mutableListOf<String>()
+        pendingActions.forEach { (modelId, pendingAction) ->
+            val model = state.models.firstOrNull { it.modelId == modelId }
+            val timeoutMs = if (pendingAction.type == PendingActionType.Delete) {
+                PENDING_DELETE_ACTION_TIMEOUT_MS
+            } else {
+                PENDING_ACTION_TIMEOUT_MS
+            }
+            val timedOut = now - pendingAction.startedAtEpochMs >= timeoutMs
+            val hasConverged = when (pendingAction.type) {
+                PendingActionType.Download -> {
+                    model != null && model.installState != ModelInstallState.NOT_INSTALLED
+                }
+
+                PendingActionType.Delete -> {
+                    model == null ||
+                            model.installState == ModelInstallState.FAILED ||
+                            model.installState == ModelInstallState.BROKEN
+                }
+
+                PendingActionType.Use -> {
+                    model != null && (
+                            model.memoryState == com.fcm.nanochat.model.LocalModelMemoryState.LoadingIntoMemory ||
+                                    model.memoryState == com.fcm.nanochat.model.LocalModelMemoryState.LoadedInMemory ||
+                                    model.memoryState == com.fcm.nanochat.model.LocalModelMemoryState.InUse ||
+                                    model.memoryState == com.fcm.nanochat.model.LocalModelMemoryState.FailedToLoad
+                            )
+                }
+            }
+
+            if (timedOut || hasConverged) {
+                staleModelIds += modelId
+            }
+        }
+        staleModelIds.forEach { pendingActions.remove(it) }
+    }
 
     val filteredModels = remember(state.models, query, selectedFilter, selectedSort) {
         state.models
@@ -180,9 +227,9 @@ internal fun ModelsTab(
 
         stickyHeader {
             Surface(
-                color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                tonalElevation = 2.dp,
-                shadowElevation = 2.dp
+                color = MaterialTheme.colorScheme.background,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp
             ) {
                 PinnedToolsHeader(
                     query = query,
@@ -199,6 +246,16 @@ internal fun ModelsTab(
             com.fcm.nanochat.model.ModelLibraryPhase.Loading -> {
                 item {
                     LoadingModelCard()
+                }
+            }
+
+            com.fcm.nanochat.model.ModelLibraryPhase.Empty -> {
+                item {
+                    EmptyLibraryState(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    )
                 }
             }
 
@@ -227,23 +284,36 @@ internal fun ModelsTab(
                     items(primaryModels, key = { it.modelId }) { model ->
                         SimplifiedModelCard(
                             model = model,
+                            pendingAction = pendingActions[model.modelId],
                             onOpenDetails = { detailsModelId = model.modelId },
                             onOpenHuggingFaceSettings = onOpenHuggingFaceSettings,
-                            onDownload = { onDownload(model.modelId) },
-                            onCancelDownload = { onCancelDownload(model.modelId) },
-                            onRetryDownload = { onRetryDownload(model.modelId) },
-                            onUseModel = { onUseModel(model.modelId) },
-                            onLoadModel = { onLoadModel(model.modelId) },
-                            onEjectModel = { onEjectModel(model.modelId) },
-                            onDeleteModel = { onDeleteModel(model.modelId) },
-                            onMoveStorage = {
-                                val target =
-                                    if (model.storageLocation == ModelStorageLocation.INTERNAL) {
-                                        ModelStorageLocation.EXTERNAL
-                                    } else {
-                                        ModelStorageLocation.INTERNAL
-                                    }
-                                onMoveStorage(model.modelId, target)
+                            onDownload = {
+                                pendingActions[model.modelId] =
+                                    PendingModelAction(PendingActionType.Download)
+                                onDownload(model.modelId)
+                            },
+                            onCancelDownload = {
+                                pendingActions.remove(model.modelId)
+                                onCancelDownload(model.modelId)
+                            },
+                            onRetryDownload = {
+                                pendingActions[model.modelId] =
+                                    PendingModelAction(PendingActionType.Download)
+                                onRetryDownload(model.modelId)
+                            },
+                            onUseModel = {
+                                pendingActions[model.modelId] =
+                                    PendingModelAction(PendingActionType.Use)
+                                onUseModel(model.modelId)
+                            },
+                            onEjectModel = {
+                                pendingActions.remove(model.modelId)
+                                onEjectModel(model.modelId)
+                            },
+                            onDeleteModel = {
+                                pendingActions[model.modelId] =
+                                    PendingModelAction(PendingActionType.Delete)
+                                onDeleteModel(model.modelId)
                             }
                         )
                     }
@@ -268,23 +338,36 @@ internal fun ModelsTab(
                                 otherModels.forEach { model ->
                                     SimplifiedModelCard(
                                         model = model,
+                                        pendingAction = pendingActions[model.modelId],
                                         onOpenDetails = { detailsModelId = model.modelId },
                                         onOpenHuggingFaceSettings = onOpenHuggingFaceSettings,
-                                        onDownload = { onDownload(model.modelId) },
-                                        onCancelDownload = { onCancelDownload(model.modelId) },
-                                        onRetryDownload = { onRetryDownload(model.modelId) },
-                                        onUseModel = { onUseModel(model.modelId) },
-                                        onLoadModel = { onLoadModel(model.modelId) },
-                                        onEjectModel = { onEjectModel(model.modelId) },
-                                        onDeleteModel = { onDeleteModel(model.modelId) },
-                                        onMoveStorage = {
-                                            val target =
-                                                if (model.storageLocation == ModelStorageLocation.INTERNAL) {
-                                                    ModelStorageLocation.EXTERNAL
-                                                } else {
-                                                    ModelStorageLocation.INTERNAL
-                                                }
-                                            onMoveStorage(model.modelId, target)
+                                        onDownload = {
+                                            pendingActions[model.modelId] =
+                                                PendingModelAction(PendingActionType.Download)
+                                            onDownload(model.modelId)
+                                        },
+                                        onCancelDownload = {
+                                            pendingActions.remove(model.modelId)
+                                            onCancelDownload(model.modelId)
+                                        },
+                                        onRetryDownload = {
+                                            pendingActions[model.modelId] =
+                                                PendingModelAction(PendingActionType.Download)
+                                            onRetryDownload(model.modelId)
+                                        },
+                                        onUseModel = {
+                                            pendingActions[model.modelId] =
+                                                PendingModelAction(PendingActionType.Use)
+                                            onUseModel(model.modelId)
+                                        },
+                                        onEjectModel = {
+                                            pendingActions.remove(model.modelId)
+                                            onEjectModel(model.modelId)
+                                        },
+                                        onDeleteModel = {
+                                            pendingActions[model.modelId] =
+                                                PendingModelAction(PendingActionType.Delete)
+                                            onDeleteModel(model.modelId)
                                         }
                                     )
                                 }
@@ -296,16 +379,6 @@ internal fun ModelsTab(
                 if (filteredModels.isEmpty() && state.models.isNotEmpty() && filtersApplied) {
                     item {
                         EmptyFilterState(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                        )
-                    }
-                }
-
-                if (filteredModels.isEmpty() && state.models.isEmpty() && !filtersApplied) {
-                    item {
-                        EmptyLibraryState(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp)
@@ -330,18 +403,38 @@ internal fun ModelsTab(
     if (detailsModel != null) {
         RedesignedDetailsSheet(
             model = detailsModel,
+            pendingAction = pendingActions[detailsModel.modelId],
             onDismiss = { detailsModelId = null },
             onOpenHuggingFaceSettings = {
                 detailsModelId = null
                 onOpenHuggingFaceSettings()
             },
-            onDownload = { onDownload(detailsModel.modelId) },
-            onCancelDownload = { onCancelDownload(detailsModel.modelId) },
-            onRetryDownload = { onRetryDownload(detailsModel.modelId) },
-            onUseModel = { onUseModel(detailsModel.modelId) },
-            onLoadModel = { onLoadModel(detailsModel.modelId) },
-            onEjectModel = { onEjectModel(detailsModel.modelId) },
-            onDeleteModel = { onDeleteModel(detailsModel.modelId) },
+            onDownload = {
+                pendingActions[detailsModel.modelId] =
+                    PendingModelAction(PendingActionType.Download)
+                onDownload(detailsModel.modelId)
+            },
+            onCancelDownload = {
+                pendingActions.remove(detailsModel.modelId)
+                onCancelDownload(detailsModel.modelId)
+            },
+            onRetryDownload = {
+                pendingActions[detailsModel.modelId] =
+                    PendingModelAction(PendingActionType.Download)
+                onRetryDownload(detailsModel.modelId)
+            },
+            onUseModel = {
+                pendingActions[detailsModel.modelId] = PendingModelAction(PendingActionType.Use)
+                onUseModel(detailsModel.modelId)
+            },
+            onEjectModel = {
+                pendingActions.remove(detailsModel.modelId)
+                onEjectModel(detailsModel.modelId)
+            },
+            onDeleteModel = {
+                pendingActions[detailsModel.modelId] = PendingModelAction(PendingActionType.Delete)
+                onDeleteModel(detailsModel.modelId)
+            },
             onMoveStorage = {
                 val target = if (detailsModel.storageLocation == ModelStorageLocation.INTERNAL) {
                     ModelStorageLocation.EXTERNAL
@@ -391,6 +484,16 @@ private fun LibraryHeader(
                     contentDescription = stringResource(id = R.string.gemini_refresh_status)
                 )
             }
+        }
+
+        if (isRefreshing) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            )
         }
     }
 }
@@ -624,16 +727,16 @@ private fun PinnedToolsHeader(
     var sortMenuExpanded by remember { mutableStateOf(false) }
 
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .padding(top = 6.dp, bottom = 8.dp)
+            .padding(top = 4.dp, bottom = 8.dp)
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             androidx.compose.material3.TextField(
                 value = query,
@@ -672,7 +775,7 @@ private fun PinnedToolsHeader(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -735,25 +838,25 @@ private fun SectionHeader(title: String, count: Int) {
 @Composable
 private fun SimplifiedModelCard(
     model: ModelCardUi,
+    pendingAction: PendingModelAction?,
     onOpenDetails: () -> Unit,
     onOpenHuggingFaceSettings: () -> Unit,
     onDownload: () -> Unit,
     onCancelDownload: () -> Unit,
     onRetryDownload: () -> Unit,
     onUseModel: () -> Unit,
-    onLoadModel: () -> Unit,
     onEjectModel: () -> Unit,
-    onDeleteModel: () -> Unit,
-    onMoveStorage: () -> Unit
+    onDeleteModel: () -> Unit
 ) {
-    val status = remember(model) { model.statusLine() }
-    val actionPlan = remember(model) { model.actionPlan() }
-    var menuExpanded by remember { mutableStateOf(false) }
+    val status = remember(model, pendingAction) { model.statusLine(pendingAction) }
+    val actionPlan = remember(model, pendingAction) { model.actionPlan(pendingAction) }
+    val cardAlpha = if (pendingAction?.type == PendingActionType.Delete) 0.72f else 1f
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
+            .alpha(cardAlpha)
             .clickable(onClick = onOpenDetails),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
@@ -783,10 +886,18 @@ private fun SimplifiedModelCard(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (model.isActive) {
+                        if (model.isActive || pendingAction?.type == PendingActionType.Use) {
                             ModelStatusBadge(
-                                text = model.memoryBadgeLabel(),
-                                tone = model.memoryBadgeTone()
+                                text = if (model.isActive) {
+                                    model.memoryBadgeLabel()
+                                } else {
+                                    "Selected"
+                                },
+                                tone = if (model.isActive) {
+                                    model.memoryBadgeTone()
+                                } else {
+                                    ModelBadgeTone.Neutral
+                                }
                             )
                         }
                     }
@@ -800,38 +911,6 @@ private fun SimplifiedModelCard(
                     )
                 }
 
-                if (actionPlan.allowOverflow) {
-                    Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
-                        IconButton(onClick = { menuExpanded = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = null)
-                        }
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(text = stringResource(id = R.string.move_storage)) },
-                                leadingIcon = {
-                                    Icon(Icons.Default.SwapHoriz, contentDescription = null)
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    onMoveStorage()
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(text = stringResource(id = R.string.delete_model)) },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Delete, contentDescription = null)
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    onDeleteModel()
-                                }
-                            )
-                        }
-                    }
-                }
             }
 
             Row(
@@ -887,13 +966,11 @@ private fun SimplifiedModelCard(
                             ActionType.Retry -> onRetryDownload()
 
                             ActionType.Use -> onUseModel()
-                            ActionType.Load -> onLoadModel()
 
                             ActionType.Eject -> onEjectModel()
                             ActionType.AddToken -> onOpenHuggingFaceSettings()
                             ActionType.Cancel -> onCancelDownload()
                             ActionType.Delete -> onDeleteModel()
-                            ActionType.Move -> onMoveStorage()
                             ActionType.OpenDetails -> onOpenDetails()
                             ActionType.None -> Unit
                         }
@@ -939,19 +1016,19 @@ private fun SimplifiedModelCard(
 @Composable
 private fun RedesignedDetailsSheet(
     model: ModelCardUi,
+    pendingAction: PendingModelAction?,
     onDismiss: () -> Unit,
     onOpenHuggingFaceSettings: () -> Unit,
     onDownload: () -> Unit,
     onCancelDownload: () -> Unit,
     onRetryDownload: () -> Unit,
     onUseModel: () -> Unit,
-    onLoadModel: () -> Unit,
     onEjectModel: () -> Unit,
     onDeleteModel: () -> Unit,
     onMoveStorage: () -> Unit
 ) {
-    val actionPlan = remember(model) { model.actionPlan() }
-    val status = remember(model) { model.statusLine() }
+    val actionPlan = remember(model, pendingAction) { model.actionPlan(pendingAction) }
+    val status = remember(model, pendingAction) { model.statusLine(pendingAction) }
     var showDiagnostics by rememberSaveable(model.modelId) { mutableStateOf(false) }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -1010,13 +1087,11 @@ private fun RedesignedDetailsSheet(
                                 ActionType.Retry -> onRetryDownload()
 
                                 ActionType.Use -> onUseModel()
-                                ActionType.Load -> onLoadModel()
 
                                 ActionType.Eject -> onEjectModel()
                                 ActionType.AddToken -> onOpenHuggingFaceSettings()
                                 ActionType.Cancel -> onCancelDownload()
                                 ActionType.Delete -> onDeleteModel()
-                                ActionType.Move -> onMoveStorage()
                                 ActionType.OpenDetails,
                                 ActionType.None -> Unit
                             }
@@ -1146,6 +1221,28 @@ private fun RedesignedDetailsSheet(
                             label = stringResource(id = R.string.details_installed_path),
                             value = model.localPath.orEmpty()
                         )
+                    }
+                }
+            }
+
+            item {
+                DetailsSection(title = stringResource(id = R.string.details_section_actions)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onMoveStorage,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(text = stringResource(id = R.string.move_storage))
+                        }
+                        OutlinedButton(
+                            onClick = onDeleteModel,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(text = stringResource(id = R.string.delete_model))
+                        }
                     }
                 }
             }
@@ -1394,7 +1491,7 @@ private fun ModelCardUi.compatibilityRank(): Int {
     }
 }
 
-private fun ModelCardUi.statusLine(): StatusLine {
+private fun ModelCardUi.statusLine(pendingAction: PendingModelAction? = null): StatusLine {
     val totalBytes = sizeInBytes.takeIf { it > 0L } ?: sizeOnDiskBytes
     val progressValue = if (totalBytes > 0L) {
         downloadedBytes.toFloat() / totalBytes.toFloat()
@@ -1402,11 +1499,52 @@ private fun ModelCardUi.statusLine(): StatusLine {
         null
     }
 
+    if (pendingAction != null) {
+        when (pendingAction.type) {
+            PendingActionType.Download -> {
+                if (installState == ModelInstallState.NOT_INSTALLED) {
+                    return StatusLine(
+                        label = "Starting download",
+                        supporting = "Preparing local download...",
+                        tone = ModelBadgeTone.Neutral,
+                        progress = 0.04f
+                    )
+                }
+            }
+
+            PendingActionType.Delete -> {
+                if (installState != ModelInstallState.DELETING) {
+                    return StatusLine(
+                        label = "Deleting model",
+                        supporting = "Removing local files from this device.",
+                        tone = ModelBadgeTone.Warning,
+                        progress = 0.5f
+                    )
+                }
+            }
+
+            PendingActionType.Use -> {
+                if (memoryState != com.fcm.nanochat.model.LocalModelMemoryState.LoadingIntoMemory &&
+                    memoryState != com.fcm.nanochat.model.LocalModelMemoryState.LoadedInMemory &&
+                    memoryState != com.fcm.nanochat.model.LocalModelMemoryState.InUse &&
+                    memoryState != com.fcm.nanochat.model.LocalModelMemoryState.FailedToLoad
+                ) {
+                    return StatusLine(
+                        label = "Preparing local model",
+                        supporting = "Selected. Loading this model into memory.",
+                        tone = ModelBadgeTone.Neutral,
+                        progress = 0.38f
+                    )
+                }
+            }
+        }
+    }
+
     if (isActive) {
         return when (memoryState) {
             com.fcm.nanochat.model.LocalModelMemoryState.SelectedNotLoaded -> StatusLine(
                 label = "Selected, not loaded",
-                supporting = "Load this model into memory before local chat.",
+                supporting = "NanoChat will prepare this model when you resume local chat.",
                 tone = ModelBadgeTone.Neutral
             )
 
@@ -1431,7 +1569,7 @@ private fun ModelCardUi.statusLine(): StatusLine {
 
             com.fcm.nanochat.model.LocalModelMemoryState.EjectedFromMemory -> StatusLine(
                 label = "Ejected from memory",
-                supporting = "Installed on device. Load again to resume local chat.",
+                supporting = "Installed on device. Tap Use model to prepare it again.",
                 tone = ModelBadgeTone.Warning
             )
 
@@ -1496,7 +1634,7 @@ private fun ModelCardUi.fallbackStatusLine(progressValue: Float?): StatusLine {
         LocalModelHealthState.InstalledReady -> StatusLine(
             label = if (isActive) "Selected for chat" else "Installed on device",
             supporting = if (isActive) {
-                "Load this model into memory to start local chat."
+                "Tap Use model to load this selection into memory for local chat."
             } else {
                 "Installed and compatible with this device."
             },
@@ -1535,51 +1673,62 @@ private fun ModelCardUi.fallbackStatusLine(progressValue: Float?): StatusLine {
     }
 }
 
-private fun ModelCardUi.actionPlan(): ActionPlan {
+private fun ModelCardUi.actionPlan(pendingAction: PendingModelAction? = null): ActionPlan {
+    if (pendingAction != null) {
+        return when (pendingAction.type) {
+            PendingActionType.Download -> ActionPlan(
+                primaryLabel = "Starting...",
+                primaryAction = ActionType.None,
+                primaryEnabled = false
+            )
+
+            PendingActionType.Delete -> ActionPlan(
+                primaryLabel = "Deleting...",
+                primaryAction = ActionType.None,
+                primaryEnabled = false
+            )
+
+            PendingActionType.Use -> ActionPlan(
+                primaryLabel = "Preparing...",
+                primaryAction = ActionType.None,
+                primaryEnabled = false
+            )
+        }
+    }
+
     if (healthState == LocalModelHealthState.InstalledReady && isActive) {
         return when (memoryState) {
             com.fcm.nanochat.model.LocalModelMemoryState.SelectedNotLoaded,
             com.fcm.nanochat.model.LocalModelMemoryState.NeedsReload,
             com.fcm.nanochat.model.LocalModelMemoryState.EjectedFromMemory,
             com.fcm.nanochat.model.LocalModelMemoryState.NotSelected -> ActionPlan(
-                primaryLabel = "Load",
-                primaryAction = ActionType.Load,
-                primaryEnabled = true,
-                allowOverflow = true
+                primaryLabel = "Use model",
+                primaryAction = ActionType.Use,
+                primaryEnabled = true
             )
 
             com.fcm.nanochat.model.LocalModelMemoryState.LoadingIntoMemory -> ActionPlan(
                 primaryLabel = "Loading...",
                 primaryAction = ActionType.None,
-                primaryEnabled = false,
-                allowOverflow = true
+                primaryEnabled = false
             )
 
             com.fcm.nanochat.model.LocalModelMemoryState.LoadedInMemory -> ActionPlan(
-                primaryLabel = "Loaded",
-                primaryAction = ActionType.None,
-                primaryEnabled = false,
-                secondaryLabel = "Eject",
-                secondaryAction = ActionType.Eject,
-                secondaryEnabled = true,
-                allowOverflow = true
+                primaryLabel = "Eject",
+                primaryAction = ActionType.Eject,
+                primaryEnabled = true
             )
 
             com.fcm.nanochat.model.LocalModelMemoryState.InUse -> ActionPlan(
-                primaryLabel = "In use",
-                primaryAction = ActionType.None,
-                primaryEnabled = false,
-                secondaryLabel = "Eject",
-                secondaryAction = ActionType.Eject,
-                secondaryEnabled = true,
-                allowOverflow = true
+                primaryLabel = "Eject",
+                primaryAction = ActionType.Eject,
+                primaryEnabled = true
             )
 
             com.fcm.nanochat.model.LocalModelMemoryState.FailedToLoad -> ActionPlan(
-                primaryLabel = "Retry load",
-                primaryAction = ActionType.Load,
-                primaryEnabled = true,
-                allowOverflow = true
+                primaryLabel = "Use model",
+                primaryAction = ActionType.Use,
+                primaryEnabled = true
             )
         }
     }
@@ -1588,8 +1737,7 @@ private fun ModelCardUi.actionPlan(): ActionPlan {
         return ActionPlan(
             primaryLabel = "Use model",
             primaryAction = ActionType.Use,
-            primaryEnabled = true,
-            allowOverflow = true
+            primaryEnabled = true
         )
     }
 
@@ -1611,17 +1759,13 @@ private fun ModelCardUi.actionPlan(): ActionPlan {
         is LocalModelHealthState.Paused -> ActionPlan(
             primaryLabel = "Resume",
             primaryAction = ActionType.Resume,
-            primaryEnabled = true,
-            secondaryLabel = "Delete",
-            secondaryAction = ActionType.Delete
+            primaryEnabled = true
         )
 
         is LocalModelHealthState.DownloadFailed -> ActionPlan(
             primaryLabel = "Retry",
             primaryAction = ActionType.Retry,
-            primaryEnabled = true,
-            secondaryLabel = "Delete",
-            secondaryAction = ActionType.Delete
+            primaryEnabled = true
         )
 
         LocalModelHealthState.InstalledNeedsValidation -> ActionPlan(
@@ -1633,10 +1777,7 @@ private fun ModelCardUi.actionPlan(): ActionPlan {
         is LocalModelHealthState.InstalledStartupFailed -> ActionPlan(
             primaryLabel = "Continue setup",
             primaryAction = ActionType.OpenDetails,
-            primaryEnabled = true,
-            secondaryLabel = "Delete",
-            secondaryAction = ActionType.Delete,
-            allowOverflow = true
+            primaryEnabled = true
         )
 
         LocalModelHealthState.RequiresToken -> ActionPlan(
@@ -1650,9 +1791,7 @@ private fun ModelCardUi.actionPlan(): ActionPlan {
         LocalModelHealthState.RequiresLicenseApproval -> ActionPlan(
             primaryLabel = "View details",
             primaryAction = ActionType.OpenDetails,
-            primaryEnabled = true,
-            secondaryLabel = "Delete",
-            secondaryAction = ActionType.Delete
+            primaryEnabled = true
         )
 
         is LocalModelHealthState.NotCompatible,
@@ -1665,8 +1804,7 @@ private fun ModelCardUi.actionPlan(): ActionPlan {
         LocalModelHealthState.InstalledReady -> ActionPlan(
             primaryLabel = "Use model",
             primaryAction = ActionType.Use,
-            primaryEnabled = true,
-            allowOverflow = true
+            primaryEnabled = true
         )
     }
 }
@@ -1928,7 +2066,7 @@ private fun ModelCardUi.startupValidationResult(): String {
             com.fcm.nanochat.model.LocalModelMemoryState.EjectedFromMemory -> "Ejected"
             com.fcm.nanochat.model.LocalModelMemoryState.FailedToLoad -> "Startup failed"
             com.fcm.nanochat.model.LocalModelMemoryState.SelectedNotLoaded,
-            com.fcm.nanochat.model.LocalModelMemoryState.NeedsReload -> "Needs load"
+            com.fcm.nanochat.model.LocalModelMemoryState.NeedsReload -> "Needs preparation"
 
             com.fcm.nanochat.model.LocalModelMemoryState.NotSelected -> "Not selected"
         }
@@ -1971,3 +2109,5 @@ private fun ModelCardUi.rootCauseDetail(): String? {
 
 private val MarkdownLinkRegex = Regex("\\[([^\\]]+)]\\(([^)]+)\\)")
 private val UrlRegex = Regex("https?://\\S+")
+private const val PENDING_ACTION_TIMEOUT_MS = 8_000L
+private const val PENDING_DELETE_ACTION_TIMEOUT_MS = 30_000L

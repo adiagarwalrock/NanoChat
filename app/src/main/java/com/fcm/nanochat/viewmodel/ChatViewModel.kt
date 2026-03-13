@@ -14,8 +14,11 @@ import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.ChatSession
 import com.fcm.nanochat.models.registry.ActiveModelStatus
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,17 +27,24 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatViewModel(
     private val repository: ChatRepository
 ) : ViewModel() {
+    private val generationMutex = Mutex()
     private val selectedSessionId = MutableStateFlow<Long?>(null)
     private val draft = MutableStateFlow("")
     private val notice = MutableStateFlow<String?>(null)
     private val isSending = MutableStateFlow(false)
     private var sendJob: Job? = null
     private var activeRequestId: Long = 0
+    private var activeAssistantMessageId: Long? = null
+    private var activeAssistantPreview: String = ""
+    private val cancelledRequestIds = mutableSetOf<Long>()
     private var lastUserPrompt: String? = null
 
     private val settings = repository.observeSettings()
@@ -181,13 +191,31 @@ class ChatViewModel(
             ) {
                 sendJob?.cancel()
             }
-            repository.setInferenceMode(mode)
-            if (mode == InferenceMode.DOWNLOADED && !activeLocalModelStatus.value.ready) {
-                notice.value = activeLocalModelStatus.value.message
-                return@launch
+            withContext(Dispatchers.IO) {
+                repository.setInferenceMode(mode)
             }
-            when (val availability = repository.backendAvailability(mode, settings.value)) {
-                is BackendAvailability.Unavailable -> notice.value = availability.message
+
+            if (mode == InferenceMode.DOWNLOADED) {
+                val preparationError = withContext(Dispatchers.IO) {
+                    repository.prepareSelectedLocalModel()
+                }
+                if (!preparationError.isNullOrBlank() && shouldSurfaceNotice(
+                        mode,
+                        preparationError
+                    )
+                ) {
+                    notice.value = preparationError
+                    return@launch
+                }
+            }
+
+            when (val availability = withContext(Dispatchers.IO) {
+                repository.backendAvailability(mode, settings.value)
+            }) {
+                is BackendAvailability.Unavailable -> {
+                    notice.value = availability.message.takeIf { shouldSurfaceNotice(mode, it) }
+                }
+
                 BackendAvailability.Available -> notice.value = null
             }
         }
@@ -208,71 +236,155 @@ class ChatViewModel(
         val sessionId = activeSessionId.value ?: return
         if (prompt.isBlank() || isSending.value) return
 
-        if (
-            settings.value.inferenceMode == InferenceMode.DOWNLOADED &&
-            !activeLocalModelStatus.value.ready
-        ) {
-            notice.value = activeLocalModelStatus.value.message
-            return
-        }
-
-        val requestId = ++activeRequestId
         sendJob?.cancel()
+        val requestId = ++activeRequestId
+        cancelledRequestIds.remove(requestId)
+        isSending.value = true
+        notice.value = null
+        lastUserPrompt = prompt
+
         sendJob = viewModelScope.launch {
-            isSending.value = true
-            notice.value = null
-            lastUserPrompt = prompt
-            var assistantMessageId: Long? = null
-
-            try {
-                val snapshot = settings.value
-                val mode = snapshot.inferenceMode
-                val availability = repository.backendAvailability(mode, snapshot)
-                if (availability is BackendAvailability.Unavailable) {
-                    notice.value = availability.message
-                    return@launch
-                }
-
-                val history = repository.recentTurnsFor(mode, sessionId)
-                repository.saveUserMessage(sessionId, prompt, snapshot)
-                val createdAssistantMessageId =
-                    repository.insertAssistantPlaceholder(sessionId, snapshot)
-                assistantMessageId = createdAssistantMessageId
-                draft.value = ""
-
+            generationMutex.withLock {
+                var assistantMessageId: Long? = null
                 val assembler = StreamingMessageAssembler()
                 var lastPersistTimeMs = 0L
                 var lastPersistedLength = 0
                 var lastPersistedSnapshot = ""
+                var hasVisibleContent = false
+                var watchdogTriggered = false
+                var watchdogJob: Job? = null
 
-                repository.streamResponse(mode, history, prompt, snapshot).collect { delta ->
-                    val content = assembler.append(mode, delta)
-                    if (
-                        mode != InferenceMode.AICORE &&
-                        shouldPersistStreamSnapshot(content, lastPersistTimeMs, lastPersistedLength)
-                    ) {
-                        repository.updateAssistantMessage(createdAssistantMessageId, content)
-                        lastPersistTimeMs = System.currentTimeMillis()
-                        lastPersistedLength = content.length
-                        lastPersistedSnapshot = content
+                try {
+                    val snapshot = settings.value
+                    val mode = snapshot.inferenceMode
+
+                    if (mode == InferenceMode.DOWNLOADED) {
+                        val preparationError = withContext(Dispatchers.IO) {
+                            repository.prepareSelectedLocalModel()
+                        }
+                        if (!preparationError.isNullOrBlank()) {
+                            notice.value = preparationError.takeIf { shouldSurfaceNotice(mode, it) }
+                            return@withLock
+                        }
                     }
-                }
 
-                val finalContent = assembler.current()
-                if (mode == InferenceMode.AICORE || finalContent != lastPersistedSnapshot) {
-                    repository.updateAssistantMessage(createdAssistantMessageId, finalContent)
-                }
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (error: Throwable) {
-                val message = userFacingError(error).ifBlank { "Unable to complete the request." }
-                notice.value = message
-                assistantMessageId?.let { messageId ->
-                    repository.updateAssistantMessage(messageId, message)
-                }
-            } finally {
-                if (activeRequestId == requestId) {
-                    isSending.value = false
+                    val availability = withContext(Dispatchers.IO) {
+                        repository.backendAvailability(mode, snapshot)
+                    }
+                    if (availability is BackendAvailability.Unavailable) {
+                        notice.value = availability.message.takeIf { shouldSurfaceNotice(mode, it) }
+                        return@withLock
+                    }
+
+                    val history = withContext(Dispatchers.IO) {
+                        repository.recentTurnsFor(mode, sessionId)
+                    }
+                    val createdAssistantMessageId = withContext(Dispatchers.IO) {
+                        repository.saveUserMessage(sessionId, prompt, snapshot)
+                        repository.insertAssistantPlaceholder(sessionId, snapshot)
+                    }
+
+                    assistantMessageId = createdAssistantMessageId
+                    activeAssistantMessageId = createdAssistantMessageId
+                    activeAssistantPreview = ""
+                    draft.value = ""
+
+                    val parentJob = coroutineContext[Job]
+                    watchdogJob = launch {
+                        delay(firstTokenWatchdogMs(mode))
+                        if (!hasVisibleContent && isCurrentRequest(requestId)) {
+                            watchdogTriggered = true
+                            parentJob?.cancel(
+                                GenerationWatchdogTimeout(
+                                    "No response arrived in time. Retry or reselect this model."
+                                )
+                            )
+                        }
+                    }
+
+                    repository.streamResponse(mode, history, prompt, snapshot).collect { delta ->
+                        ensureRequestActive(requestId)
+                        val content = assembler.append(mode, delta)
+                        activeAssistantPreview = content
+                        if (content.isNotBlank()) {
+                            hasVisibleContent = true
+                        }
+
+                        if (
+                            mode != InferenceMode.AICORE &&
+                            shouldPersistStreamSnapshot(
+                                content,
+                                lastPersistTimeMs,
+                                lastPersistedLength
+                            )
+                        ) {
+                            withContext(Dispatchers.IO) {
+                                repository.updateAssistantMessage(
+                                    createdAssistantMessageId,
+                                    content
+                                )
+                            }
+                            lastPersistTimeMs = System.currentTimeMillis()
+                            lastPersistedLength = content.length
+                            lastPersistedSnapshot = content
+                        }
+                    }
+
+                    ensureRequestActive(requestId)
+
+                    val finalContent = assembler.current()
+                    if (finalContent.isBlank()) {
+                        throw InferenceException.BackendUnavailable(
+                            "Local model produced no visible text. Try again or reselect this model."
+                        )
+                    }
+
+                    if (mode == InferenceMode.AICORE || finalContent != lastPersistedSnapshot) {
+                        withContext(Dispatchers.IO) {
+                            repository.updateAssistantMessage(
+                                createdAssistantMessageId,
+                                finalContent
+                            )
+                        }
+                    }
+                } catch (cancellation: CancellationException) {
+                    val cancelledContent = when {
+                        activeAssistantPreview.isNotBlank() -> activeAssistantPreview
+                        watchdogTriggered || cancellation is GenerationWatchdogTimeout -> WATCHDOG_TIMEOUT_MESSAGE
+                        else -> CANCELLATION_MESSAGE
+                    }
+
+                    assistantMessageId?.let { messageId ->
+                        withContext(NonCancellable + Dispatchers.IO) {
+                            repository.updateAssistantMessage(messageId, cancelledContent)
+                        }
+                    }
+
+                    if (watchdogTriggered || cancellation is GenerationWatchdogTimeout) {
+                        val mode = settings.value.inferenceMode
+                        notice.value =
+                            WATCHDOG_TIMEOUT_MESSAGE.takeIf { shouldSurfaceNotice(mode, it) }
+                    }
+                } catch (error: Throwable) {
+                    val message =
+                        userFacingError(error).ifBlank { "Unable to complete the request." }
+                    val mode = settings.value.inferenceMode
+                    notice.value = message.takeIf { shouldSurfaceNotice(mode, it) }
+                    assistantMessageId?.let { messageId ->
+                        withContext(Dispatchers.IO) {
+                            repository.updateAssistantMessage(messageId, message)
+                        }
+                    }
+                } finally {
+                    watchdogJob?.cancel()
+                    if (activeAssistantMessageId == assistantMessageId) {
+                        activeAssistantMessageId = null
+                        activeAssistantPreview = ""
+                    }
+                    cancelledRequestIds.remove(requestId)
+                    if (activeRequestId == requestId) {
+                        isSending.value = false
+                    }
                 }
             }
         }
@@ -280,11 +392,26 @@ class ChatViewModel(
 
     fun stopGeneration() {
         if (!isSending.value) return
-        sendJob?.cancel()
-        if (settings.value.inferenceMode == InferenceMode.DOWNLOADED) {
-            repository.releaseDownloadedRuntime()
+
+        val requestId = activeRequestId
+        cancelledRequestIds += requestId
+        activeRequestId = requestId + 1
+
+        val assistantMessageId = activeAssistantMessageId
+        val partialContent = activeAssistantPreview
+
+        sendJob?.cancel(CancellationException(CANCELLATION_MESSAGE))
+        if (assistantMessageId != null && partialContent.isNotBlank()) {
+            viewModelScope.launch(Dispatchers.IO) {
+                repository.updateAssistantMessage(
+                    assistantMessageId,
+                    partialContent
+                )
+            }
         }
+
         isSending.value = false
+        notice.value = null
     }
 
     private fun shouldPersistStreamSnapshot(
@@ -301,6 +428,24 @@ class ChatViewModel(
         return elapsedMs >= STREAM_PERSIST_INTERVAL_MS || lengthGrowth >= STREAM_PERSIST_MIN_LENGTH_DELTA
     }
 
+    private fun isCurrentRequest(requestId: Long): Boolean {
+        return activeRequestId == requestId && !cancelledRequestIds.contains(requestId)
+    }
+
+    private fun ensureRequestActive(requestId: Long) {
+        if (!isCurrentRequest(requestId)) {
+            throw CancellationException("Generation request was superseded.")
+        }
+    }
+
+    private fun firstTokenWatchdogMs(mode: InferenceMode): Long {
+        return if (mode == InferenceMode.DOWNLOADED) {
+            LOCAL_FIRST_TOKEN_WATCHDOG_MS
+        } else {
+            REMOTE_FIRST_TOKEN_WATCHDOG_MS
+        }
+    }
+
     private fun userFacingError(error: Throwable): String {
         return when (error) {
             is InferenceException.Configuration -> error.message.orEmpty()
@@ -311,11 +456,22 @@ class ChatViewModel(
         }
     }
 
+    private fun shouldSurfaceNotice(mode: InferenceMode, _message: String): Boolean {
+        return mode != InferenceMode.DOWNLOADED
+    }
+
     private companion object {
         const val STREAM_PERSIST_INTERVAL_MS = 180L
         const val STREAM_PERSIST_MIN_LENGTH_DELTA = 24
+        const val LOCAL_FIRST_TOKEN_WATCHDOG_MS = 18_000L
+        const val REMOTE_FIRST_TOKEN_WATCHDOG_MS = 25_000L
+        const val CANCELLATION_MESSAGE = "Generation cancelled."
+        const val WATCHDOG_TIMEOUT_MESSAGE =
+            "No response arrived in time. Retry last, or reselect the local model."
     }
 }
+
+private class GenerationWatchdogTimeout(message: String) : CancellationException(message)
 
 private data class SessionUiState(
     val sessions: List<ChatSession>,

@@ -19,14 +19,14 @@ class ModelCardActionLabelTest {
     }
 
     @Test
-    fun `installed active state maps to selected`() {
+    fun `installed active state maps to use model`() {
         val card = card(
             installState = ModelInstallState.INSTALLED,
             compatibility = LocalModelCompatibilityState.Ready,
             isActive = true
         )
 
-        assertEquals("Selected", card.primaryActionLabel())
+        assertEquals("Use model", card.primaryActionLabel())
     }
 
     @Test

@@ -32,24 +32,23 @@ class ModelManagerViewModel(
     private val notice = MutableStateFlow<String?>(null)
     private val isRefreshing = MutableStateFlow(false)
 
-    init {
-        localModelRepository.reconcile()
-    }
-
     val uiState: StateFlow<ModelGalleryScreenState> = combine(
         localModelRepository.allowlist,
         localModelRepository.records,
+        localModelRepository.recordsHydrated,
         localModelRepository.activeModelStatus,
-        localModelRepository.runtimeLoadState,
-        notice
-    ) { allowlist, records, activeStatus, runtimeLoadState, noticeValue ->
+        localModelRepository.runtimeLoadState
+    ) { allowlist, records, recordsHydrated, activeStatus, runtimeLoadState ->
         GalleryInputs(
             allowlist = allowlist,
             records = records,
+            recordsHydrated = recordsHydrated,
             activeStatus = activeStatus,
             runtimeLoadState = runtimeLoadState,
-            notice = noticeValue
+            notice = null
         )
+    }.combine(notice) { inputs, noticeValue ->
+        inputs.copy(notice = noticeValue)
     }.combine(isRefreshing) { inputs, refreshing ->
         val runtimeMetrics = localModelRepository.latestRuntimeMetrics()
         val cardItems = inputs.records
@@ -107,20 +106,16 @@ class ModelManagerViewModel(
                     .thenBy { it.displayName.lowercase() }
             )
 
+        val allowlistHydrated = inputs.allowlist.models.isNotEmpty() ||
+                inputs.allowlist.version.value.isNotBlank() ||
+                !inputs.allowlist.lastRefreshError.isNullOrBlank()
+
         val phase = when {
-            inputs.allowlist.models.isEmpty() && inputs.allowlist.version.value.isBlank() -> {
-                ModelLibraryPhase.Loading
-            }
-
-            inputs.allowlist.models.isNotEmpty() && cardItems.size < inputs.allowlist.models.size -> {
-                ModelLibraryPhase.Loading
-            }
-
-            cardItems.isEmpty() && !inputs.allowlist.lastRefreshError.isNullOrBlank() -> {
-                ModelLibraryPhase.Error
-            }
-
-            else -> ModelLibraryPhase.Ready
+            cardItems.isNotEmpty() -> ModelLibraryPhase.Ready
+            !inputs.recordsHydrated -> ModelLibraryPhase.Loading
+            !allowlistHydrated -> ModelLibraryPhase.Loading
+            !inputs.allowlist.lastRefreshError.isNullOrBlank() -> ModelLibraryPhase.Error
+            else -> ModelLibraryPhase.Empty
         }
 
         val activeSummary = buildActiveSummary(
@@ -177,37 +172,31 @@ class ModelManagerViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val model = localModelRepository.records.value.firstOrNull { it.modelId == modelId }
             if (model == null) {
-                notice.update { "This model is not ready yet. Finish setup and try again." }
                 return@launch
             }
 
             val healthState = mapHealthState(model)
             if (healthState is LocalModelHealthState.UnsupportedForChat) {
-                notice.update { "This model is not optimized for chat in NanoChat." }
                 return@launch
             }
             if (healthState !is LocalModelHealthState.InstalledReady) {
-                notice.update { "This model is not ready yet. Finish setup and try again." }
                 return@launch
             }
 
             localModelRepository.setActiveModel(modelId)
-        }
-    }
-
-    fun loadModel(modelId: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val error = localModelRepository.prepareModelInMemory(modelId)
-            if (!error.isNullOrBlank()) {
-                notice.update { error }
-            }
+            localModelRepository.preferDownloadedMode()
+            localModelRepository.prepareModelInMemory(modelId)
         }
     }
 
     fun ejectModel(modelId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val error = localModelRepository.ejectModelFromMemory(modelId)
-            if (!error.isNullOrBlank()) {
+            if (!error.isNullOrBlank() && !error.contains(
+                    "not loaded in memory",
+                    ignoreCase = true
+                )
+            ) {
                 notice.update { error }
             }
         }
@@ -507,6 +496,7 @@ class ModelManagerViewModel(
     private data class GalleryInputs(
         val allowlist: com.fcm.nanochat.models.allowlist.AllowlistSnapshot,
         val records: List<com.fcm.nanochat.models.registry.InstalledModelRecord>,
+        val recordsHydrated: Boolean,
         val activeStatus: com.fcm.nanochat.models.registry.ActiveModelStatus,
         val runtimeLoadState: RuntimeLoadState,
         val notice: String?
@@ -532,14 +522,14 @@ class ModelManagerViewModelFactory(
 internal fun ModelCardUi.primaryActionLabel(): String {
     if (isActive) {
         return when (memoryState) {
-            LocalModelMemoryState.LoadingIntoMemory -> "Loading"
+            LocalModelMemoryState.LoadingIntoMemory -> "Preparing"
             LocalModelMemoryState.LoadedInMemory,
             LocalModelMemoryState.InUse -> "Eject"
 
             LocalModelMemoryState.EjectedFromMemory,
             LocalModelMemoryState.SelectedNotLoaded,
             LocalModelMemoryState.NeedsReload,
-            LocalModelMemoryState.FailedToLoad -> "Load"
+            LocalModelMemoryState.FailedToLoad -> "Use model"
 
             LocalModelMemoryState.NotSelected -> "Use model"
         }

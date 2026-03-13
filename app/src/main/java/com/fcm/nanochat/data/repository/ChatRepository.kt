@@ -46,6 +46,8 @@ class ChatRepository(
                 return@combine baseStatus
             }
 
+            val displayName = baseStatus.displayName?.trim().orEmpty().ifBlank { "Local model" }
+
             val runtimeModelId = runtimeState.modelId?.trim()?.lowercase().orEmpty()
             val sameModel = runtimeModelId == activeModelId
 
@@ -54,10 +56,13 @@ class ChatRepository(
                     if (sameModel) {
                         baseStatus.copy(
                             ready = false,
-                            message = "Selected local model is loading into memory."
+                            message = "Selected $displayName. Preparing local model..."
                         )
                     } else {
-                        baseStatus
+                        baseStatus.copy(
+                            ready = false,
+                            message = "Selected $displayName is not ready yet. NanoChat is preparing it now."
+                        )
                     }
                 }
 
@@ -65,36 +70,39 @@ class ChatRepository(
                     if (sameModel) {
                         baseStatus.copy(
                             ready = baseStatus.ready,
-                            message = if (baseStatus.ready) null else baseStatus.message
+                            message = if (baseStatus.ready) {
+                                "Ready for local chat"
+                            } else {
+                                baseStatus.message
+                            }
                         )
                     } else {
                         baseStatus.copy(
                             ready = false,
-                            message = "Selected local model is not loaded in memory. Open Model Library and press Load."
+                            message = "Selected $displayName is not ready yet. NanoChat will prepare it when local chat starts."
                         )
                     }
                 }
 
                 RuntimeLoadPhase.EJECTED,
                 RuntimeLoadPhase.IDLE -> {
-                    if (runtimeModelId.isBlank() || sameModel) {
-                        baseStatus.copy(
-                            ready = false,
-                            message = "Selected local model is not loaded in memory. Open Model Library and press Load."
-                        )
-                    } else {
-                        baseStatus
-                    }
+                    baseStatus.copy(
+                        ready = false,
+                        message = "Selected $displayName is not loaded. Open Model Library and tap Use model."
+                    )
                 }
 
                 RuntimeLoadPhase.FAILED -> {
                     if (runtimeModelId.isBlank() || sameModel) {
                         baseStatus.copy(
                             ready = false,
-                            message = "Selected local model failed to load into memory. Open Model Library and retry load."
+                            message = "Selected $displayName failed to prepare for local chat. Tap Use model to retry."
                         )
                     } else {
-                        baseStatus
+                        baseStatus.copy(
+                            ready = false,
+                            message = "Selected $displayName is not ready yet. NanoChat is preparing it now."
+                        )
                     }
                 }
             }
@@ -153,7 +161,7 @@ class ChatRepository(
                 role = ChatRole.USER,
                 content = content,
                 inferenceMode = settings.inferenceMode,
-                modelName = settings.modelName,
+                modelName = messageModelName(settings),
                 temperature = settings.temperature,
                 topP = settings.topP,
                 contextLength = settings.contextLength,
@@ -174,7 +182,7 @@ class ChatRepository(
                 role = ChatRole.ASSISTANT,
                 content = "",
                 inferenceMode = settings.inferenceMode,
-                modelName = settings.modelName,
+                modelName = messageModelName(settings),
                 temperature = settings.temperature,
                 topP = settings.topP,
                 contextLength = settings.contextLength,
@@ -198,10 +206,6 @@ class ChatRepository(
             downloadedInferenceClient.release()
         }
         preferences.updateInferenceMode(mode)
-    }
-
-    fun releaseDownloadedRuntime() {
-        downloadedInferenceClient.release()
     }
 
     suspend fun updateSettings(
@@ -235,6 +239,17 @@ class ChatRepository(
 
     suspend fun backendAvailability(mode: InferenceMode, settings: SettingsSnapshot): BackendAvailability =
         buildClient(mode).availability(settings)
+
+    suspend fun prepareSelectedLocalModel(): String? {
+        val selectedModelId = localModelRepository.activeModelStatus.value.modelId
+            ?.trim()
+            .orEmpty()
+            .lowercase()
+        if (selectedModelId.isBlank()) {
+            return "Choose a local model from Model Library."
+        }
+        return localModelRepository.prepareModelInMemory(selectedModelId)
+    }
 
     suspend fun recentTurnsFor(mode: InferenceMode, sessionId: Long): List<ChatTurn> {
         val limit = ChatDefaults.historyWindowFor(mode)
@@ -293,6 +308,23 @@ class ChatRepository(
             ChatDefaults.normalizedSessionTitle(content),
             now
         )
+    }
+
+    private fun messageModelName(settings: SettingsSnapshot): String {
+        if (settings.inferenceMode != InferenceMode.DOWNLOADED) {
+            return settings.modelName
+        }
+
+        val activeId = settings.activeLocalModelId.trim().lowercase()
+        if (activeId.isBlank()) {
+            return settings.modelName
+        }
+
+        return localModelRepository.records.value
+            .firstOrNull { it.modelId.equals(activeId, ignoreCase = true) }
+            ?.displayName
+            ?.ifBlank { settings.modelName }
+            ?: settings.modelName
     }
 }
 

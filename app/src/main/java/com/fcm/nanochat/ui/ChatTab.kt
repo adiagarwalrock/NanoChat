@@ -61,6 +61,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
@@ -696,53 +697,76 @@ private fun LocalModelStatusSurface(
     onOpenModelGallery: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val normalizedMessage = message?.trim().orEmpty()
+    val lowerMessage = normalizedMessage.lowercase()
+    val preparing = !isReady && (
+            "preparing" in lowerMessage ||
+                    "loading" in lowerMessage
+            )
+
+    val titleText = when {
+        isReady -> "Running on ${modelName.orEmpty().ifBlank { "local model" }}"
+        preparing -> "Preparing local model"
+        modelName.isNullOrBlank() -> "Select a local model"
+        else -> "Local model selected"
+    }
+
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(14.dp),
         color = if (isReady) {
             MaterialTheme.colorScheme.secondaryContainer
         } else {
-            MaterialTheme.colorScheme.errorContainer
+            MaterialTheme.colorScheme.surfaceContainerHigh
         }
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = if (isReady) {
-                        "Running on ${modelName.orEmpty().ifBlank { "local model" }}"
-                    } else {
-                        "Local model not ready"
-                    },
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (isReady) {
-                        MaterialTheme.colorScheme.onSecondaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onErrorContainer
-                    }
-                )
-                if (!message.isNullOrBlank()) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodySmall,
+                        text = titleText,
+                        style = MaterialTheme.typography.labelLarge,
                         color = if (isReady) {
                             MaterialTheme.colorScheme.onSecondaryContainer
                         } else {
-                            MaterialTheme.colorScheme.onErrorContainer
+                            MaterialTheme.colorScheme.onSurface
                         }
                     )
+                    if (normalizedMessage.isNotBlank()) {
+                        Text(
+                            text = normalizedMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isReady) {
+                                MaterialTheme.colorScheme.onSecondaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+                }
+                TextButton(onClick = onOpenModelGallery) {
+                    Text("Model library")
                 }
             }
-            TextButton(onClick = onOpenModelGallery) {
-                Text("Model library")
+
+            if (preparing) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                )
             }
         }
     }
@@ -893,6 +917,12 @@ private fun MessageRow(
                 ) {
                     if (message.content.isBlank() && message.isStreaming) {
                         TypingIndicator()
+                    } else if (message.content.isBlank()) {
+                        Text(
+                            text = stringResource(id = R.string.assistant_no_response_yet),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     } else {
                         MarkdownMessage(
                             content = message.content,
