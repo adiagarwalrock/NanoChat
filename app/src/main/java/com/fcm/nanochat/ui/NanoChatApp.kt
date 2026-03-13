@@ -73,6 +73,7 @@ fun NanoChatApp(
     onCancelModelDownload: (String) -> Unit = {},
     onRetryModelDownload: (String) -> Unit = {},
     onUseModel: (String) -> Unit = {},
+    onEjectModel: (String) -> Unit = {},
     onDeleteModel: (String) -> Unit = {},
     onMoveModelStorage: (String, com.fcm.nanochat.models.registry.ModelStorageLocation) -> Unit = { _, _ -> },
     onImportLocalModel: () -> Unit = {},
@@ -105,6 +106,12 @@ fun NanoChatApp(
         val currentNotice = chatState.notice ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(currentNotice)
         onDismissNotice()
+    }
+
+    LaunchedEffect(modelState.notice) {
+        val currentNotice = modelState.notice ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(currentNotice)
+        onDismissModelNotice()
     }
 
     ModalNavigationDrawer(
@@ -196,10 +203,10 @@ fun NanoChatApp(
                         onCancelModelDownload = onCancelModelDownload,
                         onRetryModelDownload = onRetryModelDownload,
                         onUseModel = onUseModel,
+                        onEjectModel = onEjectModel,
                         onDeleteModel = onDeleteModel,
                         onMoveModelStorage = onMoveModelStorage,
-                        onImportLocalModel = onImportLocalModel,
-                        onDismissModelNotice = onDismissModelNotice
+                        onImportLocalModel = onImportLocalModel
                     )
                 }
 
@@ -259,10 +266,10 @@ private fun ModelsPage(
     onCancelModelDownload: (String) -> Unit,
     onRetryModelDownload: (String) -> Unit,
     onUseModel: (String) -> Unit,
+    onEjectModel: (String) -> Unit,
     onDeleteModel: (String) -> Unit,
     onMoveModelStorage: (String, com.fcm.nanochat.models.registry.ModelStorageLocation) -> Unit,
-    onImportLocalModel: () -> Unit,
-    onDismissModelNotice: () -> Unit
+    onImportLocalModel: () -> Unit
 ) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -292,11 +299,11 @@ private fun ModelsPage(
             onCancelDownload = onCancelModelDownload,
             onRetryDownload = onRetryModelDownload,
             onUseModel = onUseModel,
+            onEjectModel = onEjectModel,
             onDeleteModel = onDeleteModel,
             onMoveStorage = onMoveModelStorage,
             onImportLocalModel = onImportLocalModel,
-            onOpenHuggingFaceSettings = onOpenHuggingFaceSettings,
-            onClearNotice = onDismissModelNotice
+            onOpenHuggingFaceSettings = onOpenHuggingFaceSettings
         )
     }
 }

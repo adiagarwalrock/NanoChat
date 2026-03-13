@@ -95,11 +95,39 @@ data class ModelGalleryScreenState(
     val allowlistVersion: String = "",
     val allowlistSource: AllowlistSourceType = AllowlistSourceType.BUNDLED,
     val allowlistRefreshedAtEpochMs: Long = 0L,
+    val phase: ModelLibraryPhase = ModelLibraryPhase.Loading,
     val activeModelId: String? = null,
+    val activeSummary: ActiveLocalModelSummaryUi? = null,
     val models: List<ModelCardUi> = emptyList(),
+    val libraryError: String? = null,
     val runtimeMetrics: RuntimeDiagnosticsUi? = null,
     val notice: String? = null,
     val isRefreshing: Boolean = false
+)
+
+enum class ModelLibraryPhase {
+    Loading,
+    Ready,
+    Error
+}
+
+enum class LocalModelMemoryState {
+    NotSelected,
+    SelectedNotLoaded,
+    LoadingIntoMemory,
+    LoadedInMemory,
+    InUse,
+    EjectedFromMemory,
+    NeedsReload,
+    FailedToLoad
+}
+
+data class ActiveLocalModelSummaryUi(
+    val modelId: String,
+    val displayName: String,
+    val memoryState: LocalModelMemoryState,
+    val statusText: String,
+    val metricsText: String?
 )
 
 data class ModelCardUi(
@@ -125,6 +153,8 @@ data class ModelCardUi(
     val installState: ModelInstallState,
     val compatibility: LocalModelCompatibilityState,
     val healthState: LocalModelHealthState = LocalModelHealthState.NotInstalled,
+    val memoryState: LocalModelMemoryState = LocalModelMemoryState.NotSelected,
+    val memoryMessage: String? = null,
     val isActive: Boolean,
     val isLegacy: Boolean,
     val storageLocation: ModelStorageLocation,

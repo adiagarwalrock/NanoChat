@@ -18,7 +18,9 @@ import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatSession
 import com.fcm.nanochat.model.UsageStats
 import com.fcm.nanochat.models.registry.ActiveModelStatus
+import com.fcm.nanochat.models.runtime.RuntimeLoadPhase
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
@@ -35,7 +37,68 @@ class ChatRepository(
     fun observePinnedSessionIds(): Flow<Set<Long>> = preferences.pinnedSessionIds
 
     fun observeActiveLocalModelStatus(): Flow<ActiveModelStatus> =
-        localModelRepository.activeModelStatus
+        combine(
+            localModelRepository.activeModelStatus,
+            localModelRepository.runtimeLoadState
+        ) { baseStatus, runtimeState ->
+            val activeModelId = baseStatus.modelId?.trim()?.lowercase().orEmpty()
+            if (activeModelId.isBlank()) {
+                return@combine baseStatus
+            }
+
+            val runtimeModelId = runtimeState.modelId?.trim()?.lowercase().orEmpty()
+            val sameModel = runtimeModelId == activeModelId
+
+            when (runtimeState.phase) {
+                RuntimeLoadPhase.LOADING -> {
+                    if (sameModel) {
+                        baseStatus.copy(
+                            ready = false,
+                            message = "Selected local model is loading into memory."
+                        )
+                    } else {
+                        baseStatus
+                    }
+                }
+
+                RuntimeLoadPhase.LOADED -> {
+                    if (sameModel) {
+                        baseStatus.copy(
+                            ready = baseStatus.ready,
+                            message = if (baseStatus.ready) null else baseStatus.message
+                        )
+                    } else {
+                        baseStatus.copy(
+                            ready = false,
+                            message = "Selected local model is not loaded in memory. Open Model Library and press Load."
+                        )
+                    }
+                }
+
+                RuntimeLoadPhase.EJECTED,
+                RuntimeLoadPhase.IDLE -> {
+                    if (runtimeModelId.isBlank() || sameModel) {
+                        baseStatus.copy(
+                            ready = false,
+                            message = "Selected local model is not loaded in memory. Open Model Library and press Load."
+                        )
+                    } else {
+                        baseStatus
+                    }
+                }
+
+                RuntimeLoadPhase.FAILED -> {
+                    if (runtimeModelId.isBlank() || sameModel) {
+                        baseStatus.copy(
+                            ready = false,
+                            message = "Selected local model failed to load into memory. Open Model Library and retry load."
+                        )
+                    } else {
+                        baseStatus
+                    }
+                }
+            }
+        }
 
     fun observeSessions(): Flow<List<ChatSession>> =
         database.sessionDao().observeSessions().map { sessions ->

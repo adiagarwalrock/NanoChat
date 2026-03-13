@@ -61,7 +61,64 @@ class DownloadedModelInferenceClient(
         }
 
         return when (val compatibility = record.compatibility) {
-            LocalModelCompatibilityState.Ready -> BackendAvailability.Available
+            LocalModelCompatibilityState.Ready -> {
+                if (!record.isActive) {
+                    BackendAvailability.Available
+                } else {
+                    val runtimeState = runtimeManager.loadState.value
+                    val runtimeModelId = runtimeState.modelId?.trim()?.lowercase().orEmpty()
+                    val selectedModelId = record.modelId.trim().lowercase()
+
+                    when (runtimeState.phase) {
+                        com.fcm.nanochat.models.runtime.RuntimeLoadPhase.LOADING -> {
+                            if (runtimeModelId == selectedModelId) {
+                                BackendAvailability.Unavailable(
+                                    "Selected local model is loading into memory."
+                                )
+                            } else {
+                                BackendAvailability.Unavailable(
+                                    "Selected local model is not loaded in memory. Open Model Library and press Load."
+                                )
+                            }
+                        }
+
+                        com.fcm.nanochat.models.runtime.RuntimeLoadPhase.LOADED -> {
+                            if (runtimeModelId == selectedModelId) {
+                                BackendAvailability.Available
+                            } else {
+                                BackendAvailability.Unavailable(
+                                    "Selected local model is not loaded in memory. Open Model Library and press Load."
+                                )
+                            }
+                        }
+
+                        com.fcm.nanochat.models.runtime.RuntimeLoadPhase.EJECTED,
+                        com.fcm.nanochat.models.runtime.RuntimeLoadPhase.IDLE -> {
+                            if (runtimeModelId.isBlank() || runtimeModelId == selectedModelId) {
+                                BackendAvailability.Unavailable(
+                                    "Selected local model is not loaded in memory. Open Model Library and press Load."
+                                )
+                            } else {
+                                BackendAvailability.Unavailable(
+                                    "Selected local model is not loaded in memory. Open Model Library and press Load."
+                                )
+                            }
+                        }
+
+                        com.fcm.nanochat.models.runtime.RuntimeLoadPhase.FAILED -> {
+                            if (runtimeModelId.isBlank() || runtimeModelId == selectedModelId) {
+                                BackendAvailability.Unavailable(
+                                    "Selected local model failed to load into memory. Open Model Library and retry load."
+                                )
+                            } else {
+                                BackendAvailability.Unavailable(
+                                    "Selected local model is not loaded in memory. Open Model Library and press Load."
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             LocalModelCompatibilityState.Downloadable -> {
                 BackendAvailability.Unavailable("Download this local model before using it.")
             }

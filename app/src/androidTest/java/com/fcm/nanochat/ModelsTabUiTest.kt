@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import com.fcm.nanochat.model.ModelCardUi
 import com.fcm.nanochat.model.ModelGalleryScreenState
+import com.fcm.nanochat.model.ModelLibraryPhase
 import com.fcm.nanochat.models.allowlist.AllowlistSourceType
 import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
 import com.fcm.nanochat.models.registry.ModelInstallState
@@ -23,6 +24,7 @@ class ModelsTabUiTest {
         val state = ModelGalleryScreenState(
             allowlistVersion = "1_0_10",
             allowlistSource = AllowlistSourceType.BUNDLED,
+            phase = ModelLibraryPhase.Ready,
             models = listOf(
                 sampleCard(
                     modelId = "qwen",
@@ -41,10 +43,10 @@ class ModelsTabUiTest {
                 onCancelDownload = {},
                 onRetryDownload = {},
                 onUseModel = {},
+                onEjectModel = {},
                 onDeleteModel = {},
                 onMoveStorage = { _, _ -> },
-                onImportLocalModel = {},
-                onClearNotice = {}
+                onImportLocalModel = {}
             )
         }
 
@@ -58,6 +60,7 @@ class ModelsTabUiTest {
         val state = ModelGalleryScreenState(
             allowlistVersion = "1_0_10",
             allowlistSource = AllowlistSourceType.BUNDLED,
+            phase = ModelLibraryPhase.Ready,
             models = listOf(
                 sampleCard(
                     modelId = "gemma-e4b",
@@ -79,10 +82,10 @@ class ModelsTabUiTest {
                 onCancelDownload = {},
                 onRetryDownload = {},
                 onUseModel = {},
+                onEjectModel = {},
                 onDeleteModel = {},
                 onMoveStorage = { _, _ -> },
-                onImportLocalModel = {},
-                onClearNotice = {}
+                onImportLocalModel = {}
             )
         }
 

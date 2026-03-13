@@ -20,6 +20,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SdStorage
@@ -38,7 +40,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -85,6 +86,8 @@ private enum class ActionType {
     Resume,
     Retry,
     Use,
+    Load,
+    Eject,
     AddToken,
     Cancel,
     Delete,
@@ -113,16 +116,17 @@ internal fun ModelsTab(
     onCancelDownload: (String) -> Unit,
     onRetryDownload: (String) -> Unit,
     onUseModel: (String) -> Unit,
+    onEjectModel: (String) -> Unit,
     onDeleteModel: (String) -> Unit,
     onMoveStorage: (String, ModelStorageLocation) -> Unit,
     onImportLocalModel: () -> Unit,
-    onOpenHuggingFaceSettings: () -> Unit = {},
-    onClearNotice: () -> Unit
+    onOpenHuggingFaceSettings: () -> Unit = {}
 ) {
     var detailsModelId by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     var selectedFilter by rememberSaveable { mutableStateOf(ModelFilter.All) }
     var selectedSort by rememberSaveable { mutableStateOf(ModelSort.Recommended) }
+    var otherExpanded by rememberSaveable { mutableStateOf(false) }
 
     val filteredModels = remember(state.models, query, selectedFilter, selectedSort) {
         state.models
@@ -132,8 +136,13 @@ internal fun ModelsTab(
             .sortedWith(selectedSort.comparator())
             .toList()
     }
-    val recommended = filteredModels.filter { it.recommendedForChat }
-    val other = filteredModels.filterNot { it.recommendedForChat }
+    val primaryModels = filteredModels.filter {
+        it.recommendedForChat || it.installState == ModelInstallState.INSTALLED || it.isActive
+    }
+    val otherModels = filteredModels.filterNot {
+        it.recommendedForChat || it.installState == ModelInstallState.INSTALLED || it.isActive
+    }
+    val filtersApplied = query.trim().isNotBlank() || selectedFilter != ModelFilter.All
     val detailsModel = remember(detailsModelId, state.models) {
         state.models.firstOrNull { it.modelId == detailsModelId }
     }
@@ -146,44 +155,28 @@ internal fun ModelsTab(
             LibraryHeader(
                 allowlistVersion = state.allowlistVersion,
                 isRefreshing = state.isRefreshing,
-                onRefresh = onRefresh,
-                onImportLocalModel = onImportLocalModel
+                onRefresh = onRefresh
             )
         }
 
-        if (state.notice != null) {
+        if (state.activeSummary != null) {
             item {
-                NoticeBanner(
-                    message = toFriendlyError(state.notice),
-                    onDismiss = onClearNotice
+                ActiveModelSummaryStrip(
+                    summary = state.activeSummary,
+                    runtimeMetrics = state.runtimeMetrics,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
                 )
             }
         }
 
-        state.runtimeMetrics?.let { metrics ->
-            item {
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = stringResource(
-                            id = R.string.local_runtime_summary,
-                            metrics.modelId,
-                            metrics.timeToFirstTokenMs,
-                            "%.1f".format(metrics.tokensPerSecond)
-                        ),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                    )
-                }
-            }
-        }
-
         stickyHeader {
-            Surface(color = MaterialTheme.colorScheme.background) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                tonalElevation = 2.dp,
+                shadowElevation = 2.dp
+            ) {
                 PinnedToolsHeader(
                     query = query,
                     selectedFilter = selectedFilter,
@@ -195,79 +188,127 @@ internal fun ModelsTab(
             }
         }
 
-        if (recommended.isNotEmpty()) {
-            item {
-                SectionHeader(
-                    title = stringResource(id = R.string.recommended_for_chat),
-                    count = recommended.size
-                )
+        when (state.phase) {
+            com.fcm.nanochat.model.ModelLibraryPhase.Loading -> {
+                items(3) {
+                    LoadingModelCard()
+                }
             }
-            items(recommended, key = { it.modelId }) { model ->
-                SimplifiedModelCard(
-                    model = model,
-                    onOpenDetails = { detailsModelId = model.modelId },
-                    onOpenHuggingFaceSettings = onOpenHuggingFaceSettings,
-                    onDownload = { onDownload(model.modelId) },
-                    onCancelDownload = { onCancelDownload(model.modelId) },
-                    onRetryDownload = { onRetryDownload(model.modelId) },
-                    onUseModel = { onUseModel(model.modelId) },
-                    onDeleteModel = { onDeleteModel(model.modelId) },
-                    onMoveStorage = {
-                        val target = if (model.storageLocation == ModelStorageLocation.INTERNAL) {
-                            ModelStorageLocation.EXTERNAL
-                        } else {
-                            ModelStorageLocation.INTERNAL
-                        }
-                        onMoveStorage(model.modelId, target)
-                    }
-                )
-            }
-        }
 
-        if (other.isNotEmpty()) {
-            item {
-                SectionHeader(
-                    title = stringResource(id = R.string.other_supported_models),
-                    count = other.size
-                )
-            }
-            items(other, key = { it.modelId }) { model ->
-                SimplifiedModelCard(
-                    model = model,
-                    onOpenDetails = { detailsModelId = model.modelId },
-                    onOpenHuggingFaceSettings = onOpenHuggingFaceSettings,
-                    onDownload = { onDownload(model.modelId) },
-                    onCancelDownload = { onCancelDownload(model.modelId) },
-                    onRetryDownload = { onRetryDownload(model.modelId) },
-                    onUseModel = { onUseModel(model.modelId) },
-                    onDeleteModel = { onDeleteModel(model.modelId) },
-                    onMoveStorage = {
-                        val target = if (model.storageLocation == ModelStorageLocation.INTERNAL) {
-                            ModelStorageLocation.EXTERNAL
-                        } else {
-                            ModelStorageLocation.INTERNAL
-                        }
-                        onMoveStorage(model.modelId, target)
-                    }
-                )
-            }
-        }
-
-        if (filteredModels.isEmpty()) {
-            item {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = stringResource(id = R.string.no_models_match_filters),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp)
+            com.fcm.nanochat.model.ModelLibraryPhase.Error -> {
+                item {
+                    ErrorLoadingState(
+                        message = state.libraryError?.trim().orEmpty().ifBlank {
+                            "Unable to load model library."
+                        },
+                        onRetry = onRefresh,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
                     )
                 }
             }
+
+            com.fcm.nanochat.model.ModelLibraryPhase.Ready -> {
+                if (primaryModels.isNotEmpty()) {
+                    item {
+                        SectionHeader(
+                            title = stringResource(id = R.string.recommended_for_chat),
+                            count = primaryModels.size
+                        )
+                    }
+                    items(primaryModels, key = { it.modelId }) { model ->
+                        SimplifiedModelCard(
+                            model = model,
+                            onOpenDetails = { detailsModelId = model.modelId },
+                            onOpenHuggingFaceSettings = onOpenHuggingFaceSettings,
+                            onDownload = { onDownload(model.modelId) },
+                            onCancelDownload = { onCancelDownload(model.modelId) },
+                            onRetryDownload = { onRetryDownload(model.modelId) },
+                            onUseModel = { onUseModel(model.modelId) },
+                            onEjectModel = { onEjectModel(model.modelId) },
+                            onDeleteModel = { onDeleteModel(model.modelId) },
+                            onMoveStorage = {
+                                val target =
+                                    if (model.storageLocation == ModelStorageLocation.INTERNAL) {
+                                        ModelStorageLocation.EXTERNAL
+                                    } else {
+                                        ModelStorageLocation.INTERNAL
+                                    }
+                                onMoveStorage(model.modelId, target)
+                            }
+                        )
+                    }
+                }
+
+                if (otherModels.isNotEmpty()) {
+                    item {
+                        AccordionSectionHeader(
+                            title = stringResource(id = R.string.other_supported_models),
+                            count = otherModels.size,
+                            expanded = otherExpanded,
+                            onToggle = { otherExpanded = !otherExpanded }
+                        )
+                    }
+                    item {
+                        AnimatedVisibility(visible = otherExpanded) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                otherModels.forEach { model ->
+                                    SimplifiedModelCard(
+                                        model = model,
+                                        onOpenDetails = { detailsModelId = model.modelId },
+                                        onOpenHuggingFaceSettings = onOpenHuggingFaceSettings,
+                                        onDownload = { onDownload(model.modelId) },
+                                        onCancelDownload = { onCancelDownload(model.modelId) },
+                                        onRetryDownload = { onRetryDownload(model.modelId) },
+                                        onUseModel = { onUseModel(model.modelId) },
+                                        onEjectModel = { onEjectModel(model.modelId) },
+                                        onDeleteModel = { onDeleteModel(model.modelId) },
+                                        onMoveStorage = {
+                                            val target =
+                                                if (model.storageLocation == ModelStorageLocation.INTERNAL) {
+                                                    ModelStorageLocation.EXTERNAL
+                                                } else {
+                                                    ModelStorageLocation.INTERNAL
+                                                }
+                                            onMoveStorage(model.modelId, target)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (filteredModels.isEmpty() && state.models.isNotEmpty() && filtersApplied) {
+                    item {
+                        EmptyFilterState(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                        )
+                    }
+                }
+
+                if (filteredModels.isEmpty() && state.models.isEmpty() && !filtersApplied) {
+                    item {
+                        EmptyLibraryState(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            ImportLocalModelSection(
+                onImportLocalModel = onImportLocalModel,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            )
         }
 
         item { Spacer(modifier = Modifier.height(18.dp)) }
@@ -285,6 +326,7 @@ internal fun ModelsTab(
             onCancelDownload = { onCancelDownload(detailsModel.modelId) },
             onRetryDownload = { onRetryDownload(detailsModel.modelId) },
             onUseModel = { onUseModel(detailsModel.modelId) },
+            onEjectModel = { onEjectModel(detailsModel.modelId) },
             onDeleteModel = { onDeleteModel(detailsModel.modelId) },
             onMoveStorage = {
                 val target = if (detailsModel.storageLocation == ModelStorageLocation.INTERNAL) {
@@ -302,8 +344,7 @@ internal fun ModelsTab(
 private fun LibraryHeader(
     allowlistVersion: String,
     isRefreshing: Boolean,
-    onRefresh: () -> Unit,
-    onImportLocalModel: () -> Unit
+    onRefresh: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -337,45 +378,221 @@ private fun LibraryHeader(
                 )
             }
         }
+    }
+}
 
-        OutlinedButton(
-            onClick = onImportLocalModel,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp)
+@Composable
+private fun ActiveModelSummaryStrip(
+    summary: com.fcm.nanochat.model.ActiveLocalModelSummaryUi,
+    runtimeMetrics: com.fcm.nanochat.model.RuntimeDiagnosticsUi?,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Icon(Icons.Default.SdStorage, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(text = stringResource(id = R.string.import_local_model_coming_soon))
+            Text(
+                text = stringResource(id = R.string.active_local_model),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Text(
+                text = "${summary.displayName} - ${summary.statusText}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            val metricsText = runtimeMetrics
+                ?.takeIf { it.modelId.equals(summary.modelId, ignoreCase = true) }
+                ?.let {
+                    stringResource(
+                        id = R.string.local_runtime_summary,
+                        it.modelId,
+                        it.timeToFirstTokenMs,
+                        "%.1f".format(it.tokensPerSecond)
+                    )
+                }
+                ?: summary.metricsText
+
+            if (!metricsText.isNullOrBlank()) {
+                Text(
+                    text = metricsText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun NoticeBanner(
+private fun LoadingModelCard() {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = stringResource(id = R.string.loading_model_library),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+private fun ErrorLoadingState(
     message: String,
-    onDismiss: () -> Unit
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(id = R.string.unable_to_load_models),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Text(
+                text = toFriendlyError(message),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            TextButton(onClick = onRetry) {
+                Text(text = stringResource(id = R.string.gemini_refresh_status))
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccordionSectionHeader(
+    title: String,
+    count: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
+            .clickable(onClick = onToggle)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = message,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier.weight(1f)
+                text = "$title ($count)",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface
             )
-            TextButton(onClick = onDismiss) {
-                Text(text = stringResource(id = R.string.dismiss))
+            Icon(
+                imageVector = if (expanded) {
+                    Icons.Filled.KeyboardArrowUp
+                } else {
+                    Icons.Filled.KeyboardArrowDown
+                },
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyFilterState(modifier: Modifier = Modifier) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier
+    ) {
+        Text(
+            text = stringResource(id = R.string.no_models_match_filters),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp)
+        )
+    }
+}
+
+@Composable
+private fun EmptyLibraryState(modifier: Modifier = Modifier) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier
+    ) {
+        Text(
+            text = stringResource(id = R.string.empty_library_message),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp)
+        )
+    }
+}
+
+@Composable
+private fun ImportLocalModelSection(
+    onImportLocalModel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = stringResource(id = R.string.import_local_model_title),
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Text(
+                    text = stringResource(id = R.string.import_local_model_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            OutlinedButton(onClick = onImportLocalModel) {
+                Icon(Icons.Default.SdStorage, contentDescription = null)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(text = stringResource(id = R.string.coming_soon))
             }
         }
     }
@@ -399,7 +616,7 @@ private fun PinnedToolsHeader(
             .padding(top = 6.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        OutlinedTextField(
+        androidx.compose.material3.TextField(
             value = query,
             onValueChange = onQueryChange,
             modifier = Modifier.fillMaxWidth(),
@@ -407,7 +624,16 @@ private fun PinnedToolsHeader(
             leadingIcon = {
                 Icon(Icons.Default.Search, contentDescription = null)
             },
-            placeholder = { Text(text = stringResource(id = R.string.search_models)) }
+            placeholder = { Text(text = stringResource(id = R.string.search_models)) },
+            shape = RoundedCornerShape(28.dp),
+            colors = androidx.compose.material3.TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
+            )
         )
 
         Row(
@@ -484,6 +710,7 @@ private fun SimplifiedModelCard(
     onCancelDownload: () -> Unit,
     onRetryDownload: () -> Unit,
     onUseModel: () -> Unit,
+    onEjectModel: () -> Unit,
     onDeleteModel: () -> Unit,
     onMoveStorage: () -> Unit
 ) {
@@ -524,8 +751,8 @@ private fun SimplifiedModelCard(
                         )
                         if (model.isActive) {
                             ModelStatusBadge(
-                                text = stringResource(id = R.string.selected_for_chat),
-                                tone = ModelBadgeTone.Positive
+                                text = model.memoryBadgeLabel(),
+                                tone = model.memoryBadgeTone()
                             )
                         }
                     }
@@ -623,7 +850,10 @@ private fun SimplifiedModelCard(
                             ActionType.Resume,
                             ActionType.Retry -> onRetryDownload()
 
-                            ActionType.Use -> onUseModel()
+                            ActionType.Use,
+                            ActionType.Load -> onUseModel()
+
+                            ActionType.Eject -> onEjectModel()
                             ActionType.AddToken -> onOpenHuggingFaceSettings()
                             ActionType.Cancel -> onCancelDownload()
                             ActionType.Delete -> onDeleteModel()
@@ -648,6 +878,7 @@ private fun SimplifiedModelCard(
                             when (actionPlan.secondaryAction) {
                                 ActionType.Cancel -> onCancelDownload()
                                 ActionType.Delete -> onDeleteModel()
+                                ActionType.Eject -> onEjectModel()
                                 ActionType.OpenDetails -> onOpenDetails()
                                 else -> Unit
                             }
@@ -658,8 +889,10 @@ private fun SimplifiedModelCard(
                     }
                 }
 
-                TextButton(onClick = onOpenDetails) {
-                    Text(text = stringResource(id = R.string.view_details))
+                if (actionPlan.secondaryLabel == null) {
+                    TextButton(onClick = onOpenDetails) {
+                        Text(text = stringResource(id = R.string.view_details))
+                    }
                 }
             }
         }
@@ -676,6 +909,7 @@ private fun RedesignedDetailsSheet(
     onCancelDownload: () -> Unit,
     onRetryDownload: () -> Unit,
     onUseModel: () -> Unit,
+    onEjectModel: () -> Unit,
     onDeleteModel: () -> Unit,
     onMoveStorage: () -> Unit
 ) {
@@ -696,6 +930,22 @@ private fun RedesignedDetailsSheet(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold
                 )
+                Row(
+                    modifier = Modifier.padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (model.isActive) {
+                        ModelStatusBadge(
+                            text = model.memoryBadgeLabel(),
+                            tone = model.memoryBadgeTone()
+                        )
+                    }
+                    ModelStatusBadge(
+                        text = model.installStateLabel(),
+                        tone = ModelBadgeTone.Neutral
+                    )
+                }
                 Text(
                     text = model.fullDescription(),
                     style = MaterialTheme.typography.bodyMedium,
@@ -722,7 +972,10 @@ private fun RedesignedDetailsSheet(
                                 ActionType.Resume,
                                 ActionType.Retry -> onRetryDownload()
 
-                                ActionType.Use -> onUseModel()
+                                ActionType.Use,
+                                ActionType.Load -> onUseModel()
+
+                                ActionType.Eject -> onEjectModel()
                                 ActionType.AddToken -> onOpenHuggingFaceSettings()
                                 ActionType.Cancel -> onCancelDownload()
                                 ActionType.Delete -> onDeleteModel()
@@ -742,6 +995,7 @@ private fun RedesignedDetailsSheet(
                                 when (actionPlan.secondaryAction) {
                                     ActionType.Cancel -> onCancelDownload()
                                     ActionType.Delete -> onDeleteModel()
+                                    ActionType.Eject -> onEjectModel()
                                     ActionType.OpenDetails -> Unit
                                     else -> Unit
                                 }
@@ -763,6 +1017,10 @@ private fun RedesignedDetailsSheet(
                     DetailRow(
                         label = stringResource(id = R.string.details_install_state),
                         value = model.installStateLabel()
+                    )
+                    DetailRow(
+                        label = stringResource(id = R.string.details_memory_state),
+                        value = model.memoryStateLabel()
                     )
                     DetailRow(
                         label = stringResource(id = R.string.details_compatibility),
@@ -938,15 +1196,21 @@ private fun DetailsSection(
 
 @Composable
 private fun DetailRow(label: String, value: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(0.42f)
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(0.58f)
         )
     }
 }
@@ -1047,7 +1311,11 @@ private fun ModelCardUi.matchesFilter(filter: ModelFilter): Boolean {
         ModelFilter.ChatReady -> recommendedForChat
         ModelFilter.Installed -> installState == ModelInstallState.INSTALLED
         ModelFilter.RequiresToken -> healthState == LocalModelHealthState.RequiresToken
-        ModelFilter.NeedsAttention -> healthState.needsAttention
+        ModelFilter.NeedsAttention -> {
+            healthState.needsAttention ||
+                    memoryState == com.fcm.nanochat.model.LocalModelMemoryState.FailedToLoad ||
+                    memoryState == com.fcm.nanochat.model.LocalModelMemoryState.NeedsReload
+        }
     }
 }
 
@@ -1095,6 +1363,64 @@ private fun ModelCardUi.statusLine(): StatusLine {
         null
     }
 
+    if (isActive) {
+        return when (memoryState) {
+            com.fcm.nanochat.model.LocalModelMemoryState.SelectedNotLoaded -> StatusLine(
+                label = "Selected, not loaded",
+                supporting = "Load this model into memory before local chat.",
+                tone = ModelBadgeTone.Neutral
+            )
+
+            com.fcm.nanochat.model.LocalModelMemoryState.LoadingIntoMemory -> StatusLine(
+                label = "Loading into memory",
+                supporting = "Allocating runtime and preparing local session.",
+                tone = ModelBadgeTone.Neutral,
+                progress = 0.45f
+            )
+
+            com.fcm.nanochat.model.LocalModelMemoryState.LoadedInMemory -> StatusLine(
+                label = "Loaded in memory",
+                supporting = "Ready for local chat responses.",
+                tone = ModelBadgeTone.Positive
+            )
+
+            com.fcm.nanochat.model.LocalModelMemoryState.InUse -> StatusLine(
+                label = "In use",
+                supporting = "NanoChat is using this model for local chat.",
+                tone = ModelBadgeTone.Positive
+            )
+
+            com.fcm.nanochat.model.LocalModelMemoryState.EjectedFromMemory -> StatusLine(
+                label = "Ejected from memory",
+                supporting = "Installed on device. Load again to resume local chat.",
+                tone = ModelBadgeTone.Warning
+            )
+
+            com.fcm.nanochat.model.LocalModelMemoryState.NeedsReload -> StatusLine(
+                label = "Needs reload",
+                supporting = "Installed on device, but not loaded in memory.",
+                tone = ModelBadgeTone.Warning
+            )
+
+            com.fcm.nanochat.model.LocalModelMemoryState.FailedToLoad -> StatusLine(
+                label = "Failed to load into memory",
+                supporting = memoryMessage?.let(::toFriendlyError)
+                    ?: "Installed, but NanoChat could not start this model.",
+                tone = ModelBadgeTone.Error
+            )
+
+            com.fcm.nanochat.model.LocalModelMemoryState.NotSelected -> {
+                // Fall back to health state if this model is no longer active.
+                fallbackStatusLine(progressValue)
+            }
+        }
+    }
+
+    return fallbackStatusLine(progressValue)
+}
+
+private fun ModelCardUi.fallbackStatusLine(progressValue: Float?): StatusLine {
+    
     return when (val state = healthState) {
         LocalModelHealthState.NotInstalled -> StatusLine(
             label = "Not installed",
@@ -1129,9 +1455,9 @@ private fun ModelCardUi.statusLine(): StatusLine {
         )
 
         LocalModelHealthState.InstalledReady -> StatusLine(
-            label = if (isActive) "Selected for chat" else "Ready to use",
+            label = if (isActive) "Selected for chat" else "Installed on device",
             supporting = if (isActive) {
-                "NanoChat will use this model for on-device responses."
+                "Load this model into memory to start local chat."
             } else {
                 "Installed and compatible with this device."
             },
@@ -1171,6 +1497,69 @@ private fun ModelCardUi.statusLine(): StatusLine {
 }
 
 private fun ModelCardUi.actionPlan(): ActionPlan {
+    if (healthState == LocalModelHealthState.InstalledReady && isActive) {
+        return when (memoryState) {
+            com.fcm.nanochat.model.LocalModelMemoryState.SelectedNotLoaded,
+            com.fcm.nanochat.model.LocalModelMemoryState.NeedsReload -> ActionPlan(
+                primaryLabel = "Load",
+                primaryAction = ActionType.Load,
+                primaryEnabled = true,
+                secondaryLabel = "Eject",
+                secondaryAction = ActionType.Eject,
+                secondaryEnabled = true,
+                allowOverflow = true
+            )
+
+            com.fcm.nanochat.model.LocalModelMemoryState.EjectedFromMemory -> ActionPlan(
+                primaryLabel = "Load",
+                primaryAction = ActionType.Load,
+                primaryEnabled = true,
+                allowOverflow = true
+            )
+
+            com.fcm.nanochat.model.LocalModelMemoryState.LoadingIntoMemory -> ActionPlan(
+                primaryLabel = "Loading",
+                primaryAction = ActionType.None,
+                primaryEnabled = false,
+                secondaryLabel = "Eject",
+                secondaryAction = ActionType.Eject,
+                secondaryEnabled = true,
+                allowOverflow = true
+            )
+
+            com.fcm.nanochat.model.LocalModelMemoryState.LoadedInMemory,
+            com.fcm.nanochat.model.LocalModelMemoryState.InUse -> ActionPlan(
+                primaryLabel = "Loaded",
+                primaryAction = ActionType.None,
+                primaryEnabled = false,
+                secondaryLabel = "Eject",
+                secondaryAction = ActionType.Eject,
+                secondaryEnabled = true,
+                allowOverflow = true
+            )
+
+            com.fcm.nanochat.model.LocalModelMemoryState.FailedToLoad -> ActionPlan(
+                primaryLabel = "Retry load",
+                primaryAction = ActionType.Load,
+                primaryEnabled = true,
+                secondaryLabel = "Eject",
+                secondaryAction = ActionType.Eject,
+                secondaryEnabled = true,
+                allowOverflow = true
+            )
+
+            com.fcm.nanochat.model.LocalModelMemoryState.NotSelected -> ActionPlan(
+                primaryLabel = "Load",
+                primaryAction = ActionType.Load,
+                primaryEnabled = true,
+                secondaryLabel = "Eject",
+                secondaryAction = ActionType.Eject,
+                secondaryEnabled = true,
+                allowOverflow = true
+            )
+        }
+    }
+
     return when (healthState) {
         LocalModelHealthState.NotInstalled -> ActionPlan(
             primaryLabel = "Download",
@@ -1211,9 +1600,11 @@ private fun ModelCardUi.actionPlan(): ActionPlan {
         LocalModelHealthState.InstalledReady -> {
             if (isActive) {
                 ActionPlan(
-                    primaryLabel = "Selected",
-                    primaryAction = ActionType.None,
-                    primaryEnabled = false,
+                    primaryLabel = "Load",
+                    primaryAction = ActionType.Load,
+                    primaryEnabled = true,
+                    secondaryLabel = "Eject",
+                    secondaryAction = ActionType.Eject,
                     allowOverflow = true
                 )
             } else {
@@ -1288,6 +1679,49 @@ private fun ModelCardUi.healthStateLabel(): String {
         LocalModelHealthState.RequiresLicenseApproval -> "License approval required"
         is LocalModelHealthState.NotCompatible -> "Not compatible"
         LocalModelHealthState.UnsupportedForChat -> "Unsupported for chat"
+    }
+}
+
+private fun ModelCardUi.memoryStateLabel(): String {
+    return when (memoryState) {
+        com.fcm.nanochat.model.LocalModelMemoryState.NotSelected -> "Not selected"
+        com.fcm.nanochat.model.LocalModelMemoryState.SelectedNotLoaded -> "Selected, not loaded"
+        com.fcm.nanochat.model.LocalModelMemoryState.LoadingIntoMemory -> "Loading into memory"
+        com.fcm.nanochat.model.LocalModelMemoryState.LoadedInMemory -> "Loaded in memory"
+        com.fcm.nanochat.model.LocalModelMemoryState.InUse -> "In use"
+        com.fcm.nanochat.model.LocalModelMemoryState.EjectedFromMemory -> "Ejected from memory"
+        com.fcm.nanochat.model.LocalModelMemoryState.NeedsReload -> "Needs reload"
+        com.fcm.nanochat.model.LocalModelMemoryState.FailedToLoad -> {
+            memoryMessage?.let(::toFriendlyError) ?: "Failed to load"
+        }
+    }
+}
+
+private fun ModelCardUi.memoryBadgeLabel(): String {
+    return when (memoryState) {
+        com.fcm.nanochat.model.LocalModelMemoryState.LoadingIntoMemory -> "Loading"
+        com.fcm.nanochat.model.LocalModelMemoryState.LoadedInMemory -> "In memory"
+        com.fcm.nanochat.model.LocalModelMemoryState.InUse -> "In use"
+        com.fcm.nanochat.model.LocalModelMemoryState.EjectedFromMemory -> "Ejected"
+        com.fcm.nanochat.model.LocalModelMemoryState.FailedToLoad -> "Load failed"
+        com.fcm.nanochat.model.LocalModelMemoryState.SelectedNotLoaded,
+        com.fcm.nanochat.model.LocalModelMemoryState.NeedsReload,
+        com.fcm.nanochat.model.LocalModelMemoryState.NotSelected -> "Selected"
+    }
+}
+
+private fun ModelCardUi.memoryBadgeTone(): ModelBadgeTone {
+    return when (memoryState) {
+        com.fcm.nanochat.model.LocalModelMemoryState.LoadingIntoMemory,
+        com.fcm.nanochat.model.LocalModelMemoryState.SelectedNotLoaded,
+        com.fcm.nanochat.model.LocalModelMemoryState.NeedsReload,
+        com.fcm.nanochat.model.LocalModelMemoryState.NotSelected -> ModelBadgeTone.Neutral
+
+        com.fcm.nanochat.model.LocalModelMemoryState.LoadedInMemory,
+        com.fcm.nanochat.model.LocalModelMemoryState.InUse -> ModelBadgeTone.Positive
+
+        com.fcm.nanochat.model.LocalModelMemoryState.EjectedFromMemory -> ModelBadgeTone.Warning
+        com.fcm.nanochat.model.LocalModelMemoryState.FailedToLoad -> ModelBadgeTone.Error
     }
 }
 
@@ -1405,6 +1839,14 @@ private fun toFriendlyError(raw: String?): String {
             "Installed, but NanoChat could not start this model."
         }
 
+        "not loaded in memory" in lowercase -> {
+            "Installed on device, but not loaded in memory."
+        }
+
+        "failed to load into memory" in lowercase -> {
+            "Installed, but NanoChat could not load this model into memory."
+        }
+
         "invocationtargetexception" in lowercase -> {
             "Installed, but NanoChat could not start this model."
         }
@@ -1457,6 +1899,21 @@ private fun ModelCardUi.detectedFileFormat(): String {
 }
 
 private fun ModelCardUi.startupValidationResult(): String {
+    if (isActive) {
+        return when (memoryState) {
+            com.fcm.nanochat.model.LocalModelMemoryState.LoadingIntoMemory -> "Loading"
+            com.fcm.nanochat.model.LocalModelMemoryState.LoadedInMemory,
+            com.fcm.nanochat.model.LocalModelMemoryState.InUse -> "Runnable"
+
+            com.fcm.nanochat.model.LocalModelMemoryState.EjectedFromMemory -> "Ejected"
+            com.fcm.nanochat.model.LocalModelMemoryState.FailedToLoad -> "Startup failed"
+            com.fcm.nanochat.model.LocalModelMemoryState.SelectedNotLoaded,
+            com.fcm.nanochat.model.LocalModelMemoryState.NeedsReload -> "Needs load"
+
+            com.fcm.nanochat.model.LocalModelMemoryState.NotSelected -> "Not selected"
+        }
+    }
+
     return when (healthState) {
         LocalModelHealthState.InstalledReady -> "Runnable"
         LocalModelHealthState.InstalledNeedsValidation -> "Validation pending"

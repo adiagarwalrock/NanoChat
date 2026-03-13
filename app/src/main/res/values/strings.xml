@@ -88,8 +88,19 @@
     <string name="allowlist_version">Allowlist v%1$s</string>
     <string name="unknown_value">unknown</string>
     <string name="import_local_model_coming_soon">Import local model (coming soon)</string>
+    <string name="import_local_model_title">Import local model</string>
+    <string name="import_local_model_subtitle">Bring your own compatible local model.</string>
+    <string name="coming_soon">Coming soon</string>
     <string name="dismiss">Dismiss</string>
     <string name="local_runtime_summary">Last local run: %1$s - TTFB %2$d ms - %3$s tok/s</string>
+    <string name="loading_model_library">Loading model library</string>
+    <string name="unable_to_load_models">Could not load model library</string>
+    <string name="empty_library_message">No models are available right now. Pull to refresh and try again.</string>
+    <string name="memory_loading">loading into memory</string>
+    <string name="memory_loaded">loaded in memory</string>
+    <string name="memory_ejected">ejected from memory</string>
+    <string name="memory_failed">failed to load</string>
+    <string name="memory_not_loaded">selected, not loaded</string>
     <string name="no_models_match_filters">No models match your filters.</string>
     <string name="minimum_ram_value">RAM %1$d GB+</string>
     <string name="details_section_readiness">Readiness</string>
@@ -99,6 +110,7 @@
     <string name="details_section_diagnostics">Diagnostics</string>
     <string name="details_health_state">Health state</string>
     <string name="details_install_state">Install state</string>
+    <string name="details_memory_state">Memory state</string>
     <string name="details_compatibility">Compatibility</string>
     <string name="details_startup_validation">Startup validation</string>
     <string name="details_startup_file_path">Startup file path</string>

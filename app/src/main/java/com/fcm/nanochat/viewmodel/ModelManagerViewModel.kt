@@ -4,13 +4,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.fcm.nanochat.data.repository.LocalModelRepository
+import com.fcm.nanochat.model.ActiveLocalModelSummaryUi
 import com.fcm.nanochat.model.LocalModelHealthState
+import com.fcm.nanochat.model.LocalModelMemoryState
 import com.fcm.nanochat.model.ModelCardUi
 import com.fcm.nanochat.model.ModelGalleryScreenState
+import com.fcm.nanochat.model.ModelLibraryPhase
 import com.fcm.nanochat.model.RuntimeDiagnosticsUi
 import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
 import com.fcm.nanochat.models.registry.ModelInstallState
 import com.fcm.nanochat.models.registry.ModelStorageLocation
+import com.fcm.nanochat.models.runtime.RuntimeLoadPhase
+import com.fcm.nanochat.models.runtime.RuntimeLoadState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -26,17 +31,35 @@ class ModelManagerViewModel(
     private val notice = MutableStateFlow<String?>(null)
     private val isRefreshing = MutableStateFlow(false)
 
+    init {
+        localModelRepository.reconcile()
+    }
+
     val uiState: StateFlow<ModelGalleryScreenState> = combine(
         localModelRepository.allowlist,
         localModelRepository.records,
         localModelRepository.activeModelStatus,
-        notice,
-        isRefreshing
-    ) { allowlist, records, activeStatus, noticeValue, refreshing ->
-        val cardItems = records
+        localModelRepository.runtimeLoadState,
+        notice
+    ) { allowlist, records, activeStatus, runtimeLoadState, noticeValue ->
+        GalleryInputs(
+            allowlist = allowlist,
+            records = records,
+            activeStatus = activeStatus,
+            runtimeLoadState = runtimeLoadState,
+            notice = noticeValue
+        )
+    }.combine(isRefreshing) { inputs, refreshing ->
+        val runtimeMetrics = localModelRepository.latestRuntimeMetrics()
+        val cardItems = inputs.records
             .map { record ->
                 val model = record.allowlistedModel
                 val healthState = mapHealthState(record)
+                val memory = mapMemoryState(
+                    record = record,
+                    runtimeLoadState = inputs.runtimeLoadState,
+                    runtimeMetrics = runtimeMetrics
+                )
                 val diagnosticsMessage = when (val compatibility = record.compatibility) {
                     LocalModelCompatibilityState.Ready -> null
                     is LocalModelCompatibilityState.RuntimeUnavailable -> compatibility.reason
@@ -66,6 +89,8 @@ class ModelManagerViewModel(
                     installState = record.installState,
                     compatibility = record.compatibility,
                     healthState = healthState,
+                    memoryState = memory.state,
+                    memoryMessage = memory.message,
                     isActive = record.isActive,
                     isLegacy = record.isLegacy,
                     storageLocation = record.storageLocation,
@@ -81,14 +106,39 @@ class ModelManagerViewModel(
                     .thenBy { it.displayName.lowercase() }
             )
 
+        val phase = when {
+            inputs.allowlist.models.isEmpty() && inputs.allowlist.version.value.isBlank() -> {
+                ModelLibraryPhase.Loading
+            }
+
+            inputs.allowlist.models.isNotEmpty() && cardItems.size < inputs.allowlist.models.size -> {
+                ModelLibraryPhase.Loading
+            }
+
+            cardItems.isEmpty() && !inputs.allowlist.lastRefreshError.isNullOrBlank() -> {
+                ModelLibraryPhase.Error
+            }
+
+            else -> ModelLibraryPhase.Ready
+        }
+
+        val activeSummary = buildActiveSummary(
+            cards = cardItems,
+            activeModelId = inputs.activeStatus.modelId,
+            runtimeMetrics = runtimeMetrics
+        )
+
         ModelGalleryScreenState(
-            allowlistVersion = allowlist.version.value,
-            allowlistSource = allowlist.sourceType,
-            allowlistRefreshedAtEpochMs = allowlist.version.refreshedAtEpochMs,
-            activeModelId = activeStatus.modelId,
+            allowlistVersion = inputs.allowlist.version.value,
+            allowlistSource = inputs.allowlist.sourceType,
+            allowlistRefreshedAtEpochMs = inputs.allowlist.version.refreshedAtEpochMs,
+            phase = phase,
+            activeModelId = inputs.activeStatus.modelId,
+            activeSummary = activeSummary,
             models = cardItems,
-            runtimeMetrics = localModelRepository.latestRuntimeMetrics()?.toUi(),
-            notice = noticeValue ?: allowlist.lastRefreshError,
+            libraryError = inputs.allowlist.lastRefreshError,
+            runtimeMetrics = runtimeMetrics?.toUi(),
+            notice = inputs.notice,
             isRefreshing = refreshing
         )
     }.stateIn(
@@ -141,14 +191,16 @@ class ModelManagerViewModel(
             }
 
             localModelRepository.setActiveModel(modelId)
-            notice.update { "Active local model updated." }
+            localModelRepository.prepareModelInMemory(modelId)
         }
     }
 
-    fun clearActiveModel() {
+    fun ejectModel(modelId: String) {
         viewModelScope.launch {
-            localModelRepository.setActiveModel(null)
-            notice.update { "Local model cleared." }
+            val error = localModelRepository.ejectModelFromMemory(modelId)
+            if (!error.isNullOrBlank()) {
+                notice.update { error }
+            }
         }
     }
 
@@ -322,6 +374,102 @@ class ModelManagerViewModel(
         }
     }
 
+    private fun mapMemoryState(
+        record: com.fcm.nanochat.models.registry.InstalledModelRecord,
+        runtimeLoadState: RuntimeLoadState,
+        runtimeMetrics: com.fcm.nanochat.models.runtime.LocalRuntimeMetrics?
+    ): ModelMemoryUi {
+        val recordId = record.modelId.lowercase()
+        val runtimeModelId = runtimeLoadState.modelId?.lowercase()
+        val recentlyUsed = runtimeMetrics != null &&
+                runtimeMetrics.modelId.equals(record.modelId, ignoreCase = true) &&
+                System.currentTimeMillis() - runtimeMetrics.measuredAtEpochMs <= RECENT_USE_WINDOW_MS
+
+        if (!record.isActive) {
+            return ModelMemoryUi(LocalModelMemoryState.NotSelected, null)
+        }
+
+        return when (runtimeLoadState.phase) {
+            RuntimeLoadPhase.IDLE -> {
+                ModelMemoryUi(LocalModelMemoryState.SelectedNotLoaded, null)
+            }
+
+            RuntimeLoadPhase.LOADING -> {
+                if (runtimeModelId == recordId) {
+                    ModelMemoryUi(
+                        LocalModelMemoryState.LoadingIntoMemory,
+                        "Loading into memory"
+                    )
+                } else {
+                    ModelMemoryUi(LocalModelMemoryState.SelectedNotLoaded, null)
+                }
+            }
+
+            RuntimeLoadPhase.LOADED -> {
+                if (runtimeModelId == recordId) {
+                    if (recentlyUsed) {
+                        ModelMemoryUi(LocalModelMemoryState.InUse, "In use")
+                    } else {
+                        ModelMemoryUi(LocalModelMemoryState.LoadedInMemory, "Loaded in memory")
+                    }
+                } else {
+                    ModelMemoryUi(LocalModelMemoryState.SelectedNotLoaded, null)
+                }
+            }
+
+            RuntimeLoadPhase.FAILED -> {
+                if (runtimeModelId == recordId || runtimeModelId == null) {
+                    ModelMemoryUi(
+                        LocalModelMemoryState.FailedToLoad,
+                        runtimeLoadState.message
+                    )
+                } else {
+                    ModelMemoryUi(LocalModelMemoryState.NeedsReload, null)
+                }
+            }
+
+            RuntimeLoadPhase.EJECTED -> {
+                if (runtimeModelId == recordId) {
+                    ModelMemoryUi(LocalModelMemoryState.EjectedFromMemory, "Ejected from memory")
+                } else {
+                    ModelMemoryUi(LocalModelMemoryState.SelectedNotLoaded, null)
+                }
+            }
+        }
+    }
+
+    private fun buildActiveSummary(
+        cards: List<ModelCardUi>,
+        activeModelId: String?,
+        runtimeMetrics: com.fcm.nanochat.models.runtime.LocalRuntimeMetrics?
+    ): ActiveLocalModelSummaryUi? {
+        val activeId = activeModelId?.trim()?.lowercase().orEmpty()
+        if (activeId.isBlank()) return null
+
+        val model =
+            cards.firstOrNull { it.modelId.equals(activeId, ignoreCase = true) } ?: return null
+        val metricsText = runtimeMetrics
+            ?.takeIf { it.modelId.equals(model.modelId, ignoreCase = true) }
+            ?.let { "TTFB ${it.timeToFirstTokenMs} ms - ${"%.1f".format(it.tokensPerSecond)} tok/s" }
+
+        return ActiveLocalModelSummaryUi(
+            modelId = model.modelId,
+            displayName = model.displayName,
+            memoryState = model.memoryState,
+            statusText = when (model.memoryState) {
+                LocalModelMemoryState.NotSelected -> "Not selected"
+                LocalModelMemoryState.SelectedNotLoaded -> "Selected, not loaded"
+                LocalModelMemoryState.LoadingIntoMemory -> "Loading into memory"
+                LocalModelMemoryState.LoadedInMemory -> "Loaded in memory"
+                LocalModelMemoryState.InUse -> "In use"
+                LocalModelMemoryState.EjectedFromMemory -> "Ejected from memory"
+                LocalModelMemoryState.NeedsReload -> "Needs reload"
+                LocalModelMemoryState.FailedToLoad -> "Failed to load"
+            },
+            metricsText = metricsText
+        )
+    }
+
     private fun indicatesLicenseApproval(message: String): Boolean {
         if (message.isBlank()) return false
         val lowercase = message.lowercase()
@@ -340,6 +488,23 @@ class ModelManagerViewModel(
             backend = backend
         )
     }
+
+    private data class ModelMemoryUi(
+        val state: LocalModelMemoryState,
+        val message: String?
+    )
+
+    private data class GalleryInputs(
+        val allowlist: com.fcm.nanochat.models.allowlist.AllowlistSnapshot,
+        val records: List<com.fcm.nanochat.models.registry.InstalledModelRecord>,
+        val activeStatus: com.fcm.nanochat.models.registry.ActiveModelStatus,
+        val runtimeLoadState: RuntimeLoadState,
+        val notice: String?
+    )
+
+    private companion object {
+        const val RECENT_USE_WINDOW_MS = 60_000L
+    }
 }
 
 class ModelManagerViewModelFactory(
@@ -355,6 +520,21 @@ class ModelManagerViewModelFactory(
 }
 
 internal fun ModelCardUi.primaryActionLabel(): String {
+    if (isActive) {
+        return when (memoryState) {
+            LocalModelMemoryState.LoadingIntoMemory -> "Loading"
+            LocalModelMemoryState.LoadedInMemory,
+            LocalModelMemoryState.InUse -> "Eject"
+
+            LocalModelMemoryState.EjectedFromMemory,
+            LocalModelMemoryState.SelectedNotLoaded,
+            LocalModelMemoryState.NeedsReload,
+            LocalModelMemoryState.FailedToLoad -> "Load"
+
+            LocalModelMemoryState.NotSelected -> "Use model"
+        }
+    }
+
     return when (healthState) {
         LocalModelHealthState.NotInstalled -> "Download"
         is LocalModelHealthState.Downloading -> "Downloading"

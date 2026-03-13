@@ -93,7 +93,8 @@ class AppContainer(context: Context) {
         modelRegistry = modelRegistry,
         downloadCoordinator = modelDownloadCoordinator,
         importCoordinator = importCoordinator,
-        telemetry = runtimeTelemetry
+        telemetry = runtimeTelemetry,
+        runtimeManager = runtimeManager
     )
 
     private val localInferenceClient = LocalInferenceClient()
