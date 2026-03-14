@@ -234,28 +234,9 @@ class ModelManagerViewModel(
 
         return when (record.installState) {
             ModelInstallState.NOT_INSTALLED -> {
+                val compatibilityHealth = compatibilityHealthState(compatibility)
                 when {
-                    compatibility is LocalModelCompatibilityState.TokenRequired -> {
-                        LocalModelHealthState.RequiresToken
-                    }
-
-                    compatibility is LocalModelCompatibilityState.UnsupportedForChat -> {
-                        LocalModelHealthState.UnsupportedForChat
-                    }
-
-                    compatibility is LocalModelCompatibilityState.NeedsMoreRam -> {
-                        LocalModelHealthState.NotCompatible(
-                            "Requires ${compatibility.requiredGb} GB RAM."
-                        )
-                    }
-
-                    compatibility is LocalModelCompatibilityState.NeedsMoreStorage -> {
-                        LocalModelHealthState.NotCompatible("Not enough free storage.")
-                    }
-
-                    compatibility is LocalModelCompatibilityState.UnsupportedDevice -> {
-                        LocalModelHealthState.NotCompatible(compatibility.reason)
-                    }
+                    compatibilityHealth != null -> compatibilityHealth
 
                     indicatesLicenseApproval(issueMessage) -> {
                         LocalModelHealthState.RequiresLicenseApproval
@@ -303,52 +284,16 @@ class ModelManagerViewModel(
             ModelInstallState.DELETING -> LocalModelHealthState.InstalledNeedsValidation
 
             ModelInstallState.INSTALLED -> {
+                val compatibilityHealth = compatibilityHealthState(compatibility)
+                val startupFailure = startupFailureState(compatibility)
                 when {
                     compatibility is LocalModelCompatibilityState.Ready -> {
                         LocalModelHealthState.InstalledReady
                     }
 
-                    compatibility is LocalModelCompatibilityState.TokenRequired -> {
-                        LocalModelHealthState.RequiresToken
-                    }
+                    compatibilityHealth != null -> compatibilityHealth
 
-                    compatibility is LocalModelCompatibilityState.UnsupportedForChat -> {
-                        LocalModelHealthState.UnsupportedForChat
-                    }
-
-                    compatibility is LocalModelCompatibilityState.NeedsMoreRam -> {
-                        LocalModelHealthState.NotCompatible(
-                            "Requires ${compatibility.requiredGb} GB RAM."
-                        )
-                    }
-
-                    compatibility is LocalModelCompatibilityState.NeedsMoreStorage -> {
-                        LocalModelHealthState.NotCompatible("Not enough free storage.")
-                    }
-
-                    compatibility is LocalModelCompatibilityState.UnsupportedDevice -> {
-                        LocalModelHealthState.NotCompatible(compatibility.reason)
-                    }
-
-                    compatibility is LocalModelCompatibilityState.CorruptedModel -> {
-                        LocalModelHealthState.InstalledStartupFailed("This model file appears corrupted.")
-                    }
-
-                    compatibility is LocalModelCompatibilityState.RuntimeUnavailable -> {
-                        LocalModelHealthState.InstalledStartupFailed(
-                            compatibility.reason.ifBlank {
-                                "NanoChat could not start this model on your device."
-                            }
-                        )
-                    }
-
-                    compatibility is LocalModelCompatibilityState.DownloadedButNotActivatable -> {
-                        LocalModelHealthState.InstalledStartupFailed(
-                            compatibility.reason.ifBlank {
-                                "NanoChat could not start this model on your device."
-                            }
-                        )
-                    }
+                    startupFailure != null -> startupFailure
 
                     indicatesLicenseApproval(issueMessage) -> {
                         LocalModelHealthState.RequiresLicenseApproval
@@ -357,7 +302,7 @@ class ModelManagerViewModel(
                     else -> {
                         LocalModelHealthState.InstalledStartupFailed(
                             issueMessage.ifBlank {
-                                "NanoChat could not start this model on your device."
+                                DEFAULT_INSTALLED_STARTUP_FAILURE_MESSAGE
                             }
                         )
                     }
@@ -369,6 +314,62 @@ class ModelManagerViewModel(
                     message = issueMessage.ifBlank { "This model file appears corrupted." }
                 )
             }
+        }
+    }
+
+    private fun compatibilityHealthState(
+        compatibility: LocalModelCompatibilityState
+    ): LocalModelHealthState? {
+        return when (compatibility) {
+            LocalModelCompatibilityState.TokenRequired -> LocalModelHealthState.RequiresToken
+            LocalModelCompatibilityState.UnsupportedForChat -> LocalModelHealthState.UnsupportedForChat
+            is LocalModelCompatibilityState.NeedsMoreRam -> {
+                LocalModelHealthState.NotCompatible("Requires ${compatibility.requiredGb} GB RAM.")
+            }
+
+            is LocalModelCompatibilityState.NeedsMoreStorage -> {
+                LocalModelHealthState.NotCompatible("Not enough free storage.")
+            }
+
+            is LocalModelCompatibilityState.UnsupportedDevice -> {
+                LocalModelHealthState.NotCompatible(compatibility.reason)
+            }
+
+            LocalModelCompatibilityState.Ready,
+            LocalModelCompatibilityState.Downloadable,
+            LocalModelCompatibilityState.CorruptedModel,
+            is LocalModelCompatibilityState.RuntimeUnavailable,
+            is LocalModelCompatibilityState.DownloadedButNotActivatable -> null
+        }
+    }
+
+    private fun startupFailureState(
+        compatibility: LocalModelCompatibilityState
+    ): LocalModelHealthState? {
+        return when (compatibility) {
+            LocalModelCompatibilityState.CorruptedModel -> {
+                LocalModelHealthState.InstalledStartupFailed("This model file appears corrupted.")
+            }
+
+            is LocalModelCompatibilityState.RuntimeUnavailable -> {
+                LocalModelHealthState.InstalledStartupFailed(
+                    compatibility.reason.ifBlank { DEFAULT_INSTALLED_STARTUP_FAILURE_MESSAGE }
+                )
+            }
+
+            is LocalModelCompatibilityState.DownloadedButNotActivatable -> {
+                LocalModelHealthState.InstalledStartupFailed(
+                    compatibility.reason.ifBlank { DEFAULT_INSTALLED_STARTUP_FAILURE_MESSAGE }
+                )
+            }
+
+            LocalModelCompatibilityState.Ready,
+            LocalModelCompatibilityState.Downloadable,
+            LocalModelCompatibilityState.TokenRequired,
+            LocalModelCompatibilityState.UnsupportedForChat,
+            is LocalModelCompatibilityState.NeedsMoreRam,
+            is LocalModelCompatibilityState.NeedsMoreStorage,
+            is LocalModelCompatibilityState.UnsupportedDevice -> null
         }
     }
 
@@ -504,6 +505,8 @@ class ModelManagerViewModel(
 
     private companion object {
         const val RECENT_USE_WINDOW_MS = 60_000L
+        const val DEFAULT_INSTALLED_STARTUP_FAILURE_MESSAGE =
+            "NanoChat could not start this model on your device."
     }
 }
 

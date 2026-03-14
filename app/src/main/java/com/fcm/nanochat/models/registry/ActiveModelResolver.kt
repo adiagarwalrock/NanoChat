@@ -50,13 +50,24 @@ object ActiveModelResolver {
             activeRecord = record,
             shouldClearSelection = true,
             message = toFriendlyResolverMessage(
-                record.errorMessage ?: when (val compatibility = record.compatibility) {
-                    is LocalModelCompatibilityState.RuntimeUnavailable -> compatibility.reason
-                    is LocalModelCompatibilityState.DownloadedButNotActivatable -> compatibility.reason
-                    else -> null
-                }
+                record.errorMessage ?: compatibilityReason(record.compatibility)
             )
         )
+    }
+
+    private fun compatibilityReason(compatibility: LocalModelCompatibilityState): String? {
+        return when (compatibility) {
+            is LocalModelCompatibilityState.RuntimeUnavailable -> compatibility.reason
+            is LocalModelCompatibilityState.DownloadedButNotActivatable -> compatibility.reason
+            LocalModelCompatibilityState.Ready,
+            LocalModelCompatibilityState.Downloadable,
+            LocalModelCompatibilityState.TokenRequired,
+            is LocalModelCompatibilityState.NeedsMoreRam,
+            is LocalModelCompatibilityState.NeedsMoreStorage,
+            is LocalModelCompatibilityState.UnsupportedDevice,
+            LocalModelCompatibilityState.UnsupportedForChat,
+            LocalModelCompatibilityState.CorruptedModel -> null
+        }
     }
 
     private fun toFriendlyResolverMessage(raw: String?): String {
@@ -65,22 +76,34 @@ object ActiveModelResolver {
 
         val lowercase = message.lowercase()
         return when {
-            "startup_validation_failed" in lowercase ||
-                    "error building tflite model" in lowercase ||
-                    "flatbuffer" in lowercase ||
-                    "invocationtargetexception" in lowercase -> {
+            isStartupValidationFailure(lowercase) -> {
                 "Installed, but NanoChat could not start this model."
             }
 
-            "missing runtime option method" in lowercase || "settopk" in lowercase -> {
+            isRuntimeOptionFailure(lowercase) -> {
                 "This model could not start with the current on-device runtime."
             }
 
-            "missing" in lowercase && "file" in lowercase -> {
+            isMissingFileFailure(lowercase) -> {
                 "Local model file is missing. Re-download and try again."
             }
 
             else -> message
         }
+    }
+
+    private fun isStartupValidationFailure(message: String): Boolean {
+        return "startup_validation_failed" in message ||
+                "error building tflite model" in message ||
+                "flatbuffer" in message ||
+                "invocationtargetexception" in message
+    }
+
+    private fun isRuntimeOptionFailure(message: String): Boolean {
+        return "missing runtime option method" in message || "settopk" in message
+    }
+
+    private fun isMissingFileFailure(message: String): Boolean {
+        return "missing" in message && "file" in message
     }
 }

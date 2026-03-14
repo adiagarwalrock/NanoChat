@@ -23,6 +23,7 @@ import java.io.FileOutputStream
 import java.util.Locale
 
 private const val HUGGING_FACE_WHOAMI_URL = "https://huggingface.co/api/whoami-v2"
+private val nonSafeIdCharacterRegex = Regex("[^a-zA-Z0-9._-]")
 
 private sealed interface DownloadPreflightResult {
     data class Allowed(val attachAuthorization: Boolean) : DownloadPreflightResult
@@ -721,7 +722,7 @@ class ModelDownloadCoordinator(
     }
 
     private fun safeId(modelId: String): String {
-        return modelId.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        return modelId.replace(nonSafeIdCharacterRegex, "_")
     }
 
     private fun isDebugBuild(): Boolean {

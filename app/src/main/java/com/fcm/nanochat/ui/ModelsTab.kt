@@ -63,6 +63,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fcm.nanochat.R
 import com.fcm.nanochat.model.LocalModelHealthState
+import com.fcm.nanochat.model.LocalModelMemoryState
 import com.fcm.nanochat.model.ModelCardUi
 import com.fcm.nanochat.model.ModelGalleryScreenState
 import com.fcm.nanochat.model.needsAttention
@@ -120,6 +121,53 @@ private data class PendingModelAction(
     val startedAtEpochMs: Long = System.currentTimeMillis()
 )
 
+private fun ModelCardUi.isPrimaryCard(): Boolean {
+    return recommendedForChat || installState == ModelInstallState.INSTALLED || isActive
+}
+
+private fun PendingModelAction.timeoutMs(): Long {
+    return if (type == PendingActionType.Delete) {
+        PENDING_DELETE_ACTION_TIMEOUT_MS
+    } else {
+        PENDING_ACTION_TIMEOUT_MS
+    }
+}
+
+private fun hasPendingUseConverged(model: ModelCardUi?): Boolean {
+    if (model == null) return false
+
+    return when (model.memoryState) {
+        LocalModelMemoryState.LoadingIntoMemory,
+        LocalModelMemoryState.LoadedInMemory,
+        LocalModelMemoryState.InUse,
+        LocalModelMemoryState.FailedToLoad -> true
+
+        LocalModelMemoryState.NotSelected,
+        LocalModelMemoryState.SelectedNotLoaded,
+        LocalModelMemoryState.EjectedFromMemory,
+        LocalModelMemoryState.NeedsReload -> false
+    }
+}
+
+private fun hasPendingActionConverged(
+    pendingAction: PendingModelAction,
+    model: ModelCardUi?
+): Boolean {
+    return when (pendingAction.type) {
+        PendingActionType.Download -> {
+            model != null && model.installState != ModelInstallState.NOT_INSTALLED
+        }
+
+        PendingActionType.Delete -> {
+            model == null ||
+                    model.installState == ModelInstallState.FAILED ||
+                    model.installState == ModelInstallState.BROKEN
+        }
+
+        PendingActionType.Use -> hasPendingUseConverged(model)
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 internal fun ModelsTab(
@@ -148,32 +196,9 @@ internal fun ModelsTab(
         val staleModelIds = mutableListOf<String>()
         pendingActions.forEach { (modelId, pendingAction) ->
             val model = state.models.firstOrNull { it.modelId == modelId }
-            val timeoutMs = if (pendingAction.type == PendingActionType.Delete) {
-                PENDING_DELETE_ACTION_TIMEOUT_MS
-            } else {
-                PENDING_ACTION_TIMEOUT_MS
-            }
+            val timeoutMs = pendingAction.timeoutMs()
             val timedOut = now - pendingAction.startedAtEpochMs >= timeoutMs
-            val hasConverged = when (pendingAction.type) {
-                PendingActionType.Download -> {
-                    model != null && model.installState != ModelInstallState.NOT_INSTALLED
-                }
-
-                PendingActionType.Delete -> {
-                    model == null ||
-                            model.installState == ModelInstallState.FAILED ||
-                            model.installState == ModelInstallState.BROKEN
-                }
-
-                PendingActionType.Use -> {
-                    model != null && (
-                            model.memoryState == com.fcm.nanochat.model.LocalModelMemoryState.LoadingIntoMemory ||
-                                    model.memoryState == com.fcm.nanochat.model.LocalModelMemoryState.LoadedInMemory ||
-                                    model.memoryState == com.fcm.nanochat.model.LocalModelMemoryState.InUse ||
-                                    model.memoryState == com.fcm.nanochat.model.LocalModelMemoryState.FailedToLoad
-                            )
-                }
-            }
+            val hasConverged = hasPendingActionConverged(pendingAction, model)
 
             if (timedOut || hasConverged) {
                 staleModelIds += modelId
@@ -190,12 +215,8 @@ internal fun ModelsTab(
             .sortedWith(selectedSort.comparator())
             .toList()
     }
-    val primaryModels = filteredModels.filter {
-        it.recommendedForChat || it.installState == ModelInstallState.INSTALLED || it.isActive
-    }
-    val otherModels = filteredModels.filterNot {
-        it.recommendedForChat || it.installState == ModelInstallState.INSTALLED || it.isActive
-    }
+    val primaryModels = filteredModels.filter(ModelCardUi::isPrimaryCard)
+    val otherModels = filteredModels.filterNot(ModelCardUi::isPrimaryCard)
     val filtersApplied = query.trim().isNotBlank() || selectedFilter != ModelFilter.All
     val detailsModel = remember(detailsModelId, state.models) {
         state.models.firstOrNull { it.modelId == detailsModelId }
@@ -1965,7 +1986,7 @@ private fun cleanDescription(raw: String): String {
     }
     val withoutUrls = UrlRegex.replace(withoutMarkdownLinks, "")
     return withoutUrls
-        .replace(Regex("\\s+"), " ")
+        .replace(WhitespaceRegex, " ")
         .trim()
 }
 
@@ -2109,5 +2130,6 @@ private fun ModelCardUi.rootCauseDetail(): String? {
 
 private val MarkdownLinkRegex = Regex("\\[([^\\]]+)]\\(([^)]+)\\)")
 private val UrlRegex = Regex("https?://\\S+")
+private val WhitespaceRegex = Regex("\\s+")
 private const val PENDING_ACTION_TIMEOUT_MS = 8_000L
 private const val PENDING_DELETE_ACTION_TIMEOUT_MS = 30_000L

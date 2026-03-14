@@ -75,19 +75,22 @@ object PromptFormatter {
             DownloadedPromptFamily.GENERIC -> DEFAULT_SYSTEM_PROMPT
         }
 
-        return DownloadedPrompt(
-            family = family,
-            systemInstruction = systemPrompt,
-            userMessage = when (family) {
-                DownloadedPromptFamily.QWEN -> buildQwenUserMessage(prompt)
-                DownloadedPromptFamily.DEEPSEEK -> buildQwenUserMessage(prompt)
-                DownloadedPromptFamily.GEMMA,
-                DownloadedPromptFamily.GENERIC -> buildSpeakerContextMessage(
+        val userMessage = when (family) {
+            DownloadedPromptFamily.QWEN, DownloadedPromptFamily.DEEPSEEK ->
+                buildQwenUserMessage(prompt)
+
+            DownloadedPromptFamily.GEMMA, DownloadedPromptFamily.GENERIC ->
+                buildSpeakerContextMessage(
                     history = history,
                     prompt = prompt,
                     maxTurns = maxTurns
                 )
-            }
+        }
+
+        return DownloadedPrompt(
+            family = family,
+            systemInstruction = systemPrompt,
+            userMessage = userMessage
         )
     }
 

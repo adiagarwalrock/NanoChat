@@ -319,29 +319,45 @@ class ModelRegistry(
 
         val lowercase = text.lowercase()
         return when {
-            "startup_validation_failed" in lowercase ||
-                    "error building tflite model" in lowercase ||
-                    "flatbuffer" in lowercase ||
-                    "invocationtargetexception" in lowercase -> {
+            isStartupValidationFailure(lowercase) -> {
                 "Installed, but NanoChat could not start this model."
             }
 
-            "missing runtime option method" in lowercase ||
-                    "settopk" in lowercase ||
-                    "setmaxtokens" in lowercase ||
-                    "runtime unavailable" in lowercase -> {
+            isRuntimeOptionFailure(lowercase) -> {
                 "This model could not be started with the current local runtime."
             }
 
-            "missing" in lowercase && "file" in lowercase -> {
+            isMissingFileFailure(lowercase) -> {
                 "This install appears incomplete. Try re-downloading."
             }
 
-            "corrupt" in lowercase || "size mismatch" in lowercase -> {
+            isIncompatibleFileFailure(lowercase) -> {
                 "This downloaded file may be incompatible with the current runtime."
             }
 
             else -> text
         }
+    }
+
+    private fun isStartupValidationFailure(message: String): Boolean {
+        return "startup_validation_failed" in message ||
+                "error building tflite model" in message ||
+                "flatbuffer" in message ||
+                "invocationtargetexception" in message
+    }
+
+    private fun isRuntimeOptionFailure(message: String): Boolean {
+        return "missing runtime option method" in message ||
+                "settopk" in message ||
+                "setmaxtokens" in message ||
+                "runtime unavailable" in message
+    }
+
+    private fun isMissingFileFailure(message: String): Boolean {
+        return "missing" in message && "file" in message
+    }
+
+    private fun isIncompatibleFileFailure(message: String): Boolean {
+        return "corrupt" in message || "size mismatch" in message
     }
 }

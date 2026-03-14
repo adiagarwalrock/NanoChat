@@ -54,15 +54,9 @@ class ChatRepository(
             when (runtimeState.phase) {
                 RuntimeLoadPhase.LOADING -> {
                     if (sameModel) {
-                        baseStatus.copy(
-                            ready = false,
-                            message = "Selected $displayName. Preparing local model..."
-                        )
+                        baseStatus.unready(preparingModelMessage(displayName))
                     } else {
-                        baseStatus.copy(
-                            ready = false,
-                            message = "Selected $displayName is not ready yet. NanoChat is preparing it now."
-                        )
+                        baseStatus.unready(notReadyYetMessage(displayName))
                     }
                 }
 
@@ -77,32 +71,20 @@ class ChatRepository(
                             }
                         )
                     } else {
-                        baseStatus.copy(
-                            ready = false,
-                            message = "Selected $displayName is not ready yet. NanoChat will prepare it when local chat starts."
-                        )
+                        baseStatus.unready(willPrepareOnStartMessage(displayName))
                     }
                 }
 
                 RuntimeLoadPhase.EJECTED,
                 RuntimeLoadPhase.IDLE -> {
-                    baseStatus.copy(
-                        ready = false,
-                        message = "Selected $displayName is not loaded. Open Model Library and tap Use model."
-                    )
+                    baseStatus.unready(notLoadedMessage(displayName))
                 }
 
                 RuntimeLoadPhase.FAILED -> {
                     if (runtimeModelId.isBlank() || sameModel) {
-                        baseStatus.copy(
-                            ready = false,
-                            message = "Selected $displayName failed to prepare for local chat. Tap Use model to retry."
-                        )
+                        baseStatus.unready(prepareFailedMessage(displayName))
                     } else {
-                        baseStatus.copy(
-                            ready = false,
-                            message = "Selected $displayName is not ready yet. NanoChat is preparing it now."
-                        )
+                        baseStatus.unready(notReadyYetMessage(displayName))
                     }
                 }
             }
@@ -326,6 +308,30 @@ class ChatRepository(
             ?.ifBlank { settings.modelName }
             ?: settings.modelName
     }
+}
+
+private fun ActiveModelStatus.unready(message: String): ActiveModelStatus {
+    return copy(ready = false, message = message)
+}
+
+private fun preparingModelMessage(displayName: String): String {
+    return "Selected $displayName. Preparing local model..."
+}
+
+private fun notReadyYetMessage(displayName: String): String {
+    return "Selected $displayName is not ready yet. NanoChat is preparing it now."
+}
+
+private fun willPrepareOnStartMessage(displayName: String): String {
+    return "Selected $displayName is not ready yet. NanoChat will prepare it when local chat starts."
+}
+
+private fun notLoadedMessage(displayName: String): String {
+    return "Selected $displayName is not loaded. Open Model Library and tap Use model."
+}
+
+private fun prepareFailedMessage(displayName: String): String {
+    return "Selected $displayName failed to prepare for local chat. Tap Use model to retry."
 }
 
 private fun ChatSessionEntity.toModel(): ChatSession {

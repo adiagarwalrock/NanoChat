@@ -48,43 +48,8 @@ class LocalModelCompatibilityEvaluator(
             )
         }
 
-        if (installState == ModelInstallState.INSTALLED && installedPath.isNullOrBlank()) {
-            return LocalModelCompatibilityState.CorruptedModel
-        }
-
-        if (installState == ModelInstallState.INSTALLED && !installedPath.isNullOrBlank()) {
-            val file = File(installedPath)
-            if (!file.exists() || !file.isFile || file.length() <= 0L) {
-                return LocalModelCompatibilityState.CorruptedModel
-            }
-
-            if (file.name.endsWith(".part", ignoreCase = true)) {
-                return LocalModelCompatibilityState.DownloadedButNotActivatable(
-                    "Startup validation failed. Selected file is a partial download: ${file.absolutePath}"
-                )
-            }
-
-            if (file.name != model.modelFile) {
-                return LocalModelCompatibilityState.DownloadedButNotActivatable(
-                    "Startup validation failed. Expected ${model.modelFile} but found ${file.name}."
-                )
-            }
-
-            if (model.fileType.isNotBlank() &&
-                !file.extension.equals(model.fileType, ignoreCase = true)
-            ) {
-                return LocalModelCompatibilityState.DownloadedButNotActivatable(
-                    "Startup validation failed. Expected *.${model.fileType} but found *.${file.extension}."
-                )
-            }
-
-            if (model.sizeInBytes > 0L && file.length() != model.sizeInBytes) {
-                return LocalModelCompatibilityState.DownloadedButNotActivatable(
-                    "Startup validation failed. Expected ${model.sizeInBytes} bytes but found ${file.length()}."
-                )
-            }
-
-            return LocalModelCompatibilityState.Ready
+        if (installState == ModelInstallState.INSTALLED) {
+            return evaluateInstalledModel(model = model, installedPath = installedPath)
         }
 
         val availableStorage = availableStorageBytes()
@@ -103,6 +68,56 @@ class LocalModelCompatibilityEvaluator(
 
             else -> LocalModelCompatibilityState.Downloadable
         }
+    }
+
+    private fun evaluateInstalledModel(
+        model: AllowlistedModel,
+        installedPath: String?
+    ): LocalModelCompatibilityState {
+        if (installedPath.isNullOrBlank()) {
+            return LocalModelCompatibilityState.CorruptedModel
+        }
+
+        val file = File(installedPath)
+        if (!file.exists() || !file.isFile || file.length() <= 0L) {
+            return LocalModelCompatibilityState.CorruptedModel
+        }
+
+        if (file.name.endsWith(".part", ignoreCase = true)) {
+            return startupValidationFailure(
+                "Selected file is a partial download: ${file.absolutePath}"
+            )
+        }
+
+        if (file.name != model.modelFile) {
+            return startupValidationFailure(
+                "Expected ${model.modelFile} but found ${file.name}."
+            )
+        }
+
+        if (model.fileType.isNotBlank() && !file.extension.equals(
+                model.fileType,
+                ignoreCase = true
+            )
+        ) {
+            return startupValidationFailure(
+                "Expected *.${model.fileType} but found *.${file.extension}."
+            )
+        }
+
+        if (model.sizeInBytes > 0L && file.length() != model.sizeInBytes) {
+            return startupValidationFailure(
+                "Expected ${model.sizeInBytes} bytes but found ${file.length()}."
+            )
+        }
+
+        return LocalModelCompatibilityState.Ready
+    }
+
+    private fun startupValidationFailure(reason: String): LocalModelCompatibilityState {
+        return LocalModelCompatibilityState.DownloadedButNotActivatable(
+            "Startup validation failed. $reason"
+        )
     }
 
     private fun availableStorageBytes(): Long {
@@ -136,7 +151,7 @@ class LocalModelCompatibilityEvaluator(
     }
 
     private fun isChatSuitable(model: AllowlistedModel): Boolean {
-        if (model.recommendedForChat) return true
-        return model.taskTypes.any { it.contains("chat", ignoreCase = true) }
+        return model.recommendedForChat ||
+                model.taskTypes.any { it.contains("chat", ignoreCase = true) }
     }
 }

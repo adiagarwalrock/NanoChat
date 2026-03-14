@@ -1,6 +1,7 @@
 package com.fcm.nanochat.inference
 
 object GeneratedTextSanitizer {
+    private const val MAX_ASSISTANT_PREFIX_STRIPS = 4
     private val controlLineRegex = Regex(
         pattern = """(?i)^\s*(<\|assistant\|>|<\|user\|>|<\|system\|>|<\|im_start\|>|<\|im_end\|>|<\|eot_id\|>|<\|endoftext\|>|<assistant>|</assistant>|<user>|</user>|assistant\s*:|###\s*assistant\s*:|\[assistant])\s*$"""
     )
@@ -16,6 +17,9 @@ object GeneratedTextSanitizer {
     private val completeThinkBlockRegex = Regex(
         pattern = """(?is)<think>.*?</think>"""
     )
+    private val leadingAssistantLabelRegex = Regex("(?i)^\\s*assistant\\s*:\\s*")
+    private val excessiveNewlineRegex = Regex("\\n{3,}")
+    private val repeatedHorizontalWhitespaceRegex = Regex("[ \\t]{2,}")
 
     fun sanitize(raw: String): String {
         if (raw.isBlank()) return ""
@@ -26,32 +30,29 @@ object GeneratedTextSanitizer {
 
         val withoutThoughtTags = stripThinkingContent(normalizedInput)
 
-        val trimmedLines = withoutThoughtTags
+        var normalized = withoutThoughtTags
             .lines()
             .dropWhile { line ->
                 val content = line.trim()
                 content.isBlank() || controlLineRegex.matches(content)
             }
+            .joinToString(separator = "\n")
+            .trimEnd()
 
-        var normalized = buildString {
-            trimmedLines.forEach { line ->
-                append(line)
-                append('\n')
-            }
-        }.trimEnd()
-
-        repeat(4) {
+        var stripCount = 0
+        while (stripCount < MAX_ASSISTANT_PREFIX_STRIPS) {
             val updated = normalized.replaceFirst(leadingAssistantPrefixRegex, "")
-            if (updated == normalized) return@repeat
+            if (updated == normalized) break
             normalized = updated
+            stripCount += 1
         }
 
         return normalized
             .replace(inlineControlTokenRegex, " ")
             .replace(standaloneRoleLineRegex, "")
-            .replace(Regex("(?i)^\\s*assistant\\s*:\\s*"), "")
-            .replace(Regex("\n{3,}"), "\n\n")
-            .replace(Regex("[ \\t]{2,}"), " ")
+            .replace(leadingAssistantLabelRegex, "")
+            .replace(excessiveNewlineRegex, "\n\n")
+            .replace(repeatedHorizontalWhitespaceRegex, " ")
             .trim()
     }
 
@@ -59,11 +60,13 @@ object GeneratedTextSanitizer {
         var result = raw.replace(completeThinkBlockRegex, " ")
 
         val openThinkIndex = result.lastIndexOf("<think>", ignoreCase = true)
-        if (openThinkIndex >= 0) {
-            val closeThinkIndex = result.indexOf("</think>", startIndex = openThinkIndex)
-            if (closeThinkIndex == -1) {
-                result = result.substring(0, openThinkIndex)
-            }
+        if (openThinkIndex < 0) {
+            return result
+        }
+
+        val closeThinkIndex = result.indexOf("</think>", startIndex = openThinkIndex)
+        if (closeThinkIndex == -1) {
+            result = result.substring(0, openThinkIndex)
         }
 
         return result

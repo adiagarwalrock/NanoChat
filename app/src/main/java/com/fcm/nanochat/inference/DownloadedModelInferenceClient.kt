@@ -65,54 +65,8 @@ class DownloadedModelInferenceClient(
         }
 
         return when (val compatibility = record.compatibility) {
-            LocalModelCompatibilityState.Ready -> {
-                val runtimeState = runtimeManager.loadState.value
-                val runtimeModelId = runtimeState.modelId?.trim()?.lowercase().orEmpty()
-                val selectedModelId = record.modelId.trim().lowercase()
+            LocalModelCompatibilityState.Ready -> availabilityForReadyModel(record)
 
-                when (runtimeState.phase) {
-                    com.fcm.nanochat.models.runtime.RuntimeLoadPhase.LOADING -> {
-                        if (runtimeModelId == selectedModelId) {
-                            BackendAvailability.Unavailable(
-                                "Selected local model is being prepared for local chat."
-                            )
-                        } else {
-                            BackendAvailability.Unavailable(
-                                "Selected local model is not ready yet. NanoChat is preparing it now."
-                            )
-                        }
-                    }
-
-                    com.fcm.nanochat.models.runtime.RuntimeLoadPhase.LOADED -> {
-                        if (runtimeModelId == selectedModelId) {
-                            BackendAvailability.Available
-                        } else {
-                            BackendAvailability.Unavailable(
-                                "Selected local model is not ready yet. NanoChat is preparing it now."
-                            )
-                        }
-                    }
-
-                    com.fcm.nanochat.models.runtime.RuntimeLoadPhase.EJECTED,
-                    com.fcm.nanochat.models.runtime.RuntimeLoadPhase.IDLE -> {
-                        BackendAvailability.Unavailable(
-                            "Selected local model is not ready yet. NanoChat is preparing it now."
-                        )
-                    }
-
-                    com.fcm.nanochat.models.runtime.RuntimeLoadPhase.FAILED -> {
-                        if (runtimeModelId.isBlank() || runtimeModelId == selectedModelId) {
-                            BackendAvailability.Unavailable(
-                                "Selected local model failed to prepare for local chat. Tap Use model to retry."
-                            )
-                        } else {
-                            BackendAvailability.Unavailable(
-                                "Selected local model is not ready yet. NanoChat is preparing it now."
-                            )
-                        }
-                    }
-                }
-            }
             LocalModelCompatibilityState.Downloadable -> {
                 BackendAvailability.Unavailable("Download this local model before using it.")
             }
@@ -153,6 +107,54 @@ class DownloadedModelInferenceClient(
                 BackendAvailability.Unavailable(toFriendlyRuntimeError(compatibility.reason))
             }
         }
+    }
+
+    private fun availabilityForReadyModel(record: InstalledModelRecord): BackendAvailability {
+        val runtimeState = runtimeManager.loadState.value
+        val runtimeModelId = runtimeState.modelId?.trim()?.lowercase().orEmpty()
+        val selectedModelId = record.modelId.trim().lowercase()
+        val matchesSelectedModel = runtimeModelId == selectedModelId
+
+        return when (runtimeState.phase) {
+            com.fcm.nanochat.models.runtime.RuntimeLoadPhase.LOADING -> {
+                if (matchesSelectedModel) {
+                    BackendAvailability.Unavailable(
+                        "Selected local model is being prepared for local chat."
+                    )
+                } else {
+                    notReadyYetAvailability()
+                }
+            }
+
+            com.fcm.nanochat.models.runtime.RuntimeLoadPhase.LOADED -> {
+                if (matchesSelectedModel) {
+                    BackendAvailability.Available
+                } else {
+                    notReadyYetAvailability()
+                }
+            }
+
+            com.fcm.nanochat.models.runtime.RuntimeLoadPhase.EJECTED,
+            com.fcm.nanochat.models.runtime.RuntimeLoadPhase.IDLE -> {
+                notReadyYetAvailability()
+            }
+
+            com.fcm.nanochat.models.runtime.RuntimeLoadPhase.FAILED -> {
+                if (runtimeModelId.isBlank() || matchesSelectedModel) {
+                    BackendAvailability.Unavailable(
+                        "Selected local model failed to prepare for local chat. Tap Use model to retry."
+                    )
+                } else {
+                    notReadyYetAvailability()
+                }
+            }
+        }
+    }
+
+    private fun notReadyYetAvailability(): BackendAvailability.Unavailable {
+        return BackendAvailability.Unavailable(
+            "Selected local model is not ready yet. NanoChat is preparing it now."
+        )
     }
 
     override fun streamChat(request: InferenceRequest): Flow<String> = flow {
@@ -698,11 +700,8 @@ class DownloadedModelInferenceClient(
             }
 
             "flatbuffer" in lowercase ||
-                    "error building tflite model" in lowercase -> {
-                "Installed, but NanoChat could not start this model."
-            }
-
-            "invocationtargetexception" in lowercase -> {
+                    "error building tflite model" in lowercase ||
+                    "invocationtargetexception" in lowercase -> {
                 "Installed, but NanoChat could not start this model."
             }
 

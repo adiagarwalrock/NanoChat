@@ -289,20 +289,7 @@ class SettingsViewModel(
                             !serverMessage.isNullOrBlank() -> serverMessage
                             else -> "Unable to validate Hugging Face token (HTTP ${response.code})."
                         }
-                        return@withContext HuggingFaceAccountUi(
-                            isValidating = false,
-                            isValid = false,
-                            username = null,
-                            fullName = null,
-                            email = null,
-                            emailVerified = false,
-                            avatarUrl = null,
-                            profileUrl = null,
-                            isPro = false,
-                            tokenName = null,
-                            tokenRole = null,
-                            message = message
-                        )
+                        return@withContext invalidHuggingFaceAccount(message)
                     }
 
                     val account = HuggingFaceWhoAmIParser.parseAccount(body)
@@ -314,22 +301,28 @@ class SettingsViewModel(
                     throw error
                 }
 
-                return@withContext HuggingFaceAccountUi(
-                    isValidating = false,
-                    isValid = false,
-                    username = null,
-                    fullName = null,
-                    email = null,
-                    emailVerified = false,
-                    avatarUrl = null,
-                    profileUrl = null,
-                    isPro = false,
-                    tokenName = null,
-                    tokenRole = null,
-                    message = error.message ?: "Failed to validate Hugging Face token."
+                return@withContext invalidHuggingFaceAccount(
+                    error.message ?: "Failed to validate Hugging Face token."
                 )
             }
         }
+    }
+
+    private fun invalidHuggingFaceAccount(message: String): HuggingFaceAccountUi {
+        return HuggingFaceAccountUi(
+            isValidating = false,
+            isValid = false,
+            username = null,
+            fullName = null,
+            email = null,
+            emailVerified = false,
+            avatarUrl = null,
+            profileUrl = null,
+            isPro = false,
+            tokenName = null,
+            tokenRole = null,
+            message = message
+        )
     }
 
     fun clearAllHistory() {

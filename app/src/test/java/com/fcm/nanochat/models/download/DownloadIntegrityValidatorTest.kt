@@ -9,46 +9,53 @@ class DownloadIntegrityValidatorTest {
 
     @Test
     fun `validate succeeds for matching non-empty file`() {
-        val file = createTempFile(prefix = "nanochat", suffix = ".part").toFile()
-        file.writeBytes(ByteArray(16) { 1 })
+        withTempDownloadFile(ByteArray(16) { 1 }) { file ->
+            val result = validator.validate(
+                tempFile = file,
+                expectedFileName = "model.litertlm",
+                expectedSizeBytes = 16
+            )
 
-        val result = validator.validate(
-            tempFile = file,
-            expectedFileName = "model.litertlm",
-            expectedSizeBytes = 16
-        )
-
-        assertTrue(result is ValidationResult.Success)
-        file.delete()
+            assertTrue(result is ValidationResult.Success)
+        }
     }
 
     @Test
     fun `validate fails on size mismatch`() {
-        val file = createTempFile(prefix = "nanochat", suffix = ".part").toFile()
-        file.writeBytes(ByteArray(8) { 1 })
+        withTempDownloadFile(ByteArray(8) { 1 }) { file ->
+            val result = validator.validate(
+                tempFile = file,
+                expectedFileName = "model.litertlm",
+                expectedSizeBytes = 16
+            )
 
-        val result = validator.validate(
-            tempFile = file,
-            expectedFileName = "model.litertlm",
-            expectedSizeBytes = 16
-        )
-
-        assertTrue(result is ValidationResult.Failure)
-        file.delete()
+            assertTrue(result is ValidationResult.Failure)
+        }
     }
 
     @Test
     fun `validate fails on empty file`() {
+        withTempDownloadFile(ByteArray(0)) { file ->
+            val result = validator.validate(
+                tempFile = file,
+                expectedFileName = "model.litertlm",
+                expectedSizeBytes = 0
+            )
+
+            assertTrue(result is ValidationResult.Failure)
+        }
+    }
+
+    private fun withTempDownloadFile(
+        bytes: ByteArray,
+        block: (java.io.File) -> Unit
+    ) {
         val file = createTempFile(prefix = "nanochat", suffix = ".part").toFile()
-        file.writeBytes(ByteArray(0))
-
-        val result = validator.validate(
-            tempFile = file,
-            expectedFileName = "model.litertlm",
-            expectedSizeBytes = 0
-        )
-
-        assertTrue(result is ValidationResult.Failure)
-        file.delete()
+        file.writeBytes(bytes)
+        try {
+            block(file)
+        } finally {
+            file.delete()
+        }
     }
 }

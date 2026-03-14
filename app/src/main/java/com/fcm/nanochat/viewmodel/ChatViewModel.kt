@@ -466,10 +466,10 @@ class ChatViewModel(
     }
 
     private fun firstTokenWatchdogMs(mode: InferenceMode): Long {
-        return if (mode == InferenceMode.DOWNLOADED) {
-            LOCAL_FIRST_TOKEN_WATCHDOG_MS
-        } else {
-            REMOTE_FIRST_TOKEN_WATCHDOG_MS
+        return when (mode) {
+            InferenceMode.DOWNLOADED -> LOCAL_FIRST_TOKEN_WATCHDOG_MS
+            InferenceMode.AICORE,
+            InferenceMode.REMOTE -> REMOTE_FIRST_TOKEN_WATCHDOG_MS
         }
     }
 
@@ -484,8 +484,7 @@ class ChatViewModel(
     }
 
     private fun shouldSurfaceNotice(mode: InferenceMode, message: String): Boolean {
-        if (message.isBlank()) return false
-        return mode != InferenceMode.DOWNLOADED
+        return message.isNotBlank() && mode != InferenceMode.DOWNLOADED
     }
 
     private companion object {

@@ -117,9 +117,7 @@ internal class LiteRtLmRuntime(
 
     override fun cancelActiveGeneration(reason: String) {
         val active = activeConversation.get() ?: return
-        if (!active.gate.tryCancel()) {
-            return
-        }
+        if (!active.gate.tryCancel()) return
 
         Log.d(
             TAG,
@@ -163,12 +161,9 @@ internal class LiteRtLmRuntime(
         reason: String
     ): Boolean {
         val active = activeConversation.get() ?: return false
-        if (active.generationId != generationId || active.conversation !== conversation) {
-            return false
-        }
-        if (!active.gate.tryFinalize()) {
-            return false
-        }
+        if (active.generationId != generationId) return false
+        if (active.conversation !== conversation) return false
+        if (!active.gate.tryFinalize()) return false
 
         activeConversation.compareAndSet(active, null)
         Log.d(TAG, "Finalizing local generation generationId=$generationId reason=$reason")
@@ -347,7 +342,6 @@ internal object LiteRtLmRuntimeFactory {
         return when (label) {
             "gpu" -> Backend.GPU()
             "npu" -> Backend.NPU()
-            "auto" -> Backend.CPU()
             else -> Backend.CPU()
         }
     }
