@@ -1,9 +1,8 @@
 package com.fcm.nanochat.inference
 
 import android.util.Log
-import com.fcm.nanochat.data.SettingsSnapshot
 import com.fcm.nanochat.data.AcceleratorPreference
-import com.fcm.nanochat.data.ThinkingEffort
+import com.fcm.nanochat.data.SettingsSnapshot
 import com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig
 import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
 import com.fcm.nanochat.models.registry.InstalledModelRecord
@@ -598,25 +597,24 @@ class DownloadedModelInferenceClient(
     }
 
     private fun mergeRuntimeChunk(existing: String, incoming: String): String {
-        val chunk = incoming
-        if (chunk.isBlank()) return existing
-        if (existing.isBlank()) return chunk
+        if (incoming.isBlank()) return existing
+        if (existing.isBlank()) return incoming
 
-        return when {
-            chunk.length > existing.length && chunk.startsWith(existing) -> chunk
-            else -> existing + chunk
+        return if (incoming.length > existing.length && incoming.startsWith(existing)) {
+            incoming
+        } else {
+            existing + incoming
         }
     }
 
     private fun incrementalVisibleDelta(previous: String, current: String): String {
-        if (current.isBlank()) return ""
+        if (current.isBlank() || current == previous || previous.startsWith(current)) return ""
         if (previous.isBlank()) return current
 
-        return when {
-            current == previous -> ""
-            current.startsWith(previous) -> current.removePrefix(previous)
-            previous.startsWith(current) -> ""
-            else -> current
+        return if (current.startsWith(previous)) {
+            current.removePrefix(previous)
+        } else {
+            current
         }
     }
 
@@ -636,11 +634,12 @@ class DownloadedModelInferenceClient(
         if (compact.length < 48) return false
 
         val first = compact.first()
-        if (first in '0'..'9' || first in 'a'..'z' || first in 'A'..'Z') return false
+        if (first.isLetterOrDigit()) return false
+        
         val punctuationCandidates = setOf('#', '\'', '$', '-', '_', '=', '|', '`', '.', '*', '+')
         if (first !in punctuationCandidates) return false
 
-        val sameRatio = compact.count { it == first }.toDouble() / compact.length.toDouble()
+        val sameRatio = compact.count { it == first }.toDouble() / compact.length
         return sameRatio >= 0.95
     }
 
@@ -718,16 +717,15 @@ class DownloadedModelInferenceClient(
         return config.copy(accelerators = normalized, strictAccelerator = true)
     }
 
-    private fun generationAttemptConfigs(
-        config: AllowlistDefaultConfig
-    ): List<AllowlistDefaultConfig> {
-        val attempts = mutableListOf(config)
-        val firstAccelerator = config.acceleratorHints.firstOrNull()?.lowercase().orEmpty()
-        val alreadyCpuOnly = config.acceleratorHints.size == 1 && firstAccelerator == "cpu"
-        if (!alreadyCpuOnly && firstAccelerator != "cpu") {
-            attempts += config.copy(accelerators = "cpu", strictAccelerator = true)
+    private fun generationAttemptConfigs(config: AllowlistDefaultConfig): List<AllowlistDefaultConfig> {
+        val firstAccelerator = config.acceleratorHints.firstOrNull()?.lowercase()
+        val cpuConfig = config.copy(accelerators = "cpu", strictAccelerator = true)
+
+        return if (firstAccelerator == "cpu" && config.acceleratorHints.size == 1) {
+            listOf(config)
+        } else {
+            listOf(config, cpuConfig).distinctBy { "${it.accelerators}|${it.strictAccelerator}" }
         }
-        return attempts.distinctBy { attempt -> "${attempt.accelerators}|${attempt.strictAccelerator}" }
     }
 
     private fun shouldRetryOnCpuFallback(

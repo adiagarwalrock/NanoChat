@@ -16,29 +16,29 @@ import com.google.ai.edge.litertlm.ExperimentalFlags
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import java.io.File
 import java.io.FileInputStream
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 
 private data class StartupFileInspection(
-    val path: String,
-    val exists: Boolean,
-    val sizeBytes: Long,
-    val extension: String,
-    val detectedFormat: String,
-    val magicBytesHex: String
+        val path: String,
+        val exists: Boolean,
+        val sizeBytes: Long,
+        val extension: String,
+        val detectedFormat: String,
+        val magicBytesHex: String
 )
 
 internal class LiteRtLmRuntime(
-    private val engine: Engine,
-    private val samplerConfig: SamplerConfig?
+        private val engine: Engine,
+        private val samplerConfig: SamplerConfig?
 ) : LocalModelRuntime {
     private val generationCounter = AtomicLong(0L)
     private val activeConversation = AtomicReference<ActiveConversation?>(null)
@@ -54,65 +54,64 @@ internal class LiteRtLmRuntime(
 
         val generationId = generationCounter.incrementAndGet()
         val gate = StreamLifecycleGate()
-        val normalizedSystemInstruction = systemInstruction
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-            ?.let { Contents.of(listOf(Content.Text(it))) }
+        val normalizedSystemInstruction =
+                systemInstruction?.trim()?.takeIf { it.isNotBlank() }?.let {
+                    Contents.of(listOf(Content.Text(it)))
+                }
 
-        val conversation = engine.createConversation(
-            ConversationConfig(
-                samplerConfig = samplerConfig,
-                systemInstruction = normalizedSystemInstruction
-            )
-        )
-        val active = ActiveConversation(
-            generationId = generationId,
-            conversation = conversation,
-            gate = gate
-        )
+        val conversation =
+                engine.createConversation(
+                        ConversationConfig(
+                                samplerConfig = samplerConfig,
+                                systemInstruction = normalizedSystemInstruction
+                        )
+                )
+        val active =
+                ActiveConversation(
+                        generationId = generationId,
+                        conversation = conversation,
+                        gate = gate
+                )
         activeConversation.set(active)
         Log.d(TAG, "Starting local generation generationId=$generationId")
 
         val contents = Contents.of(listOf(Content.Text(request)))
 
-        val callback = object : MessageCallback {
-            override fun onMessage(message: Message) {
-                if (!isCurrentGeneration(generationId, conversation)) {
-                    return
-                }
-                val chunk = message.toString()
-                if (chunk != "null") {
-                    trySend(chunk)
-                }
-            }
+        val callback =
+                object : MessageCallback {
+                    override fun onMessage(message: Message) {
+                        if (!isCurrentGeneration(generationId, conversation)) {
+                            return
+                        }
+                        val chunk = message.toString()
+                        if (chunk != "null") {
+                            trySend(chunk)
+                        }
+                    }
 
-            override fun onDone() {
-                if (!finishGeneration(generationId, conversation, reason = "done")) {
-                    return
-                }
-                channel.close()
-            }
+                    override fun onDone() {
+                        if (!finishGeneration(generationId, conversation, reason = "done")) {
+                            return
+                        }
+                        channel.close()
+                    }
 
-            override fun onError(throwable: Throwable) {
-                if (!finishGeneration(generationId, conversation, reason = "error")) {
-                    return
+                    override fun onError(throwable: Throwable) {
+                        if (!finishGeneration(generationId, conversation, reason = "error")) {
+                            return
+                        }
+                        channel.close(throwable)
+                    }
                 }
-                channel.close(throwable)
-            }
-        }
 
-        runCatching {
-            conversation.sendMessageAsync(contents, callback)
-        }.onFailure { error ->
+        runCatching { conversation.sendMessageAsync(contents, callback) }.onFailure { error ->
             if (!finishGeneration(generationId, conversation, reason = "send_message_failure")) {
                 return@onFailure
             }
             channel.close(error)
         }
 
-        awaitClose {
-            cancelActiveGeneration("await_close")
-        }
+        awaitClose { cancelActiveGeneration("await_close") }
     }
 
     override fun cancelActiveGeneration(reason: String) {
@@ -120,21 +119,14 @@ internal class LiteRtLmRuntime(
         if (!active.gate.tryCancel()) return
 
         Log.d(
-            TAG,
-            "Cancelling active local generation generationId=${active.generationId} reason=$reason"
+                TAG,
+                "Cancelling active local generation generationId=${active.generationId} reason=$reason"
         )
         runCatching { active.conversation.cancelProcess() }
     }
 
-    override fun close() {
-        val active = activeConversation.getAndSet(null)
-        if (active != null) {
-            active.gate.tryCancel()
-            if (active.gate.tryFinalize()) {
-                runCatching { active.conversation.cancelProcess() }
-                runCatching { active.conversation.close() }
-            }
-        }
+    override suspend fun close() {
+        cancelAndDrainActiveConversation(reason = "close")
         runCatching { engine.close() }
     }
 
@@ -145,9 +137,9 @@ internal class LiteRtLmRuntime(
     }
 
     private data class ActiveConversation(
-        val generationId: Long,
-        val conversation: Conversation,
-        val gate: StreamLifecycleGate
+            val generationId: Long,
+            val conversation: Conversation,
+            val gate: StreamLifecycleGate
     )
 
     private fun isCurrentGeneration(generationId: Long, conversation: Conversation): Boolean {
@@ -156,9 +148,9 @@ internal class LiteRtLmRuntime(
     }
 
     private fun finishGeneration(
-        generationId: Long,
-        conversation: Conversation,
-        reason: String
+            generationId: Long,
+            conversation: Conversation,
+            reason: String
     ): Boolean {
         val active = activeConversation.get() ?: return false
         if (active.generationId != generationId) return false
@@ -190,13 +182,12 @@ internal class LiteRtLmRuntime(
         }
 
         Log.w(
-            TAG,
-            "Forcing local generation finalization generationId=${stale.generationId} reason=$reason"
+                TAG,
+                "Forcing local generation finalization generationId=${stale.generationId} reason=$reason"
         )
         runCatching { stale.conversation.cancelProcess() }
         runCatching { stale.conversation.close() }
     }
-
 }
 
 internal class StreamLifecycleGate {
@@ -210,46 +201,49 @@ internal class StreamLifecycleGate {
 
 internal object LiteRtLmRuntimeFactory {
     fun create(
-        context: Context,
-        modelId: String,
-        modelPath: String,
-        config: AllowlistDefaultConfig,
-        expectedFileName: String?,
-        expectedFileType: String?,
-        expectedSizeBytes: Long
+            context: Context,
+            modelId: String,
+            modelPath: String,
+            config: AllowlistDefaultConfig,
+            expectedFileName: String?,
+            expectedFileType: String?,
+            expectedSizeBytes: Long
     ): LocalModelRuntime {
         val trimmedPath = modelPath.trim()
         val debugEnabled = isDebugBuild(context)
         val inspection = inspectModelFile(trimmedPath, debugEnabled)
         logStartupInspection(
-            modelId = modelId,
-            inspection = inspection,
-            expectedFileName = expectedFileName,
-            expectedFileType = expectedFileType,
-            expectedSizeBytes = expectedSizeBytes
+                modelId = modelId,
+                inspection = inspection,
+                expectedFileName = expectedFileName,
+                expectedFileType = expectedFileType,
+                expectedSizeBytes = expectedSizeBytes
         )
         validateModelFile(
-            inspection = inspection,
-            expectedFileName = expectedFileName,
-            expectedFileType = expectedFileType,
-            expectedSizeBytes = expectedSizeBytes
+                inspection = inspection,
+                expectedFileName = expectedFileName,
+                expectedFileType = expectedFileType,
+                expectedSizeBytes = expectedSizeBytes
         )
 
         val backends = backendOrder(config)
         val errors = mutableListOf<String>()
 
         for (backend in backends) {
-            val runtime = runCatching {
-                createRuntime(
-                    context = context,
-                    modelPath = trimmedPath,
-                    config = config,
-                    backendLabel = backend
-                )
-            }.getOrElse { error ->
-                errors += "${backend.ifBlank { "auto" }}: ${rootCauseSummary(error)}"
-                null
-            }
+            val runtime =
+                    runCatching {
+                        createRuntime(
+                                context = context,
+                                modelPath = trimmedPath,
+                                config = config,
+                                backendLabel = backend
+                        )
+                    }
+                            .getOrElse { error ->
+                                errors +=
+                                        "${backend.ifBlank { "auto" }}: ${rootCauseSummary(error)}"
+                                null
+                            }
 
             if (runtime != null) {
                 return runtime
@@ -257,20 +251,20 @@ internal object LiteRtLmRuntimeFactory {
         }
 
         error(
-            errors.joinToString(separator = " | ").ifBlank {
-                "Unable to initialize local runtime."
-            }
+                errors.joinToString(separator = " | ").ifBlank {
+                    "Unable to initialize local runtime."
+                }
         )
     }
 
     fun probe(
-        context: Context,
-        modelId: String,
-        modelPath: String,
-        config: AllowlistDefaultConfig,
-        expectedFileName: String?,
-        expectedFileType: String?,
-        expectedSizeBytes: Long
+            context: Context,
+            modelId: String,
+            modelPath: String,
+            config: AllowlistDefaultConfig,
+            expectedFileName: String?,
+            expectedFileType: String?,
+            expectedSizeBytes: Long
     ): String? {
         if (!isRuntimeClassAvailable()) {
             return "Local runtime is unavailable on this build."
@@ -279,62 +273,64 @@ internal object LiteRtLmRuntimeFactory {
         val debugEnabled = isDebugBuild(context)
         val inspection = inspectModelFile(modelPath.trim(), debugEnabled)
         return runCatching {
-            val runtime = create(
-                context = context,
-                modelId = modelId,
-                modelPath = modelPath,
-                config = config,
-                expectedFileName = expectedFileName,
-                expectedFileType = expectedFileType,
-                expectedSizeBytes = expectedSizeBytes
-            )
-            runtime.close()
-        }.exceptionOrNull()?.let { error ->
-            probeFailureMessage(inspection, error)
+            val runtime =
+                    create(
+                            context = context,
+                            modelId = modelId,
+                            modelPath = modelPath,
+                            config = config,
+                            expectedFileName = expectedFileName,
+                            expectedFileType = expectedFileType,
+                            expectedSizeBytes = expectedSizeBytes
+                    )
+            kotlinx.coroutines.runBlocking { runtime.close() }
         }
+                .exceptionOrNull()
+                ?.let { error -> probeFailureMessage(inspection, error) }
     }
 
     fun isRuntimeClassAvailable(): Boolean {
-        return runCatching {
-            Class.forName("com.google.ai.edge.litertlm.Engine")
-        }.isSuccess
+        return runCatching { Class.forName("com.google.ai.edge.litertlm.Engine") }.isSuccess
     }
 
     @OptIn(ExperimentalApi::class)
     private fun createRuntime(
-        context: Context,
-        modelPath: String,
-        config: AllowlistDefaultConfig,
-        backendLabel: String
+            context: Context,
+            modelPath: String,
+            config: AllowlistDefaultConfig,
+            backendLabel: String
     ): LocalModelRuntime {
         val backend = backendFromLabel(backendLabel)
         if (backendLabel == "npu") {
             ExperimentalFlags.npuLibrariesDir = context.applicationInfo.nativeLibraryDir
         }
 
-        val engineConfig = EngineConfig(
-            modelPath = modelPath,
-            backend = backend,
-            maxNumTokens = config.maxTokens.coerceAtLeast(256),
-            cacheDir = if (modelPath.startsWith(TMP_MODEL_PATH_PREFIX)) {
-                context.getExternalFilesDir(null)?.absolutePath
-            } else {
-                null
-            }
-        )
+        val engineConfig =
+                EngineConfig(
+                        modelPath = modelPath,
+                        backend = backend,
+                        maxNumTokens = config.maxTokens.coerceAtLeast(256),
+                        cacheDir =
+                                if (modelPath.startsWith(TMP_MODEL_PATH_PREFIX)) {
+                                    context.getExternalFilesDir(null)?.absolutePath
+                                } else {
+                                    null
+                                }
+                )
 
         val engine = Engine(engineConfig)
         engine.initialize()
 
-        val samplerConfig = if (backendLabel == "npu") {
-            null
-        } else {
-            SamplerConfig(
-                topK = config.topK.coerceAtLeast(1),
-                topP = config.topP.coerceIn(0.0, 1.0),
-                temperature = config.temperature.coerceAtLeast(0.0)
-            )
-        }
+        val samplerConfig =
+                if (backendLabel == "npu") {
+                    null
+                } else {
+                    SamplerConfig(
+                            topK = config.topK.coerceAtLeast(1),
+                            topP = config.topP.coerceIn(0.0, 1.0),
+                            temperature = config.temperature.coerceAtLeast(0.0)
+                    )
+                }
         return LiteRtLmRuntime(engine = engine, samplerConfig = samplerConfig)
     }
 
@@ -347,24 +343,18 @@ internal object LiteRtLmRuntimeFactory {
     }
 
     private fun backendOrder(config: AllowlistDefaultConfig): List<String> {
-        val explicit = config.acceleratorHints
-            .map { it.lowercase(Locale.US) }
-            .filter { it == "cpu" || it == "gpu" || it == "npu" }
-            .distinct()
-            .toMutableList()
+        val explicit =
+                config.acceleratorHints
+                        .map { it.lowercase(Locale.US) }
+                        .filter { it in listOf("cpu", "gpu", "npu") }
+                        .distinct()
+                        .toMutableList()
 
-        if (explicit.isEmpty()) {
-            explicit += listOf("gpu", "cpu")
-        }
+        if (explicit.isEmpty()) explicit.addAll(listOf("gpu", "cpu"))
+        if (config.strictAccelerator) return explicit.distinct()
 
-        if (config.strictAccelerator) {
-            return explicit.distinct()
-        }
-
-        if ("cpu" !in explicit) {
-            explicit += "cpu"
-        }
-        explicit += "auto"
+        if ("cpu" !in explicit) explicit.add("cpu")
+        explicit.add("auto")
 
         return explicit.distinct()
     }
@@ -376,26 +366,27 @@ internal object LiteRtLmRuntimeFactory {
         val extension = file.extension.lowercase(Locale.US)
         val magicBytes = if (exists) readMagicBytes(file) else ByteArray(0)
         return StartupFileInspection(
-            path = file.absolutePath,
-            exists = exists,
-            sizeBytes = sizeBytes,
-            extension = extension,
-            detectedFormat = detectFormat(extension, magicBytes),
-            magicBytesHex = if (debugEnabled) {
-                magicBytes.joinToString(" ") { byte ->
-                    "%02X".format(byte.toInt() and 0xFF)
-                }
-            } else {
-                ""
-            }
+                path = file.absolutePath,
+                exists = exists,
+                sizeBytes = sizeBytes,
+                extension = extension,
+                detectedFormat = detectFormat(extension, magicBytes),
+                magicBytesHex =
+                        if (debugEnabled) {
+                            magicBytes.joinToString(" ") { byte ->
+                                "%02X".format(byte.toInt() and 0xFF)
+                            }
+                        } else {
+                            ""
+                        }
         )
     }
 
     private fun validateModelFile(
-        inspection: StartupFileInspection,
-        expectedFileName: String?,
-        expectedFileType: String?,
-        expectedSizeBytes: Long
+            inspection: StartupFileInspection,
+            expectedFileName: String?,
+            expectedFileType: String?,
+            expectedSizeBytes: Long
     ) {
         if (!inspection.exists) {
             error("Model file is missing.")
@@ -412,38 +403,36 @@ internal object LiteRtLmRuntimeFactory {
 
         val normalizedExpectedName = expectedFileName?.trim().orEmpty()
         if (normalizedExpectedName.isNotBlank() && file.name != normalizedExpectedName) {
-            error(
-                "Model file name mismatch. Expected $normalizedExpectedName, got ${file.name}."
-            )
+            error("Model file name mismatch. Expected $normalizedExpectedName, got ${file.name}.")
         }
 
         val normalizedExpectedType = expectedFileType?.trim()?.lowercase(Locale.US).orEmpty()
         if (normalizedExpectedType.isNotBlank() && inspection.extension != normalizedExpectedType) {
             error(
-                "Model file extension mismatch. Expected $normalizedExpectedType, got ${inspection.extension}."
+                    "Model file extension mismatch. Expected $normalizedExpectedType, got ${inspection.extension}."
             )
         }
 
         if (expectedSizeBytes > 0L && inspection.sizeBytes != expectedSizeBytes) {
             error(
-                "Model file size mismatch. Expected $expectedSizeBytes bytes, got ${inspection.sizeBytes}."
+                    "Model file size mismatch. Expected $expectedSizeBytes bytes, got ${inspection.sizeBytes}."
             )
         }
     }
 
     private fun logStartupInspection(
-        modelId: String,
-        inspection: StartupFileInspection,
-        expectedFileName: String?,
-        expectedFileType: String?,
-        expectedSizeBytes: Long
+            modelId: String,
+            inspection: StartupFileInspection,
+            expectedFileName: String?,
+            expectedFileType: String?,
+            expectedSizeBytes: Long
     ) {
         Log.d(
-            TAG,
-            "startup_file modelId=$modelId path=${inspection.path} exists=${inspection.exists} " +
-                    "sizeBytes=${inspection.sizeBytes} extension=${inspection.extension} " +
-                    "format=${inspection.detectedFormat} expectedName=${expectedFileName.orEmpty()} " +
-                    "expectedType=${expectedFileType.orEmpty()} expectedSizeBytes=$expectedSizeBytes"
+                TAG,
+                "startup_file modelId=$modelId path=${inspection.path} exists=${inspection.exists} " +
+                        "sizeBytes=${inspection.sizeBytes} extension=${inspection.extension} " +
+                        "format=${inspection.detectedFormat} expectedName=${expectedFileName.orEmpty()} " +
+                        "expectedType=${expectedFileType.orEmpty()} expectedSizeBytes=$expectedSizeBytes"
         )
         if (inspection.magicBytesHex.isNotBlank()) {
             Log.d(TAG, "startup_file_magic modelId=$modelId bytes=${inspection.magicBytesHex}")
@@ -452,29 +441,38 @@ internal object LiteRtLmRuntimeFactory {
 
     private fun readMagicBytes(file: File): ByteArray {
         return runCatching {
-            val buffer = ByteArray(16)
-            FileInputStream(file).use { input ->
-                val read = input.read(buffer)
-                if (read <= 0) {
-                    ByteArray(0)
-                } else {
-                    buffer.copyOf(read)
+                    val buffer = ByteArray(16)
+                    FileInputStream(file).use { input ->
+                        val read = input.read(buffer)
+                        if (read <= 0) {
+                            ByteArray(0)
+                        } else {
+                            buffer.copyOf(read)
+                        }
+                    }
                 }
-            }
-        }.getOrDefault(ByteArray(0))
+                .getOrDefault(ByteArray(0))
     }
 
     private fun detectFormat(extension: String, magicBytes: ByteArray): String {
-        val isZip = magicBytes.size >= 4 &&
-                magicBytes[0] == 0x50.toByte() &&
-                magicBytes[1] == 0x4B.toByte() &&
-                magicBytes[2] == 0x03.toByte() &&
-                magicBytes[3] == 0x04.toByte()
-        val isTflite = magicBytes.size >= 8 &&
-                magicBytes[4] == 'T'.code.toByte() &&
-                magicBytes[5] == 'F'.code.toByte() &&
-                magicBytes[6] == 'L'.code.toByte() &&
-                magicBytes[7] == '3'.code.toByte()
+        val isZip =
+                magicBytes.size >= 4 &&
+                        magicBytes
+                                .take(4)
+                                .toByteArray()
+                                .contentEquals(byteArrayOf(0x50, 0x4B, 0x03, 0x04))
+        val isTflite =
+                magicBytes.size >= 8 &&
+                        magicBytes
+                                .copyOfRange(4, 8)
+                                .contentEquals(
+                                        byteArrayOf(
+                                                'T'.code.toByte(),
+                                                'F'.code.toByte(),
+                                                'L'.code.toByte(),
+                                                '3'.code.toByte()
+                                        )
+                                )
 
         return when {
             extension == "litertlm" -> "litertlm-package"
@@ -517,4 +515,3 @@ internal object LiteRtLmRuntimeFactory {
     private const val TMP_MODEL_PATH_PREFIX = "/data/local/tmp"
     private const val TAG = "LiteRtLmRuntime"
 }
-

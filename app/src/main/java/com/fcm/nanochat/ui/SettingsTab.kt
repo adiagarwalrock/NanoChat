@@ -178,12 +178,10 @@ internal fun SettingsHome(
                 modelName = displayModelName(state.modelName),
                 behaviorMode = activePreset.title,
                 providerStatus = connectionModeSummary(remoteConfigured),
-                onDeviceStatus = if (onDeviceEnabled) {
-                    "Gemini Nano enabled"
-                } else if (state.geminiStatus.supported) {
-                    "Gemini Nano available"
-                } else {
-                    "Gemini Nano unavailable"
+                onDeviceStatus = when {
+                    onDeviceEnabled -> "Gemini Nano enabled"
+                    state.geminiStatus.supported -> "Gemini Nano available"
+                    else -> "Gemini Nano unavailable"
                 },
                 onDeviceTone = when {
                     onDeviceEnabled -> BadgeTone.Positive
@@ -344,10 +342,7 @@ internal fun ConnectionSettings(
                     label = "On-device model",
                     value = stringResource(R.string.gemini_nano_title),
                     badge = when {
-                        state.geminiStatus.supported && state.geminiStatus.downloaded -> {
-                            BadgeData("Available", BadgeTone.Positive)
-                        }
-
+                        state.geminiStatus.supported && state.geminiStatus.downloaded -> BadgeData("Available", BadgeTone.Positive)
                         state.geminiStatus.supported -> BadgeData("Supported", BadgeTone.Neutral)
                         else -> BadgeData("Unavailable", BadgeTone.Warning)
                     }
@@ -1515,11 +1510,7 @@ private fun formatCount(value: Long): String {
 }
 
 private fun formatModelSize(status: GeminiNanoStatusUi, unavailableLabel: String): String {
-    val size = when {
-        status.bytesToDownload != null && status.bytesToDownload > 0 -> status.bytesToDownload
-        status.lastKnownModelSizeBytes > 0 -> status.lastKnownModelSizeBytes
-        else -> null
-    }
+    val size = status.bytesToDownload?.takeIf { it > 0 } ?: status.lastKnownModelSizeBytes.takeIf { it > 0 }
     return size?.let { humanReadableByteCount(it) } ?: unavailableLabel
 }
 

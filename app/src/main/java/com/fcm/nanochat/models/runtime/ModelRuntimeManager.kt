@@ -174,13 +174,6 @@ class ModelRuntimeManager(
     }
 
     private fun configSignature(config: AllowlistDefaultConfig): String {
-        return listOf(
-            config.topK.toString(),
-            config.topP.toString(),
-            config.temperature.toString(),
-            config.maxTokens.toString(),
-            config.accelerators,
-            config.strictAccelerator.toString()
-        ).joinToString(separator = "|")
+        return "${config.topK}|${config.topP}|${config.temperature}|${config.maxTokens}|${config.accelerators}|${config.strictAccelerator}"
     }
 }

@@ -920,7 +920,11 @@ private fun MessageList(
     ) {
         itemsIndexed(messages, key = { _, message -> message.id }) { index, message ->
             val sameRoleAsPrevious = messages.getOrNull(index - 1)?.role == message.role
-            val topPadding = if (index == 0) 2.dp else if (sameRoleAsPrevious) 10.dp else 18.dp
+            val topPadding = when {
+                index == 0 -> 2.dp
+                sameRoleAsPrevious -> 10.dp
+                else -> 18.dp
+            }
 
             MessageRow(
                 message = message,
@@ -1219,7 +1223,9 @@ private fun ThinkAccordion(thinkingText: String) {
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize()
-            .combinedClickable(onClick = { expanded = !expanded }, onLongClick = { expanded = !expanded })
+            .combinedClickable(
+                onClick = { expanded = !expanded },
+                onLongClick = { expanded = !expanded })
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -1256,6 +1262,8 @@ private fun ThinkAccordion(thinkingText: String) {
     }
 }
 
+private val markwonCache = android.util.LruCache<Int, Markwon>(4)
+
 @Composable
 private fun MarkdownMessage(
     content: String,
@@ -1276,7 +1284,7 @@ private fun MarkdownMessage(
         latexBackgroundColor,
         latexCornerRadiusPx
     ) {
-        Markwon.builder(context)
+        markwonCache.get(textArgb) ?: Markwon.builder(context)
             .usePlugin(MarkwonInlineParserPlugin.create())
             .usePlugin(
                 JLatexMathPlugin.create(16f) { builder ->
@@ -1294,7 +1302,9 @@ private fun MarkdownMessage(
                     builder.theme().textColor(textArgb)
                 }
             )
-            .build()
+            .build().also {
+                markwonCache.put(textArgb, it)
+            }
     }
 
     AndroidView(

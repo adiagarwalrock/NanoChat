@@ -194,33 +194,9 @@ class RemoteInferenceClient(
         if (choices.length() == 0) return ""
 
         val delta = choices.optJSONObject(0)?.optJSONObject("delta") ?: return ""
-        val reasoning = delta.opt("reasoning_content")
-        val reasoningText = when (reasoning) {
-            is String -> reasoning
-            is JSONArray -> buildString {
-                for (index in 0 until reasoning.length()) {
-                    val item = reasoning.opt(index)
-                    if (item is JSONObject) {
-                        append(item.optString("text"))
-                    }
-                }
-            }
-            else -> ""
-        }
-
-        val content = delta.opt("content")
-        val visibleText = when (content) {
-            is String -> content
-            is JSONArray -> buildString {
-                for (index in 0 until content.length()) {
-                    val item = content.opt(index)
-                    if (item is JSONObject) {
-                        append(item.optString("text"))
-                    }
-                }
-            }
-            else -> ""
-        }
+        
+        val reasoningText = extractText(delta.opt("reasoning_content"))
+        val visibleText = extractText(delta.opt("content"))
 
         return buildString {
             if (reasoningText.isNotBlank()) {
@@ -229,6 +205,21 @@ class RemoteInferenceClient(
                 append("</think>")
             }
             append(visibleText)
+        }
+    }
+
+    private fun extractText(jsonValue: Any?): String {
+        return when (jsonValue) {
+            is String -> jsonValue
+            is JSONArray -> buildString {
+                for (index in 0 until jsonValue.length()) {
+                    val item = jsonValue.opt(index)
+                    if (item is JSONObject) {
+                        append(item.optString("text"))
+                    }
+                }
+            }
+            else -> ""
         }
     }
 
