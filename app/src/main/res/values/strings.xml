@@ -13,7 +13,7 @@
     <string name="empty_chat_subtitle">Ask anything to start a conversation.</string>
     <string name="assistant_thinking">Thinking</string>
     <string name="assistant_no_response_yet">No response yet. You can retry.</string>
-    <string name="composer_placeholder">Message NanoChat</string>
+    <string name="composer_placeholder">Ask anything...</string>
     <string name="send_message">Send message</string>
     <string name="retry_last">Retry last</string>
     <string name="model_controls_title">Model controls</string>

@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -223,18 +224,45 @@ internal fun ModelsTab(
 
     LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         stickyHeader {
-            Surface(
-                    color = MaterialTheme.colorScheme.background,
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp
-            ) {
-                PinnedToolsHeader(
-                        query = query,
-                        selectedFilter = selectedFilter,
-                        selectedSort = selectedSort,
-                        onQueryChange = { query = it },
-                        onFilterChange = { selectedFilter = it },
-                        onSortChange = { selectedSort = it }
+            Column {
+                Surface(
+                        color = MaterialTheme.colorScheme.background,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
+                ) {
+                    PinnedToolsHeader(
+                            query = query,
+                            selectedFilter = selectedFilter,
+                            selectedSort = selectedSort,
+                            onQueryChange = { query = it },
+                            onFilterChange = { selectedFilter = it },
+                            onSortChange = { selectedSort = it }
+                    )
+                }
+                // Bottom fade so content dissolves under the header
+                Box(
+                        modifier =
+                                Modifier.fillMaxWidth()
+                                        .height(6.dp)
+                                        .background(
+                                                brush =
+                                                        androidx.compose.ui.graphics.Brush
+                                                                .verticalGradient(
+                                                                        colors =
+                                                                                listOf(
+                                                                                        MaterialTheme
+                                                                                                .colorScheme
+                                                                                                .background,
+                                                                                        MaterialTheme
+                                                                                                .colorScheme
+                                                                                                .background
+                                                                                                .copy(
+                                                                                                        alpha =
+                                                                                                                0f
+                                                                                                )
+                                                                                )
+                                                                )
+                                        )
                 )
             }
         }

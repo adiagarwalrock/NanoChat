@@ -42,33 +42,25 @@ class ChatRepository(
                     localModelRepository.runtimeLoadState
             ) { baseStatus, runtimeState ->
                 val activeModelId = baseStatus.modelId?.trim()?.lowercase().orEmpty()
-                if (activeModelId.isBlank()) {
-                    return@combine baseStatus
-                }
+                if (activeModelId.isBlank()) return@combine baseStatus
 
                 val displayName = baseStatus.displayName?.trim().orEmpty().ifBlank { "Local model" }
-
                 val runtimeModelId = runtimeState.modelId?.trim()?.lowercase().orEmpty()
                 val sameModel = runtimeModelId == activeModelId
 
                 when (runtimeState.phase) {
                     RuntimeLoadPhase.LOADING -> {
-                        if (sameModel) {
-                            baseStatus.unready(preparingModelMessage(displayName))
-                        } else {
-                            baseStatus.unready(notReadyYetMessage(displayName))
-                        }
+                        val msg =
+                            if (sameModel) preparingModelMessage(displayName)
+                            else notReadyYetMessage(displayName)
+                        baseStatus.unready(msg)
                     }
                     RuntimeLoadPhase.LOADED -> {
                         if (sameModel) {
                             baseStatus.copy(
-                                    ready = baseStatus.ready,
                                     message =
-                                            if (baseStatus.ready) {
-                                                "Ready for local chat"
-                                            } else {
-                                                baseStatus.message
-                                            }
+                                        if (baseStatus.ready) "Ready for local chat"
+                                        else baseStatus.message
                             )
                         } else {
                             baseStatus.unready(willPrepareOnStartMessage(displayName))
@@ -78,11 +70,11 @@ class ChatRepository(
                         baseStatus.unready(notLoadedMessage(displayName))
                     }
                     RuntimeLoadPhase.FAILED -> {
-                        if (runtimeModelId.isBlank() || sameModel) {
-                            baseStatus.unready(prepareFailedMessage(displayName))
-                        } else {
-                            baseStatus.unready(notReadyYetMessage(displayName))
-                        }
+                        val msg =
+                            if (runtimeModelId.isBlank() || sameModel)
+                                prepareFailedMessage(displayName)
+                            else notReadyYetMessage(displayName)
+                        baseStatus.unready(msg)
                     }
                 }
             }
@@ -304,14 +296,10 @@ class ChatRepository(
     }
 
     private fun messageModelName(settings: SettingsSnapshot): String {
-        if (settings.inferenceMode != InferenceMode.DOWNLOADED) {
-            return settings.modelName
-        }
+        if (settings.inferenceMode != InferenceMode.DOWNLOADED) return settings.modelName
 
         val activeId = settings.activeLocalModelId.trim().lowercase()
-        if (activeId.isBlank()) {
-            return settings.modelName
-        }
+        if (activeId.isBlank()) return settings.modelName
 
         return localModelRepository.records.value
                 .firstOrNull { it.modelId.equals(activeId, ignoreCase = true) }

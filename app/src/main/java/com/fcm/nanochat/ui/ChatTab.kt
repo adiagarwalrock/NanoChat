@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -73,8 +72,8 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -141,65 +140,65 @@ internal fun ChatTab(
         onMessageInfo: (ChatMessage) -> Unit,
         onDeleteMessage: (ChatMessage) -> Unit
 ) {
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp.dp
-    val compact = screenWidthDp < 700.dp
-    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-    val horizontalPadding = if (compact) 16.dp else 24.dp
-    val contentModifier = Modifier.fillMaxSize().padding(horizontal = horizontalPadding)
+        val screenWidthDp = LocalConfiguration.current.screenWidthDp.dp
+        val compact = screenWidthDp < 700.dp
+        val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+        val horizontalPadding = if (compact) 16.dp else 24.dp
+        val contentModifier = Modifier.fillMaxSize().padding(horizontal = horizontalPadding)
 
-    Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        if (compact) {
-            ChatTabContent(
-                    state = state,
-                    settingsState = settingsState,
-                    imeVisible = imeVisible,
-                    modifier = contentModifier,
-                    onOpenSessions = onOpenSessions,
-                    onSendMessage = onSendMessage,
-                    onStopGeneration = onStopGeneration,
-                    onMessageDraftChange = onMessageDraftChange,
-                    onRetryLast = onRetryLast,
-                    onInferenceModeChange = onInferenceModeChange,
-                    onOpenModelGallery = onOpenModelGallery,
-                    onTemperatureChange = onTemperatureChange,
-                    onTopPChange = onTopPChange,
-                    onContextLengthChange = onContextLengthChange,
-                    onThinkingEffortChange = onThinkingEffortChange,
-                    onAcceleratorChange = onAcceleratorChange,
-                    onMessageInfo = onMessageInfo,
-                    onDeleteMessage = onDeleteMessage
-            )
-        } else {
-            Row(modifier = Modifier.fillMaxSize()) {
-                SessionsRail(
-                        state = state,
-                        modifier = Modifier.width(280.dp).fillMaxSize(),
-                        onCreateSession = onCreateSession,
-                        onSelectSession = onOpenSessions
-                )
-                ChatTabContent(
-                        state = state,
-                        settingsState = settingsState,
-                        imeVisible = imeVisible,
-                        modifier = contentModifier,
-                        onOpenSessions = onOpenSessions,
-                        onSendMessage = onSendMessage,
-                        onStopGeneration = onStopGeneration,
-                        onMessageDraftChange = onMessageDraftChange,
-                        onRetryLast = onRetryLast,
-                        onInferenceModeChange = onInferenceModeChange,
-                        onOpenModelGallery = onOpenModelGallery,
-                        onTemperatureChange = onTemperatureChange,
-                        onTopPChange = onTopPChange,
-                        onContextLengthChange = onContextLengthChange,
-                        onThinkingEffortChange = onThinkingEffortChange,
-                        onAcceleratorChange = onAcceleratorChange,
-                        onMessageInfo = onMessageInfo,
-                        onDeleteMessage = onDeleteMessage
-                )
-            }
+        Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                if (compact) {
+                        ChatTabContent(
+                                state = state,
+                                settingsState = settingsState,
+                                imeVisible = imeVisible,
+                                modifier = contentModifier,
+                                onOpenSessions = onOpenSessions,
+                                onSendMessage = onSendMessage,
+                                onStopGeneration = onStopGeneration,
+                                onMessageDraftChange = onMessageDraftChange,
+                                onRetryLast = onRetryLast,
+                                onInferenceModeChange = onInferenceModeChange,
+                                onOpenModelGallery = onOpenModelGallery,
+                                onTemperatureChange = onTemperatureChange,
+                                onTopPChange = onTopPChange,
+                                onContextLengthChange = onContextLengthChange,
+                                onThinkingEffortChange = onThinkingEffortChange,
+                                onAcceleratorChange = onAcceleratorChange,
+                                onMessageInfo = onMessageInfo,
+                                onDeleteMessage = onDeleteMessage
+                        )
+                } else {
+                        Row(modifier = Modifier.fillMaxSize()) {
+                                SessionsRail(
+                                        state = state,
+                                        modifier = Modifier.width(280.dp).fillMaxSize(),
+                                        onCreateSession = onCreateSession,
+                                        onSelectSession = onOpenSessions
+                                )
+                                ChatTabContent(
+                                        state = state,
+                                        settingsState = settingsState,
+                                        imeVisible = imeVisible,
+                                        modifier = contentModifier,
+                                        onOpenSessions = onOpenSessions,
+                                        onSendMessage = onSendMessage,
+                                        onStopGeneration = onStopGeneration,
+                                        onMessageDraftChange = onMessageDraftChange,
+                                        onRetryLast = onRetryLast,
+                                        onInferenceModeChange = onInferenceModeChange,
+                                        onOpenModelGallery = onOpenModelGallery,
+                                        onTemperatureChange = onTemperatureChange,
+                                        onTopPChange = onTopPChange,
+                                        onContextLengthChange = onContextLengthChange,
+                                        onThinkingEffortChange = onThinkingEffortChange,
+                                        onAcceleratorChange = onAcceleratorChange,
+                                        onMessageInfo = onMessageInfo,
+                                        onDeleteMessage = onDeleteMessage
+                                )
+                        }
+                }
         }
-    }
 }
 
 @Composable
@@ -224,281 +223,314 @@ private fun ChatTabContent(
         onMessageInfo: (ChatMessage) -> Unit,
         onDeleteMessage: (ChatMessage) -> Unit
 ) {
-    var composerHeightPx by remember { mutableStateOf(0) }
-    var controlsVisible by remember { mutableStateOf(false) }
-    val density = LocalDensity.current
-    val listState = rememberLazyListState()
+        var controlsVisible by remember { mutableStateOf(false) }
+        var composerHeightPx by remember { mutableIntStateOf(0) }
+        val bottomPadding = with(LocalDensity.current) { composerHeightPx.toDp() }
+        val listState = rememberLazyListState()
 
-    val measuredComposerHeight = with(density) { composerHeightPx.toDp() }
-    val imeBottomInset = with(density) { WindowInsets.ime.getBottom(density).toDp() }
-    val navBottomInset = with(density) { WindowInsets.navigationBars.getBottom(density).toDp() }
-    val bottomInset = maxOf(imeBottomInset, navBottomInset)
-    val composerHeight = if (measuredComposerHeight > 0.dp) measuredComposerHeight else 92.dp
-    val listBottomPadding = composerHeight + bottomInset + 24.dp
+        Box(modifier = modifier.fillMaxSize()) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                        ChatTopBar(
+                                selectedMode = state.inferenceMode,
+                                modelName = settingsState.modelName,
+                                activeLocalModelName = state.activeLocalModelName,
+                                onInferenceModeChange = onInferenceModeChange,
+                                onOpenSessions = onOpenSessions
+                        )
 
-    val keepScrolledToBottom by remember {
-        derivedStateOf {
-            if (state.messages.isEmpty()) {
-                true
-            } else {
-                val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                lastVisible >= state.messages.lastIndex - 1
-            }
-        }
-    }
-
-    LaunchedEffect(state.messages.size) {
-        if (state.messages.isNotEmpty() && keepScrolledToBottom) {
-            listState.animateScrollToItem(state.messages.lastIndex)
-        }
-    }
-
-    LaunchedEffect(state.messages.lastOrNull()?.content, state.isSending) {
-        if (state.messages.isNotEmpty() && state.isSending && keepScrolledToBottom) {
-            listState.scrollToItem(state.messages.lastIndex)
-        }
-    }
-
-    Box(modifier = modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            ChatTopBar(
-                    selectedMode = state.inferenceMode,
-                    modelName = settingsState.modelName,
-                    activeLocalModelName = state.activeLocalModelName,
-                    onInferenceModeChange = onInferenceModeChange,
-                    onOpenSessions = onOpenSessions
-            )
-
-            if (state.inferenceMode == InferenceMode.DOWNLOADED) {
-                LocalModelStatusSurface(
-                        modelName = state.activeLocalModelName,
-                        isReady = state.isLocalModelReady,
-                        message = state.localModelStatusMessage,
-                        onOpenModelGallery = onOpenModelGallery,
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                )
-            }
-
-            if (state.messages.isEmpty()) {
-                Box(modifier = Modifier.weight(1f)) {
-                    if (!imeVisible) {
-                        if (state.inferenceMode == InferenceMode.DOWNLOADED &&
-                                        !state.isLocalModelReady
-                        ) {
-                            LocalModelEmptyState(
-                                    modifier = Modifier.fillMaxSize(),
-                                    onOpenModelGallery = onOpenModelGallery
-                            )
-                        } else {
-                            EmptyConversation(modifier = Modifier.fillMaxSize())
-                        }
-                    }
+                        MessageList(
+                                messages = state.messages,
+                                isSending = state.isSending,
+                                listState = listState,
+                                bottomPadding = bottomPadding,
+                                onMessageInfo = onMessageInfo,
+                                onRetryLast = onRetryLast,
+                                onDeleteMessage = onDeleteMessage,
+                                modifier = Modifier.weight(1f)
+                        )
                 }
-            } else {
-                MessageList(
-                        messages = state.messages,
+
+                Composer(
+                        draft = state.draft,
                         isSending = state.isSending,
-                        listState = listState,
-                        modifier = Modifier.weight(1f),
-                        bottomPadding = listBottomPadding,
-                        onMessageInfo = onMessageInfo,
-                        onRetryLast = onRetryLast,
-                        onDeleteMessage = onDeleteMessage
+                        notice = state.notice,
+                        onOpenControls = { controlsVisible = true },
+                        onDraftChange = onMessageDraftChange,
+                        onSend = onSendMessage,
+                        onStop = onStopGeneration,
+                        onRetry = onRetryLast,
+                        modifier =
+                                Modifier.align(Alignment.BottomCenter)
+                                        .navigationBarsPadding()
+                                        .imePadding()
+                                        .onSizeChanged { composerHeightPx = it.height }
+                                        .padding(bottom = 10.dp)
                 )
-            }
-        }
 
-        Box(
-                modifier =
-                        Modifier.align(Alignment.BottomCenter).navigationBarsPadding().imePadding()
-        ) {
-            Composer(
-                    draft = state.draft,
-                    isSending = state.isSending,
-                    notice = state.notice,
-                    onOpenControls = { controlsVisible = true },
-                    onDraftChange = onMessageDraftChange,
-                    onSend = onSendMessage,
-                    onStop = onStopGeneration,
-                    onRetry = onRetryLast,
-                    modifier =
-                            Modifier.onSizeChanged { composerHeightPx = it.height }
-                                    .padding(bottom = 10.dp)
-            )
+                if (controlsVisible) {
+                        ModelControlsSheet(
+                                state = state,
+                                settings = settingsState,
+                                onDismiss = { controlsVisible = false },
+                                onUpdateSettings = {
+                                        baseUrl,
+                                        modelName,
+                                        temperature,
+                                        topP,
+                                        contextLength ->
+                                        onTemperatureChange(temperature)
+                                        onTopPChange(topP)
+                                        onContextLengthChange(contextLength)
+                                },
+                                onUpdateThinkingEffort = onThinkingEffortChange,
+                                onUpdateAccelerator = onAcceleratorChange,
+                                onManageLocalModels = onOpenModelGallery
+                        )
+                }
         }
-    }
-
-    if (controlsVisible) {
-        ModelControlsSheet(
-                temperature = settingsState.temperature,
-                topP = settingsState.topP,
-                contextLength = settingsState.contextLength,
-                thinkingEffort = settingsState.thinkingEffort,
-                acceleratorPreference = settingsState.acceleratorPreference,
-                showThinkingControls = shouldShowThinkingControls(state, settingsState),
-                showAcceleratorControls = state.inferenceMode == InferenceMode.DOWNLOADED,
-                supportedAccelerators = state.localModelSupportedAccelerators,
-                onTemperatureChange = onTemperatureChange,
-                onTopPChange = onTopPChange,
-                onContextLengthChange = onContextLengthChange,
-                onThinkingEffortChange = onThinkingEffortChange,
-                onAcceleratorChange = onAcceleratorChange,
-                onDismiss = { controlsVisible = false }
-        )
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ModelControlsSheet(
-        temperature: Double,
-        topP: Double,
-        contextLength: Int,
-        thinkingEffort: ThinkingEffort,
-        acceleratorPreference: AcceleratorPreference,
-        showThinkingControls: Boolean,
-        showAcceleratorControls: Boolean,
-        supportedAccelerators: List<String>,
-        onTemperatureChange: (Double) -> Unit,
-        onTopPChange: (Double) -> Unit,
-        onContextLengthChange: (Int) -> Unit,
-        onThinkingEffortChange: (ThinkingEffort) -> Unit,
-        onAcceleratorChange: (AcceleratorPreference) -> Unit,
-        onDismiss: () -> Unit
+        state: ChatScreenState,
+        settings: SettingsScreenState,
+        onDismiss: () -> Unit,
+        onUpdateSettings:
+                (
+                        baseUrl: String,
+                        modelName: String,
+                        temperature: Double,
+                        topP: Double,
+                        contextLength: Int) -> Unit,
+        onUpdateThinkingEffort: (ThinkingEffort) -> Unit,
+        onUpdateAccelerator: (AcceleratorPreference) -> Unit,
+        onManageLocalModels: () -> Unit
 ) {
-    ModalBottomSheet(
-            onDismissRequest = onDismiss,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            dragHandle = {
-                BottomSheetDefaults.DragHandle(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                )
-            }
-    ) {
-        Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+        ModalBottomSheet(
+                onDismissRequest = onDismiss,
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                dragHandle = {
+                        BottomSheetDefaults.DragHandle(
+                                color =
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                alpha = 0.55f
+                                        )
+                        )
+                }
         ) {
-            Text(
-                    text = stringResource(id = R.string.model_controls_title),
-                    style = MaterialTheme.typography.titleMedium
-            )
-            Text(
-                    text = stringResource(id = R.string.model_controls_subtitle),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Surface(
-                    shape = ControlCardShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh
-            ) {
                 Column(
                         modifier =
                                 Modifier.fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                                        .padding(horizontal = 18.dp, vertical = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    LabeledSlider(
-                            label = stringResource(id = R.string.temperature_label),
-                            description = stringResource(id = R.string.temperature_description),
-                            value = temperature.toFloat(),
-                            range = 0f..2f,
-                            steps = 5,
-                            formatter = { "%.2f".format(it) },
-                            onValueChange = { onTemperatureChange(it.toDouble()) }
-                    )
-                    HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
-                    LabeledSlider(
-                            label = stringResource(id = R.string.top_p_label),
-                            description = stringResource(id = R.string.top_p_description),
-                            value = topP.toFloat(),
-                            range = 0f..1f,
-                            steps = 9,
-                            formatter = { "%.2f".format(it) },
-                            onValueChange = { onTopPChange(it.toDouble()) }
-                    )
-                    HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
-                    LabeledSlider(
-                            label = stringResource(id = R.string.context_length_label),
-                            description = stringResource(id = R.string.context_length_description),
-                            value = contextLength.toFloat(),
-                            range = 512f..32768f,
-                            steps = 10,
-                            formatter = { it.toInt().toString() },
-                            onValueChange = { onContextLengthChange(it.toInt()) }
-                    )
-
-                    if (showThinkingControls) {
-                        HorizontalDivider(
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        Text(
+                                text = stringResource(id = R.string.model_controls_title),
+                                style = MaterialTheme.typography.titleMedium
                         )
-                        LabeledChipRow(
-                                label = stringResource(id = R.string.thinking_effort_label),
-                                description =
-                                        stringResource(id = R.string.thinking_effort_description),
-                                options =
-                                        listOf(
-                                                ChipOption(
+                        Text(
+                                text = stringResource(id = R.string.model_controls_subtitle),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Surface(
+                                shape = ControlCardShape,
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh
+                        ) {
+                                Column(
+                                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                        LabeledSlider(
+                                                label =
                                                         stringResource(
-                                                                id = R.string.thinking_effort_none
+                                                                id = R.string.temperature_label
                                                         ),
-                                                        ThinkingEffort.NONE
-                                                ),
-                                                ChipOption(
+                                                description =
                                                         stringResource(
-                                                                id = R.string.thinking_effort_low
+                                                                id =
+                                                                        R.string
+                                                                                .temperature_description
                                                         ),
-                                                        ThinkingEffort.LOW
-                                                ),
-                                                ChipOption(
+                                                value = settings.temperature.toFloat(),
+                                                range = 0f..2f,
+                                                steps = 5,
+                                                formatter = { "%.2f".format(it) },
+                                                onValueChange = {
+                                                        onUpdateSettings(
+                                                                settings.baseUrl,
+                                                                settings.modelName,
+                                                                it.toDouble(),
+                                                                settings.topP,
+                                                                settings.contextLength
+                                                        )
+                                                }
+                                        )
+                                        HorizontalDivider(
+                                                color =
+                                                        MaterialTheme.colorScheme.outlineVariant
+                                                                .copy(alpha = 0.5f)
+                                        )
+                                        LabeledSlider(
+                                                label = stringResource(id = R.string.top_p_label),
+                                                description =
                                                         stringResource(
-                                                                id = R.string.thinking_effort_medium
+                                                                id = R.string.top_p_description
                                                         ),
-                                                        ThinkingEffort.MEDIUM
-                                                ),
-                                                ChipOption(
+                                                value = settings.topP.toFloat(),
+                                                range = 0f..1f,
+                                                steps = 9,
+                                                formatter = { "%.2f".format(it) },
+                                                onValueChange = {
+                                                        onUpdateSettings(
+                                                                settings.baseUrl,
+                                                                settings.modelName,
+                                                                settings.temperature,
+                                                                it.toDouble(),
+                                                                settings.contextLength
+                                                        )
+                                                }
+                                        )
+                                        HorizontalDivider(
+                                                color =
+                                                        MaterialTheme.colorScheme.outlineVariant
+                                                                .copy(alpha = 0.5f)
+                                        )
+                                        LabeledSlider(
+                                                label =
                                                         stringResource(
-                                                                id = R.string.thinking_effort_high
+                                                                id = R.string.context_length_label
                                                         ),
-                                                        ThinkingEffort.HIGH
+                                                description =
+                                                        stringResource(
+                                                                id =
+                                                                        R.string
+                                                                                .context_length_description
+                                                        ),
+                                                value = settings.contextLength.toFloat(),
+                                                range = 512f..32768f,
+                                                steps = 10,
+                                                formatter = { it.toInt().toString() },
+                                                onValueChange = {
+                                                        onUpdateSettings(
+                                                                settings.baseUrl,
+                                                                settings.modelName,
+                                                                settings.temperature,
+                                                                settings.topP,
+                                                                it.toInt()
+                                                        )
+                                                }
+                                        )
+
+                                        if (shouldShowThinkingControls(state, settings)) {
+                                                HorizontalDivider(
+                                                        color =
+                                                                MaterialTheme.colorScheme
+                                                                        .outlineVariant.copy(
+                                                                        alpha = 0.5f
+                                                                )
                                                 )
-                                        ),
-                                selected = thinkingEffort,
-                                onSelected = onThinkingEffortChange
-                        )
-                    }
+                                                LabeledChipRow(
+                                                        label =
+                                                                stringResource(
+                                                                        id =
+                                                                                R.string
+                                                                                        .thinking_effort_label
+                                                                ),
+                                                        description =
+                                                                stringResource(
+                                                                        id =
+                                                                                R.string
+                                                                                        .thinking_effort_description
+                                                                ),
+                                                        options =
+                                                                listOf(
+                                                                        ChipOption(
+                                                                                stringResource(
+                                                                                        id =
+                                                                                                R.string
+                                                                                                        .thinking_effort_none
+                                                                                ),
+                                                                                ThinkingEffort.NONE
+                                                                        ),
+                                                                        ChipOption(
+                                                                                stringResource(
+                                                                                        id =
+                                                                                                R.string
+                                                                                                        .thinking_effort_low
+                                                                                ),
+                                                                                ThinkingEffort.LOW
+                                                                        ),
+                                                                        ChipOption(
+                                                                                stringResource(
+                                                                                        id =
+                                                                                                R.string
+                                                                                                        .thinking_effort_medium
+                                                                                ),
+                                                                                ThinkingEffort
+                                                                                        .MEDIUM
+                                                                        ),
+                                                                        ChipOption(
+                                                                                stringResource(
+                                                                                        id =
+                                                                                                R.string
+                                                                                                        .thinking_effort_high
+                                                                                ),
+                                                                                ThinkingEffort.HIGH
+                                                                        )
+                                                                ),
+                                                        selected = settings.thinkingEffort,
+                                                        onSelected = onUpdateThinkingEffort
+                                                )
+                                        }
 
-                    if (showAcceleratorControls) {
-                        HorizontalDivider(
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
-                        val context = LocalContext.current
-                        val availableOptions =
-                                remember(supportedAccelerators) {
-                                    getAvailableAcceleratorOptions(context, supportedAccelerators)
+                                        if (state.inferenceMode == InferenceMode.DOWNLOADED) {
+                                                HorizontalDivider(
+                                                        color =
+                                                                MaterialTheme.colorScheme
+                                                                        .outlineVariant.copy(
+                                                                        alpha = 0.5f
+                                                                )
+                                                )
+                                                val context = LocalContext.current
+                                                val availableOptions =
+                                                        remember(
+                                                                state.localModelSupportedAccelerators
+                                                        ) {
+                                                                getAvailableAcceleratorOptions(
+                                                                        context,
+                                                                        state.localModelSupportedAccelerators
+                                                                )
+                                                        }
+
+                                                LabeledChipRow(
+                                                        label =
+                                                                stringResource(
+                                                                        id =
+                                                                                R.string
+                                                                                        .accelerator_label
+                                                                ),
+                                                        description =
+                                                                stringResource(
+                                                                        id =
+                                                                                R.string
+                                                                                        .accelerator_description
+                                                                ),
+                                                        options = availableOptions,
+                                                        selected = settings.acceleratorPreference,
+                                                        onSelected = onUpdateAccelerator
+                                                )
+                                        }
                                 }
+                        }
 
-                        LabeledChipRow(
-                                label = stringResource(id = R.string.accelerator_label),
-                                description = stringResource(id = R.string.accelerator_description),
-                                options = availableOptions,
-                                selected = acceleratorPreference,
-                                onSelected = onAcceleratorChange
-                        )
-                    }
+                        Spacer(modifier = Modifier.height(8.dp))
                 }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
         }
-    }
 }
 
 @Composable
@@ -511,55 +543,61 @@ private fun LabeledSlider(
         formatter: (Float) -> String,
         onValueChange: (Float) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                        text = description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest
-            ) {
-                Text(
-                        text = formatter(value),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                )
-            }
-        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                        Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                                Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                        text = description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                        }
+                        Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest
+                        ) {
+                                Text(
+                                        text = formatter(value),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        modifier =
+                                                Modifier.padding(
+                                                        horizontal = 10.dp,
+                                                        vertical = 5.dp
+                                                )
+                                )
+                        }
+                }
 
-        Slider(
-                value = value,
-                onValueChange = onValueChange,
-                valueRange = range,
-                steps = steps,
-                colors =
-                        SliderDefaults.colors(
-                                thumbColor = MaterialTheme.colorScheme.primary,
-                                activeTrackColor =
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
-                                inactiveTrackColor =
-                                        MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-        )
-    }
+                Slider(
+                        value = value,
+                        onValueChange = onValueChange,
+                        valueRange = range,
+                        steps = steps,
+                        colors =
+                                SliderDefaults.colors(
+                                        thumbColor = MaterialTheme.colorScheme.primary,
+                                        activeTrackColor =
+                                                MaterialTheme.colorScheme.primary.copy(
+                                                        alpha = 0.75f
+                                                ),
+                                        inactiveTrackColor =
+                                                MaterialTheme.colorScheme.surfaceContainerHighest
+                                )
+                )
+        }
 }
 
 private data class ChipOption<T>(val label: String, val value: T)
@@ -572,33 +610,33 @@ private fun <T> LabeledChipRow(
         selected: T,
         onSelected: (T) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
-        ) {
-            Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                        Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                                text = description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            options.forEach { option ->
-                FilterChip(
-                        selected = option.value == selected,
-                        onClick = { onSelected(option.value) },
-                        label = { Text(option.label) }
-                )
-            }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        options.forEach { option ->
+                                FilterChip(
+                                        selected = option.value == selected,
+                                        onClick = { onSelected(option.value) },
+                                        label = { Text(option.label) }
+                                )
+                        }
+                }
         }
-    }
 }
 
 @Composable
@@ -609,193 +647,272 @@ private fun ChatTopBar(
         onInferenceModeChange: (InferenceMode) -> Unit,
         onOpenSessions: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val cleanModel =
-            modelName.replace(ModelSeparatorRegex, " ").trim().ifBlank {
-                stringResource(id = R.string.default_model_label)
-            }
-
-    val selectedLabel =
-            when (selectedMode) {
-                InferenceMode.AICORE -> stringResource(id = R.string.gemini_nano_title)
-                InferenceMode.DOWNLOADED -> activeLocalModelName ?: "Downloaded model"
-                InferenceMode.REMOTE -> cleanModel
-            }
-
-    val statusDotColor =
-            when (selectedMode) {
-                InferenceMode.AICORE -> MaterialTheme.colorScheme.secondary
-                InferenceMode.DOWNLOADED -> MaterialTheme.colorScheme.tertiary
-                InferenceMode.REMOTE -> MaterialTheme.colorScheme.primary
-            }
-
-    val chevronRotation by
-            animateFloatAsState(
-                    targetValue = if (expanded) 180f else 0f,
-                    animationSpec = tween(durationMillis = 160),
-                    label = "ModelChevronRotation"
-            )
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-                modifier =
-                        Modifier.fillMaxWidth()
-                                .statusBarsPadding()
-                                .padding(top = 6.dp, bottom = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                    shape = HeaderIconShape,
-                    color = MaterialTheme.colorScheme.surfaceContainer,
-                    tonalElevation = 1.dp
-            ) {
-                IconButton(onClick = onOpenSessions, modifier = Modifier.size(42.dp)) {
-                    Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = stringResource(id = R.string.open_sessions),
-                            tint = MaterialTheme.colorScheme.onSurface
-                    )
+        var expanded by remember { mutableStateOf(false) }
+        val cleanModel =
+                modelName.replace(ModelSeparatorRegex, " ").trim().ifBlank {
+                        stringResource(id = R.string.default_model_label)
                 }
-            }
 
-            Box(
-                    modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
-                    contentAlignment = Alignment.Center
-            ) {
-                Box {
-                    Surface(
-                            onClick = { expanded = true },
-                            shape = HeaderSelectorShape,
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            tonalElevation = 1.dp,
-                            shadowElevation = 2.dp
-                    ) {
-                        Row(
-                                modifier =
-                                        Modifier.animateContentSize()
-                                                .padding(horizontal = 14.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+        val selectedLabel =
+                when (selectedMode) {
+                        InferenceMode.AICORE -> stringResource(id = R.string.gemini_nano_title)
+                        InferenceMode.DOWNLOADED -> activeLocalModelName ?: "Downloaded model"
+                        InferenceMode.REMOTE -> cleanModel
+                }
+
+        val statusDotColor =
+                when (selectedMode) {
+                        InferenceMode.AICORE -> MaterialTheme.colorScheme.secondary
+                        InferenceMode.DOWNLOADED -> MaterialTheme.colorScheme.tertiary
+                        InferenceMode.REMOTE -> MaterialTheme.colorScheme.primary
+                }
+
+        val chevronRotation by
+                animateFloatAsState(
+                        targetValue = if (expanded) 180f else 0f,
+                        animationSpec = tween(durationMillis = 160),
+                        label = "ModelChevronRotation"
+                )
+
+        Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                        modifier =
+                                Modifier.fillMaxWidth()
+                                        .statusBarsPadding()
+                                        .padding(top = 6.dp, bottom = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                ) {
+                        Surface(
+                                shape = HeaderIconShape,
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                tonalElevation = 1.dp
                         ) {
-                            Box(
-                                    modifier =
-                                            Modifier.size(7.dp)
-                                                    .clip(CircleShape)
-                                                    .background(statusDotColor)
-                            )
-                            Text(
-                                    text = selectedLabel,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                            )
-                            Icon(
-                                    imageVector = Icons.Default.ArrowDropDown,
-                                    contentDescription =
-                                            stringResource(id = R.string.select_backend),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier =
-                                            Modifier.size(18.dp).graphicsLayer {
-                                                rotationZ = chevronRotation
-                                            }
-                            )
+                                IconButton(
+                                        onClick = onOpenSessions,
+                                        modifier = Modifier.size(42.dp)
+                                ) {
+                                        Icon(
+                                                imageVector = Icons.Default.Menu,
+                                                contentDescription =
+                                                        stringResource(id = R.string.open_sessions),
+                                                tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                }
                         }
-                    }
 
-                    DropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false },
-                            shape = RoundedCornerShape(16.dp),
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                    ) {
-                        DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(text = stringResource(id = R.string.gemini_nano_title))
-                                        Text(
-                                                text = stringResource(id = R.string.on_device_mode),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    expanded = false
-                                    onInferenceModeChange(InferenceMode.AICORE)
+                        Box(
+                                modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                                contentAlignment = Alignment.Center
+                        ) {
+                                Box {
+                                        Surface(
+                                                onClick = { expanded = true },
+                                                shape = HeaderSelectorShape,
+                                                color =
+                                                        MaterialTheme.colorScheme
+                                                                .surfaceContainerHigh,
+                                                tonalElevation = 1.dp,
+                                                shadowElevation = 2.dp
+                                        ) {
+                                                Row(
+                                                        modifier =
+                                                                Modifier.animateContentSize()
+                                                                        .padding(
+                                                                                horizontal = 14.dp,
+                                                                                vertical = 8.dp
+                                                                        ),
+                                                        verticalAlignment =
+                                                                Alignment.CenterVertically,
+                                                        horizontalArrangement =
+                                                                Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                        Box(
+                                                                modifier =
+                                                                        Modifier.size(7.dp)
+                                                                                .clip(CircleShape)
+                                                                                .background(
+                                                                                        statusDotColor
+                                                                                )
+                                                        )
+                                                        Text(
+                                                                text = selectedLabel,
+                                                                style =
+                                                                        MaterialTheme.typography
+                                                                                .labelLarge,
+                                                                color =
+                                                                        MaterialTheme.colorScheme
+                                                                                .onSurface,
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
+                                                        )
+                                                        Icon(
+                                                                imageVector =
+                                                                        Icons.Default.ArrowDropDown,
+                                                                contentDescription =
+                                                                        stringResource(
+                                                                                id =
+                                                                                        R.string
+                                                                                                .select_backend
+                                                                        ),
+                                                                tint =
+                                                                        MaterialTheme.colorScheme
+                                                                                .onSurfaceVariant,
+                                                                modifier =
+                                                                        Modifier.size(18.dp)
+                                                                                .graphicsLayer {
+                                                                                        rotationZ =
+                                                                                                chevronRotation
+                                                                                }
+                                                        )
+                                                }
+                                        }
+
+                                        DropdownMenu(
+                                                expanded = expanded,
+                                                onDismissRequest = { expanded = false },
+                                                shape = RoundedCornerShape(16.dp),
+                                                containerColor =
+                                                        MaterialTheme.colorScheme
+                                                                .surfaceContainerHigh
+                                        ) {
+                                                DropdownMenuItem(
+                                                        text = {
+                                                                Column {
+                                                                        Text(
+                                                                                text =
+                                                                                        stringResource(
+                                                                                                id =
+                                                                                                        R.string
+                                                                                                                .gemini_nano_title
+                                                                                        )
+                                                                        )
+                                                                        Text(
+                                                                                text =
+                                                                                        stringResource(
+                                                                                                id =
+                                                                                                        R.string
+                                                                                                                .on_device_mode
+                                                                                        ),
+                                                                                style =
+                                                                                        MaterialTheme
+                                                                                                .typography
+                                                                                                .bodySmall,
+                                                                                color =
+                                                                                        MaterialTheme
+                                                                                                .colorScheme
+                                                                                                .onSurfaceVariant
+                                                                        )
+                                                                }
+                                                        },
+                                                        onClick = {
+                                                                expanded = false
+                                                                onInferenceModeChange(
+                                                                        InferenceMode.AICORE
+                                                                )
+                                                        }
+                                                )
+                                                DropdownMenuItem(
+                                                        text = {
+                                                                Column {
+                                                                        Text(
+                                                                                text =
+                                                                                        activeLocalModelName
+                                                                                                ?: "Downloaded model"
+                                                                        )
+                                                                        Text(
+                                                                                text =
+                                                                                        "Local model",
+                                                                                style =
+                                                                                        MaterialTheme
+                                                                                                .typography
+                                                                                                .bodySmall,
+                                                                                color =
+                                                                                        MaterialTheme
+                                                                                                .colorScheme
+                                                                                                .onSurfaceVariant
+                                                                        )
+                                                                }
+                                                        },
+                                                        onClick = {
+                                                                expanded = false
+                                                                onInferenceModeChange(
+                                                                        InferenceMode.DOWNLOADED
+                                                                )
+                                                        }
+                                                )
+                                                DropdownMenuItem(
+                                                        text = {
+                                                                Column {
+                                                                        Text(text = cleanModel)
+                                                                        Text(
+                                                                                text =
+                                                                                        stringResource(
+                                                                                                id =
+                                                                                                        R.string
+                                                                                                                .remote_mode
+                                                                                        ),
+                                                                                style =
+                                                                                        MaterialTheme
+                                                                                                .typography
+                                                                                                .bodySmall,
+                                                                                color =
+                                                                                        MaterialTheme
+                                                                                                .colorScheme
+                                                                                                .onSurfaceVariant
+                                                                        )
+                                                                }
+                                                        },
+                                                        onClick = {
+                                                                expanded = false
+                                                                onInferenceModeChange(
+                                                                        InferenceMode.REMOTE
+                                                                )
+                                                        }
+                                                )
+                                        }
                                 }
-                        )
-                        DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(text = activeLocalModelName ?: "Downloaded model")
-                                        Text(
-                                                text = "Local model",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    expanded = false
-                                    onInferenceModeChange(InferenceMode.DOWNLOADED)
-                                }
-                        )
-                        DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(text = cleanModel)
-                                        Text(
-                                                text = stringResource(id = R.string.remote_mode),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    expanded = false
-                                    onInferenceModeChange(InferenceMode.REMOTE)
-                                }
-                        )
-                    }
+                        }
+
+                        Spacer(modifier = Modifier.size(42.dp))
                 }
-            }
 
-            Spacer(modifier = Modifier.size(42.dp))
+                HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                )
         }
-
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-    }
 }
 
 @Composable
 private fun EmptyConversation(modifier: Modifier = Modifier) {
-    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Icon(
-                    imageVector = Icons.Default.Star,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
-            )
-            Text(
-                    text = stringResource(id = R.string.empty_chat_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 24.dp)
-            )
-            Text(
-                    text = stringResource(id = R.string.empty_chat_subtitle),
-                    style = MaterialTheme.typography.bodySmall,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 24.dp)
-            )
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                        Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = null,
+                                tint =
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                alpha = 0.85f
+                                        )
+                        )
+                        Text(
+                                text = stringResource(id = R.string.empty_chat_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(horizontal = 24.dp)
+                        )
+                        Text(
+                                text = stringResource(id = R.string.empty_chat_subtitle),
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 24.dp)
+                        )
+                }
         }
-    }
 }
 
 @Composable
@@ -806,100 +923,93 @@ private fun LocalModelStatusSurface(
         onOpenModelGallery: () -> Unit,
         modifier: Modifier = Modifier
 ) {
-    val normalizedMessage = message?.trim().orEmpty()
-    val lowerMessage = normalizedMessage.lowercase()
-    val preparing = !isReady && ("preparing" in lowerMessage || "loading" in lowerMessage)
+        val normalizedMessage = message?.trim().orEmpty()
+        val lowerMessage = normalizedMessage.lowercase()
+        val preparing = !isReady && ("preparing" in lowerMessage || "loading" in lowerMessage)
 
-    val titleText =
-            when {
-                isReady -> "Running on ${modelName.orEmpty().ifBlank { "local model" }}"
-                preparing -> "Preparing local model"
-                modelName.isNullOrBlank() -> "Select a local model"
-                else -> "Local model selected"
-            }
-
-    Surface(
-            modifier = modifier,
-            shape = RoundedCornerShape(14.dp),
-            color =
-                    if (isReady) {
-                        MaterialTheme.colorScheme.secondaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceContainerHigh
-                    }
-    ) {
-        Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Text(
-                            text = titleText,
-                            style = MaterialTheme.typography.labelLarge,
-                            color =
-                                    if (isReady) {
-                                        MaterialTheme.colorScheme.onSecondaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    }
-                    )
-                    if (normalizedMessage.isNotBlank()) {
-                        Text(
-                                text = normalizedMessage,
-                                style = MaterialTheme.typography.bodySmall,
-                                color =
-                                        if (isReady) {
-                                            MaterialTheme.colorScheme.onSecondaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        }
-                        )
-                    }
+        val titleText =
+                when {
+                        isReady -> "Running on ${modelName.orEmpty().ifBlank { "local model" }}"
+                        preparing -> "Preparing local model"
+                        modelName.isNullOrBlank() -> "Select a local model"
+                        else -> "Local model selected"
                 }
-                TextButton(onClick = onOpenModelGallery) { Text("Model library") }
-            }
 
-            if (preparing) {
-                LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                )
-            }
+        Surface(
+                modifier = modifier,
+                shape = RoundedCornerShape(14.dp),
+                color =
+                        if (isReady) {
+                                MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                                MaterialTheme.colorScheme.surfaceContainerHigh
+                        }
+        ) {
+                Column(
+                        modifier =
+                                Modifier.fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                        Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                        ) {
+                                Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                        Text(
+                                                text = titleText,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color =
+                                                        if (isReady) {
+                                                                MaterialTheme.colorScheme
+                                                                        .onSecondaryContainer
+                                                        } else {
+                                                                MaterialTheme.colorScheme.onSurface
+                                                        }
+                                        )
+                                        if (normalizedMessage.isNotBlank()) {
+                                                Text(
+                                                        text = normalizedMessage,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color =
+                                                                if (isReady) {
+                                                                        MaterialTheme.colorScheme
+                                                                                .onSecondaryContainer
+                                                                } else {
+                                                                        MaterialTheme.colorScheme
+                                                                                .onSurfaceVariant
+                                                                }
+                                                )
+                                        }
+                                }
+                                TextButton(onClick = onOpenModelGallery) { Text("Model library") }
+                        }
+
+                        if (preparing) {
+                                LinearProgressIndicator(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        trackColor =
+                                                MaterialTheme.colorScheme.surfaceContainerHighest
+                                )
+                        }
+                }
         }
-    }
 }
 
 @Composable
 private fun LocalModelEmptyState(modifier: Modifier = Modifier, onOpenModelGallery: () -> Unit) {
-    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(horizontal = 24.dp)
-        ) {
-            Text(
-                    text = "Select a local model to start on-device chat",
-                    style = MaterialTheme.typography.titleMedium,
-                    textAlign = TextAlign.Center
-            )
-            Text(
-                    text = "Open Model Library to download or activate an allowlisted local model.",
-                    style = MaterialTheme.typography.bodySmall,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Button(onClick = onOpenModelGallery) { Text("Open model library") }
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(horizontal = 24.dp)
+                ) { Button(onClick = onOpenModelGallery) { Text("Open model library") } }
         }
-    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -914,30 +1024,30 @@ private fun MessageList(
         onRetryLast: () -> Unit,
         onDeleteMessage: (ChatMessage) -> Unit
 ) {
-    LazyColumn(
-            state = listState,
-            modifier = modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(top = 12.dp, bottom = bottomPadding)
-    ) {
-        itemsIndexed(messages, key = { _, message -> message.id }) { index, message ->
-            val sameRoleAsPrevious = messages.getOrNull(index - 1)?.role == message.role
-            val topPadding =
-                    when {
-                        index == 0 -> 2.dp
-                        sameRoleAsPrevious -> 10.dp
-                        else -> 18.dp
-                    }
+        LazyColumn(
+                state = listState,
+                modifier = modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(top = 12.dp, bottom = bottomPadding)
+        ) {
+                itemsIndexed(messages, key = { _, message -> message.id }) { index, message ->
+                        val sameRoleAsPrevious = messages.getOrNull(index - 1)?.role == message.role
+                        val topPadding =
+                                when {
+                                        index == 0 -> 2.dp
+                                        sameRoleAsPrevious -> 10.dp
+                                        else -> 18.dp
+                                }
 
-            MessageRow(
-                    message = message,
-                    isSending = isSending,
-                    modifier = Modifier.padding(top = topPadding),
-                    onMessageInfo = onMessageInfo,
-                    onRetryLast = onRetryLast,
-                    onDeleteMessage = onDeleteMessage
-            )
+                        MessageRow(
+                                message = message,
+                                isSending = isSending,
+                                modifier = Modifier.padding(top = topPadding),
+                                onMessageInfo = onMessageInfo,
+                                onRetryLast = onRetryLast,
+                                onDeleteMessage = onDeleteMessage
+                        )
+                }
         }
-    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -950,124 +1060,147 @@ private fun MessageRow(
         onRetryLast: () -> Unit,
         onDeleteMessage: (ChatMessage) -> Unit
 ) {
-    val isUser = message.role == ChatRole.USER
-    @Suppress("DEPRECATION") val clipboardManager = LocalClipboardManager.current
-    val haptics = LocalHapticFeedback.current
-    val context = LocalContext.current
-    val density = LocalDensity.current
+        val isUser = message.role == ChatRole.USER
+        @Suppress("DEPRECATION") val clipboardManager = LocalClipboardManager.current
+        val haptics = LocalHapticFeedback.current
+        val context = LocalContext.current
+        val density = LocalDensity.current
 
-    var actionMenuExpanded by remember(message.id) { mutableStateOf(false) }
-    var entered by remember(message.id) { mutableStateOf(false) }
+        var actionMenuExpanded by remember(message.id) { mutableStateOf(false) }
+        var entered by remember(message.id) { mutableStateOf(false) }
 
-    LaunchedEffect(message.id) { entered = true }
+        LaunchedEffect(message.id) { entered = true }
 
-    val alpha by
-            animateFloatAsState(
-                    targetValue = if (entered) 1f else 0f,
-                    animationSpec = tween(durationMillis = 170),
-                    label = "MessageFade"
-            )
-    val offsetY by
-            animateFloatAsState(
-                    targetValue = if (entered) 0f else 10f,
-                    animationSpec = tween(durationMillis = 170),
-                    label = "MessageOffset"
-            )
+        val alpha by
+                animateFloatAsState(
+                        targetValue = if (entered) 1f else 0f,
+                        animationSpec = tween(durationMillis = 170),
+                        label = "MessageFade"
+                )
+        val offsetY by
+                animateFloatAsState(
+                        targetValue = if (entered) 0f else 10f,
+                        animationSpec = tween(durationMillis = 170),
+                        label = "MessageOffset"
+                )
 
-    Row(
-            modifier =
-                    modifier.fillMaxWidth().graphicsLayer {
-                        this.alpha = alpha
-                        translationY = with(density) { offsetY.dp.toPx() }
-                    },
-            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
-    ) {
-        Box(modifier = Modifier.fillMaxWidth(if (isUser) 0.76f else 0.96f)) {
-            val interactionModifier =
-                    Modifier.fillMaxWidth()
-                            .combinedClickable(
-                                    onClick = { onMessageInfo(message) },
-                                    onLongClick = {
-                                        haptics.performHapticFeedback(
-                                                androidx.compose.ui.hapticfeedback
-                                                        .HapticFeedbackType.LongPress
+        Row(
+                modifier =
+                        modifier.fillMaxWidth().graphicsLayer {
+                                this.alpha = alpha
+                                translationY = with(density) { offsetY.dp.toPx() }
+                        },
+                horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+        ) {
+                Box(modifier = Modifier.fillMaxWidth(if (isUser) 0.76f else 0.96f)) {
+                        val interactionModifier =
+                                Modifier.fillMaxWidth()
+                                        .combinedClickable(
+                                                onClick = { onMessageInfo(message) },
+                                                onLongClick = {
+                                                        haptics.performHapticFeedback(
+                                                                androidx.compose.ui.hapticfeedback
+                                                                        .HapticFeedbackType
+                                                                        .LongPress
+                                                        )
+                                                        actionMenuExpanded = true
+                                                }
                                         )
-                                        actionMenuExpanded = true
-                                    }
-                            )
 
-            if (isUser) {
-                Surface(
-                        modifier = interactionModifier,
-                        shape = UserBubbleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.86f),
-                        tonalElevation = 1.dp
-                ) {
-                    MarkdownMessage(
-                            content = message.content,
-                            textColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            fontSizeSp = 15f,
-                            lineSpacingMultiplier = 1.33f,
-                            modifier =
-                                    Modifier.fillMaxWidth()
-                                            .padding(horizontal = 14.dp, vertical = 11.dp)
-                    )
-                }
-            } else {
-                Column(
-                        modifier = interactionModifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (message.content.isBlank() && message.isStreaming) {
-                        TypingIndicator()
-                    } else if (message.content.isBlank()) {
-                        Text(
-                                text = stringResource(id = R.string.assistant_no_response_yet),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        if (isUser) {
+                                Surface(
+                                        modifier = interactionModifier,
+                                        shape = UserBubbleShape,
+                                        color =
+                                                MaterialTheme.colorScheme.primaryContainer.copy(
+                                                        alpha = 0.86f
+                                                ),
+                                        tonalElevation = 1.dp
+                                ) {
+                                        MarkdownMessage(
+                                                content = message.content,
+                                                textColor =
+                                                        MaterialTheme.colorScheme
+                                                                .onPrimaryContainer,
+                                                fontSizeSp = 15f,
+                                                lineSpacingMultiplier = 1.33f,
+                                                modifier =
+                                                        Modifier.fillMaxWidth()
+                                                                .padding(
+                                                                        horizontal = 14.dp,
+                                                                        vertical = 11.dp
+                                                                )
+                                        )
+                                }
+                        } else {
+                                Column(
+                                        modifier =
+                                                interactionModifier.padding(
+                                                        horizontal = 4.dp,
+                                                        vertical = 2.dp
+                                                ),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                        if (message.content.isBlank() && message.isStreaming) {
+                                                TypingIndicator()
+                                        } else if (message.content.isBlank()) {
+                                                Text(
+                                                        text =
+                                                                stringResource(
+                                                                        id =
+                                                                                R.string
+                                                                                        .assistant_no_response_yet
+                                                                ),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color =
+                                                                MaterialTheme.colorScheme
+                                                                        .onSurfaceVariant
+                                                )
+                                        } else {
+                                                val (thinking, visible) =
+                                                        splitThinking(message.content)
+                                                if (thinking != null) {
+                                                        ThinkAccordion(thinkingText = thinking)
+                                                }
+                                                if (visible.isNotBlank()) {
+                                                        MarkdownMessage(
+                                                                content = visible,
+                                                                textColor =
+                                                                        MaterialTheme.colorScheme
+                                                                                .onSurface,
+                                                                fontSizeSp = 16f,
+                                                                lineSpacingMultiplier = 1.45f,
+                                                                modifier = Modifier.fillMaxWidth()
+                                                        )
+                                                }
+                                        }
+                                }
+                        }
+
+                        MessageActionsMenu(
+                                expanded = actionMenuExpanded,
+                                canRegenerate = !isSending,
+                                canDelete = !message.isStreaming,
+                                onDismiss = { actionMenuExpanded = false },
+                                onCopy = {
+                                        clipboardManager.setText(AnnotatedString(message.content))
+                                        actionMenuExpanded = false
+                                },
+                                onShare = {
+                                        shareMessage(context, message.content)
+                                        actionMenuExpanded = false
+                                },
+                                onRegenerate = {
+                                        onRetryLast()
+                                        actionMenuExpanded = false
+                                },
+                                onDelete = {
+                                        onDeleteMessage(message)
+                                        actionMenuExpanded = false
+                                }
                         )
-                    } else {
-                        val (thinking, visible) = splitThinking(message.content)
-                        if (thinking != null) {
-                            ThinkAccordion(thinkingText = thinking)
-                        }
-                        if (visible.isNotBlank()) {
-                            MarkdownMessage(
-                                    content = visible,
-                                    textColor = MaterialTheme.colorScheme.onSurface,
-                                    fontSizeSp = 16f,
-                                    lineSpacingMultiplier = 1.45f,
-                                    modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
                 }
-            }
-
-            MessageActionsMenu(
-                    expanded = actionMenuExpanded,
-                    canRegenerate = !isSending,
-                    canDelete = !message.isStreaming,
-                    onDismiss = { actionMenuExpanded = false },
-                    onCopy = {
-                        clipboardManager.setText(AnnotatedString(message.content))
-                        actionMenuExpanded = false
-                    },
-                    onShare = {
-                        shareMessage(context, message.content)
-                        actionMenuExpanded = false
-                    },
-                    onRegenerate = {
-                        onRetryLast()
-                        actionMenuExpanded = false
-                    },
-                    onDelete = {
-                        onDeleteMessage(message)
-                        actionMenuExpanded = false
-                    }
-            )
         }
-    }
 }
 
 @Composable
@@ -1081,219 +1214,233 @@ private fun MessageActionsMenu(
         onRegenerate: () -> Unit,
         onDelete: () -> Unit
 ) {
-    DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = onDismiss,
-            shape = RoundedCornerShape(14.dp),
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-    ) {
-        DropdownMenuItem(
-                text = { Text(stringResource(id = R.string.copy_message)) },
-                leadingIcon = {
-                    Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null)
-                },
-                onClick = onCopy
-        )
-        DropdownMenuItem(
-                text = { Text(stringResource(id = R.string.share_message)) },
-                leadingIcon = {
-                    Icon(imageVector = Icons.Default.Share, contentDescription = null)
-                },
-                onClick = onShare
-        )
-        DropdownMenuItem(
-                text = { Text(stringResource(id = R.string.regenerate_response)) },
-                leadingIcon = {
-                    Icon(imageVector = Icons.Default.Refresh, contentDescription = null)
-                },
-                enabled = canRegenerate,
-                onClick = onRegenerate
-        )
-        DropdownMenuItem(
-                text = { Text(stringResource(id = R.string.delete_message)) },
-                leadingIcon = {
-                    Icon(imageVector = Icons.Default.Delete, contentDescription = null)
-                },
-                enabled = canDelete,
-                onClick = onDelete
-        )
-    }
+        DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = onDismiss,
+                shape = RoundedCornerShape(14.dp),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        ) {
+                DropdownMenuItem(
+                        text = { Text(stringResource(id = R.string.copy_message)) },
+                        leadingIcon = {
+                                Icon(
+                                        imageVector = Icons.Default.ContentCopy,
+                                        contentDescription = null
+                                )
+                        },
+                        onClick = onCopy
+                )
+                DropdownMenuItem(
+                        text = { Text(stringResource(id = R.string.share_message)) },
+                        leadingIcon = {
+                                Icon(imageVector = Icons.Default.Share, contentDescription = null)
+                        },
+                        onClick = onShare
+                )
+                DropdownMenuItem(
+                        text = { Text(stringResource(id = R.string.regenerate_response)) },
+                        leadingIcon = {
+                                Icon(imageVector = Icons.Default.Refresh, contentDescription = null)
+                        },
+                        enabled = canRegenerate,
+                        onClick = onRegenerate
+                )
+                DropdownMenuItem(
+                        text = { Text(stringResource(id = R.string.delete_message)) },
+                        leadingIcon = {
+                                Icon(imageVector = Icons.Default.Delete, contentDescription = null)
+                        },
+                        enabled = canDelete,
+                        onClick = onDelete
+                )
+        }
 }
 
 @Composable
 private fun TypingIndicator() {
-    val transition = rememberInfiniteTransition(label = "TypingDots")
-    val dotOne by
-            transition.animateFloat(
-                    initialValue = 0.25f,
-                    targetValue = 0.9f,
-                    animationSpec =
-                            infiniteRepeatable(
-                                    animation = tween(durationMillis = 520),
-                                    repeatMode = RepeatMode.Reverse
-                            ),
-                    label = "DotOneAlpha"
-            )
-    val dotTwo by
-            transition.animateFloat(
-                    initialValue = 0.25f,
-                    targetValue = 0.9f,
-                    animationSpec =
-                            infiniteRepeatable(
-                                    animation = tween(durationMillis = 520, delayMillis = 120),
-                                    repeatMode = RepeatMode.Reverse
-                            ),
-                    label = "DotTwoAlpha"
-            )
-    val dotThree by
-            transition.animateFloat(
-                    initialValue = 0.25f,
-                    targetValue = 0.9f,
-                    animationSpec =
-                            infiniteRepeatable(
-                                    animation = tween(durationMillis = 520, delayMillis = 240),
-                                    repeatMode = RepeatMode.Reverse
-                            ),
-                    label = "DotThreeAlpha"
-            )
+        val transition = rememberInfiniteTransition(label = "TypingDots")
+        val dotOne by
+                transition.animateFloat(
+                        initialValue = 0.25f,
+                        targetValue = 0.9f,
+                        animationSpec =
+                                infiniteRepeatable(
+                                        animation = tween(durationMillis = 520),
+                                        repeatMode = RepeatMode.Reverse
+                                ),
+                        label = "DotOneAlpha"
+                )
+        val dotTwo by
+                transition.animateFloat(
+                        initialValue = 0.25f,
+                        targetValue = 0.9f,
+                        animationSpec =
+                                infiniteRepeatable(
+                                        animation = tween(durationMillis = 520, delayMillis = 120),
+                                        repeatMode = RepeatMode.Reverse
+                                ),
+                        label = "DotTwoAlpha"
+                )
+        val dotThree by
+                transition.animateFloat(
+                        initialValue = 0.25f,
+                        targetValue = 0.9f,
+                        animationSpec =
+                                infiniteRepeatable(
+                                        animation = tween(durationMillis = 520, delayMillis = 240),
+                                        repeatMode = RepeatMode.Reverse
+                                ),
+                        label = "DotThreeAlpha"
+                )
 
-    Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.padding(vertical = 4.dp)
-    ) {
-        TypingDot(alpha = dotOne)
-        TypingDot(alpha = dotTwo)
-        TypingDot(alpha = dotThree)
-        Text(
-                text = stringResource(id = R.string.assistant_thinking),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
+        Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(vertical = 4.dp)
+        ) {
+                TypingDot(alpha = dotOne)
+                TypingDot(alpha = dotTwo)
+                TypingDot(alpha = dotThree)
+                Text(
+                        text = stringResource(id = R.string.assistant_thinking),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+        }
 }
 
 @Composable
 private fun TypingDot(alpha: Float) {
-    Box(
-            modifier =
-                    Modifier.size(6.dp)
-                            .clip(CircleShape)
-                            .background(
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
-                            )
-    )
+        Box(
+                modifier =
+                        Modifier.size(6.dp)
+                                .clip(CircleShape)
+                                .background(
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                alpha = alpha
+                                        )
+                                )
+        )
 }
 
 private fun shouldShowThinkingControls(
         state: ChatScreenState,
         settings: SettingsScreenState
 ): Boolean {
-    return when (state.inferenceMode) {
-        InferenceMode.DOWNLOADED -> state.localModelSupportsThinking
-        InferenceMode.REMOTE -> supportsRemoteThinking(settings.modelName)
-        InferenceMode.AICORE -> false
-    }
+        return when (state.inferenceMode) {
+                InferenceMode.DOWNLOADED -> state.localModelSupportsThinking
+                InferenceMode.REMOTE -> supportsRemoteThinking(settings.modelName)
+                InferenceMode.AICORE -> false
+        }
 }
 
 private fun supportsRemoteThinking(modelName: String): Boolean {
-    val normalized = modelName.trim().lowercase()
-    if (normalized.isBlank()) return false
-    return listOf("o1", "o3", "deepseek", "reason", "think").any { hint ->
-        normalized.contains(hint)
-    }
+        val normalized = modelName.trim().lowercase()
+        if (normalized.isBlank()) return false
+        return listOf("o1", "o3", "deepseek", "reason", "think").any { hint ->
+                normalized.contains(hint)
+        }
 }
 
 private fun splitThinking(content: String): Pair<String?, String> {
-    val parsed = ReasoningContentParser.split(content)
-    return parsed.thinking to parsed.visible
+        val parsed = ReasoningContentParser.split(content)
+        return parsed.thinking to parsed.visible
 }
 
 private fun getAvailableAcceleratorOptions(
         context: android.content.Context,
         supportedAccelerators: List<String>
 ): List<ChipOption<AcceleratorPreference>> {
-    val supported = supportedAccelerators.map { it.lowercase() }
-    val options = mutableListOf<ChipOption<AcceleratorPreference>>()
+        val supported = supportedAccelerators.map { it.lowercase() }
+        val options = mutableListOf<ChipOption<AcceleratorPreference>>()
 
-    options.add(
-            ChipOption(context.getString(R.string.accelerator_auto), AcceleratorPreference.AUTO)
-    )
-
-    if (supported.isEmpty() || supported.contains("cpu")) {
         options.add(
-                ChipOption(context.getString(R.string.accelerator_cpu), AcceleratorPreference.CPU)
+                ChipOption(context.getString(R.string.accelerator_auto), AcceleratorPreference.AUTO)
         )
-    }
 
-    if (supported.isEmpty() || supported.contains("gpu")) {
-        options.add(
-                ChipOption(context.getString(R.string.accelerator_gpu), AcceleratorPreference.GPU)
-        )
-    }
-
-    if (supported.isEmpty() || supported.contains("npu")) {
-        options.add(
-                ChipOption(
-                        context.getString(R.string.accelerator_nnapi),
-                        AcceleratorPreference.NNAPI
+        if (supported.isEmpty() || supported.contains("cpu")) {
+                options.add(
+                        ChipOption(
+                                context.getString(R.string.accelerator_cpu),
+                                AcceleratorPreference.CPU
+                        )
                 )
-        )
-    }
+        }
 
-    return options
+        if (supported.isEmpty() || supported.contains("gpu")) {
+                options.add(
+                        ChipOption(
+                                context.getString(R.string.accelerator_gpu),
+                                AcceleratorPreference.GPU
+                        )
+                )
+        }
+
+        if (supported.isEmpty() || supported.contains("npu")) {
+                options.add(
+                        ChipOption(
+                                context.getString(R.string.accelerator_nnapi),
+                                AcceleratorPreference.NNAPI
+                        )
+                )
+        }
+
+        return options
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ThinkAccordion(thinkingText: String) {
-    var expanded by remember { mutableStateOf(false) }
+        var expanded by remember { mutableStateOf(false) }
 
-    Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHighest,
-            tonalElevation = 1.dp,
-            modifier =
-                    Modifier.fillMaxWidth()
-                            .animateContentSize()
-                            .combinedClickable(
-                                    onClick = { expanded = !expanded },
-                                    onLongClick = { expanded = !expanded }
-                            )
-    ) {
-        Column(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+        Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                tonalElevation = 1.dp,
+                modifier =
+                        Modifier.fillMaxWidth()
+                                .animateContentSize()
+                                .combinedClickable(
+                                        onClick = { expanded = !expanded },
+                                        onLongClick = { expanded = !expanded }
+                                )
         ) {
-            Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                        text = stringResource(id = R.string.thinking_section_title),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                )
-                Icon(
-                        imageVector = Icons.Default.ArrowDropDown,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.graphicsLayer { rotationZ = if (expanded) 180f else 0f }
-                )
-            }
+                Column(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                        Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                                Text(
+                                        text = stringResource(id = R.string.thinking_section_title),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Icon(
+                                        imageVector = Icons.Default.ArrowDropDown,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier =
+                                                Modifier.graphicsLayer {
+                                                        rotationZ = if (expanded) 180f else 0f
+                                                }
+                                )
+                        }
 
-            if (expanded) {
-                MarkdownMessage(
-                        content = thinkingText,
-                        textColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSizeSp = 14f,
-                        lineSpacingMultiplier = 1.35f,
-                        modifier = Modifier.fillMaxWidth()
-                )
-            }
+                        if (expanded) {
+                                MarkdownMessage(
+                                        content = thinkingText,
+                                        textColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSizeSp = 14f,
+                                        lineSpacingMultiplier = 1.35f,
+                                        modifier = Modifier.fillMaxWidth()
+                                )
+                        }
+                }
         }
-    }
 }
 
 private val markwonCache = android.util.LruCache<Int, Markwon>(4)
@@ -1306,57 +1453,63 @@ private fun MarkdownMessage(
         lineSpacingMultiplier: Float,
         modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val density = LocalDensity.current
-    val textArgb = textColor.toArgb()
-    val latexBackgroundColor = textColor.copy(alpha = 0.14f).toArgb()
-    val latexCornerRadiusPx = with(density) { 10.dp.toPx() }
+        val context = LocalContext.current
+        val density = LocalDensity.current
+        val textArgb = textColor.toArgb()
+        val latexBackgroundColor = textColor.copy(alpha = 0.14f).toArgb()
+        val latexCornerRadiusPx = with(density) { 10.dp.toPx() }
 
-    val markwon =
-            remember(context, textArgb, latexBackgroundColor, latexCornerRadiusPx) {
-                markwonCache.get(textArgb)
-                        ?: Markwon.builder(context)
-                                .usePlugin(MarkwonInlineParserPlugin.create())
-                                .usePlugin(
-                                        JLatexMathPlugin.create(16f) { builder ->
-                                            builder.inlinesEnabled(true)
-                                            builder.theme().backgroundProvider {
-                                                GradientDrawable().apply {
-                                                    shape = GradientDrawable.RECTANGLE
-                                                    cornerRadius = latexCornerRadiusPx
-                                                    setColor(latexBackgroundColor)
+        val markwon =
+                remember(context, textArgb, latexBackgroundColor, latexCornerRadiusPx) {
+                        markwonCache.get(textArgb)
+                                ?: Markwon.builder(context)
+                                        .usePlugin(MarkwonInlineParserPlugin.create())
+                                        .usePlugin(
+                                                JLatexMathPlugin.create(16f) { builder ->
+                                                        builder.inlinesEnabled(true)
+                                                        builder.theme().backgroundProvider {
+                                                                GradientDrawable().apply {
+                                                                        shape =
+                                                                                GradientDrawable
+                                                                                        .RECTANGLE
+                                                                        cornerRadius =
+                                                                                latexCornerRadiusPx
+                                                                        setColor(
+                                                                                latexBackgroundColor
+                                                                        )
+                                                                }
+                                                        }
+                                                        builder.theme()
+                                                                .padding(
+                                                                        JLatexMathTheme.Padding
+                                                                                .symmetric(5, 8)
+                                                                )
+                                                        builder.theme().textColor(textArgb)
                                                 }
-                                            }
-                                            builder.theme()
-                                                    .padding(
-                                                            JLatexMathTheme.Padding.symmetric(5, 8)
-                                                    )
-                                            builder.theme().textColor(textArgb)
-                                        }
-                                )
-                                .build()
-                                .also { markwonCache.put(textArgb, it) }
-            }
-
-    AndroidView(
-            modifier = modifier,
-            factory = { viewContext ->
-                TextView(viewContext).apply {
-                    setTextColor(textArgb)
-                    textSize = fontSizeSp
-                    setLineSpacing(0f, lineSpacingMultiplier)
-                    movementMethod = LinkMovementMethod.getInstance()
-                    setTextIsSelectable(true)
+                                        )
+                                        .build()
+                                        .also { markwonCache.put(textArgb, it) }
                 }
-            },
-            update = { textView ->
-                textView.setTextColor(textArgb)
-                textView.textSize = fontSizeSp
-                textView.setLineSpacing(0f, lineSpacingMultiplier)
-                textView.setTextIsSelectable(true)
-                markwon.setMarkdown(textView, normalizeLists(content))
-            }
-    )
+
+        AndroidView(
+                modifier = modifier,
+                factory = { viewContext ->
+                        TextView(viewContext).apply {
+                                setTextColor(textArgb)
+                                textSize = fontSizeSp
+                                setLineSpacing(0f, lineSpacingMultiplier)
+                                movementMethod = LinkMovementMethod.getInstance()
+                                setTextIsSelectable(true)
+                        }
+                },
+                update = { textView ->
+                        textView.setTextColor(textArgb)
+                        textView.textSize = fontSizeSp
+                        textView.setLineSpacing(0f, lineSpacingMultiplier)
+                        textView.setTextIsSelectable(true)
+                        markwon.setMarkdown(textView, normalizeLists(content))
+                }
+        )
 }
 
 @Composable
@@ -1371,196 +1524,223 @@ private fun Composer(
         onRetry: () -> Unit,
         modifier: Modifier = Modifier
 ) {
-    val sendEnabled = draft.isNotBlank() && !isSending
-    val sendInteractionSource = remember { MutableInteractionSource() }
-    val sendPressed by sendInteractionSource.collectIsPressedAsState()
-    val sendScale by
-            animateFloatAsState(
-                    targetValue = if (sendPressed) 0.92f else 1f,
-                    animationSpec = tween(durationMillis = 110),
-                    label = "SendButtonScale"
-            )
-
-    val sendContainerColor =
-            if (sendEnabled) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else if (isSending) {
-                MaterialTheme.colorScheme.errorContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerHighest
-            }
-    val sendContentColor =
-            if (sendEnabled) {
-                MaterialTheme.colorScheme.onPrimaryContainer
-            } else if (isSending) {
-                MaterialTheme.colorScheme.onErrorContainer
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            }
-
-    Surface(
-            modifier = modifier.fillMaxWidth(),
-            shape = ComposerShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 2.dp,
-            shadowElevation = 10.dp
-    ) {
-        Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.8f)
-                ) {
-                    IconButton(onClick = onOpenControls, modifier = Modifier.size(40.dp)) {
-                        Icon(
-                                imageVector = Icons.Default.Tune,
-                                contentDescription =
-                                        stringResource(id = R.string.model_controls_title),
-                                tint = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-
-                TextField(
-                        value = draft,
-                        onValueChange = onDraftChange,
-                        modifier = Modifier.weight(1f),
-                        placeholder = {
-                            Text(
-                                    text = stringResource(id = R.string.composer_placeholder),
-                                    style = MaterialTheme.typography.bodyMedium
-                            )
-                        },
-                        minLines = 1,
-                        maxLines = 5,
-                        shape = RoundedCornerShape(16.dp),
-                        colors =
-                                TextFieldDefaults.colors(
-                                        focusedContainerColor = Color.Transparent,
-                                        unfocusedContainerColor = Color.Transparent,
-                                        disabledContainerColor = Color.Transparent,
-                                        focusedIndicatorColor = Color.Transparent,
-                                        unfocusedIndicatorColor = Color.Transparent,
-                                        disabledIndicatorColor = Color.Transparent,
-                                        cursorColor = MaterialTheme.colorScheme.primary,
-                                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                        focusedPlaceholderColor =
-                                                MaterialTheme.colorScheme.onSurfaceVariant,
-                                        unfocusedPlaceholderColor =
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+        val sendEnabled = draft.isNotBlank() && !isSending
+        val sendInteractionSource = remember { MutableInteractionSource() }
+        val sendPressed by sendInteractionSource.collectIsPressedAsState()
+        val sendScale by
+                animateFloatAsState(
+                        targetValue = if (sendPressed) 0.92f else 1f,
+                        animationSpec = tween(durationMillis = 110),
+                        label = "SendButtonScale"
                 )
 
-                Surface(
-                        modifier =
-                                Modifier.graphicsLayer {
-                                    scaleX = sendScale
-                                    scaleY = sendScale
-                                },
-                        shape = CircleShape,
-                        color = sendContainerColor,
-                        tonalElevation = if (sendEnabled) 3.dp else 0.dp
-                ) {
-                    IconButton(
-                            onClick = { if (isSending) onStop() else onSend() },
-                            enabled = isSending || sendEnabled,
-                            interactionSource = sendInteractionSource,
-                            modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                                imageVector =
-                                        if (isSending) Icons.Default.Stop
-                                        else Icons.Default.ArrowUpward,
-                                contentDescription =
-                                        if (isSending) {
-                                            "Stop generation"
-                                        } else {
-                                            stringResource(id = R.string.send_message)
-                                        },
-                                tint = sendContentColor
-                        )
-                    }
+        val sendContainerColor =
+                when {
+                        sendEnabled -> MaterialTheme.colorScheme.primaryContainer
+                        isSending -> MaterialTheme.colorScheme.errorContainer
+                        else -> MaterialTheme.colorScheme.surfaceContainerHighest
                 }
-            }
+        val sendContentColor =
+                when {
+                        sendEnabled -> MaterialTheme.colorScheme.onPrimaryContainer
+                        isSending -> MaterialTheme.colorScheme.onErrorContainer
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
 
-            if (notice != null) {
-                Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+        Surface(
+                modifier = modifier.fillMaxWidth(),
+                shape = ComposerShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 2.dp,
+                shadowElevation = 10.dp
+        ) {
+                Column(
+                        modifier =
+                                Modifier.fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                            text = notice,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.weight(1f)
-                    )
-                    TextButton(onClick = onRetry, enabled = !isSending) {
-                        Text(text = stringResource(id = R.string.retry_last))
-                    }
+                        Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                                Surface(
+                                        shape = RoundedCornerShape(14.dp),
+                                        color =
+                                                MaterialTheme.colorScheme.surfaceContainerHighest
+                                                        .copy(alpha = 0.8f)
+                                ) {
+                                        IconButton(
+                                                onClick = onOpenControls,
+                                                modifier = Modifier.size(40.dp)
+                                        ) {
+                                                Icon(
+                                                        imageVector = Icons.Default.Tune,
+                                                        contentDescription =
+                                                                stringResource(
+                                                                        id =
+                                                                                R.string
+                                                                                        .model_controls_title
+                                                                ),
+                                                        tint = MaterialTheme.colorScheme.onSurface
+                                                )
+                                        }
+                                }
+
+                                TextField(
+                                        value = draft,
+                                        onValueChange = onDraftChange,
+                                        modifier = Modifier.weight(1f),
+                                        placeholder = {
+                                                Text(
+                                                        text =
+                                                                stringResource(
+                                                                        id =
+                                                                                R.string
+                                                                                        .composer_placeholder
+                                                                ),
+                                                        style = MaterialTheme.typography.bodyMedium
+                                                )
+                                        },
+                                        minLines = 1,
+                                        maxLines = 5,
+                                        shape = RoundedCornerShape(16.dp),
+                                        colors =
+                                                TextFieldDefaults.colors(
+                                                        focusedContainerColor = Color.Transparent,
+                                                        unfocusedContainerColor = Color.Transparent,
+                                                        disabledContainerColor = Color.Transparent,
+                                                        focusedIndicatorColor = Color.Transparent,
+                                                        unfocusedIndicatorColor = Color.Transparent,
+                                                        disabledIndicatorColor = Color.Transparent,
+                                                        cursorColor =
+                                                                MaterialTheme.colorScheme.primary,
+                                                        focusedTextColor =
+                                                                MaterialTheme.colorScheme.onSurface,
+                                                        unfocusedTextColor =
+                                                                MaterialTheme.colorScheme.onSurface,
+                                                        focusedPlaceholderColor =
+                                                                MaterialTheme.colorScheme
+                                                                        .onSurfaceVariant,
+                                                        unfocusedPlaceholderColor =
+                                                                MaterialTheme.colorScheme
+                                                                        .onSurfaceVariant
+                                                )
+                                )
+
+                                Surface(
+                                        modifier =
+                                                Modifier.graphicsLayer {
+                                                        scaleX = sendScale
+                                                        scaleY = sendScale
+                                                },
+                                        shape = CircleShape,
+                                        color = sendContainerColor,
+                                        tonalElevation = if (sendEnabled) 3.dp else 0.dp
+                                ) {
+                                        IconButton(
+                                                onClick = { if (isSending) onStop() else onSend() },
+                                                enabled = isSending || sendEnabled,
+                                                interactionSource = sendInteractionSource,
+                                                modifier = Modifier.size(40.dp)
+                                        ) {
+                                                Icon(
+                                                        imageVector =
+                                                                if (isSending) Icons.Default.Stop
+                                                                else Icons.Default.ArrowUpward,
+                                                        contentDescription =
+                                                                if (isSending) {
+                                                                        "Stop generation"
+                                                                } else {
+                                                                        stringResource(
+                                                                                id =
+                                                                                        R.string
+                                                                                                .send_message
+                                                                        )
+                                                                },
+                                                        tint = sendContentColor
+                                                )
+                                        }
+                                }
+                        }
+
+                        if (notice != null) {
+                                Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                        Text(
+                                                text = notice,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.weight(1f)
+                                        )
+                                        TextButton(onClick = onRetry, enabled = !isSending) {
+                                                Text(
+                                                        text =
+                                                                stringResource(
+                                                                        id = R.string.retry_last
+                                                                )
+                                                )
+                                        }
+                                }
+                        }
                 }
-            }
         }
-    }
 }
 
 private fun shareMessage(context: android.content.Context, content: String) {
-    if (content.isBlank()) return
+        if (content.isBlank()) return
 
-    val sendIntent =
-            Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_TEXT, content)
-            }
-    val chooser = Intent.createChooser(sendIntent, context.getString(R.string.share_message))
-    if (context !is Activity) {
-        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-    runCatching { context.startActivity(chooser) }
+        val sendIntent =
+                Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, content)
+                }
+        val chooser = Intent.createChooser(sendIntent, context.getString(R.string.share_message))
+        if (context !is Activity) {
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { context.startActivity(chooser) }
 }
 
 private fun normalizeLists(raw: String): String {
-    if (raw.isBlank()) return raw
+        if (raw.isBlank()) return raw
 
-    val orderedListMissingSpaceRegex = Regex("(?<=\\b\\d)\\.(?=[A-Z])")
-    val orderedListBoundaryRegex = Regex("(?<=[\\p{L}\\p{N}\\)\\]\\.!?:])(?=\\d+\\.\\s*[A-Z])")
-    val unorderedListBoundaryRegex = Regex("(?<=[\\p{L}\\p{N}\\)\\]\\.!?:])(?=(?:[-*+]\\s+[A-Z]))")
-    val lines = raw.replace("\r\n", "\n").replace('\r', '\n').lines()
-    val builder = StringBuilder()
-    var insideFence = false
+        val orderedListMissingSpaceRegex = Regex("(?<=\\b\\d)\\.(?=[A-Z])")
+        val orderedListBoundaryRegex = Regex("(?<=[\\p{L}\\p{N}\\)\\]\\.!?:])(?=\\d+\\.\\s*[A-Z])")
+        val unorderedListBoundaryRegex =
+                Regex("(?<=[\\p{L}\\p{N}\\)\\]\\.!?:])(?=(?:[-*+]\\s+[A-Z]))")
+        val lines = raw.replace("\r\n", "\n").replace('\r', '\n').lines()
+        val builder = StringBuilder()
+        var insideFence = false
 
-    for (line in lines) {
-        val trimmed = line.trimStart()
-        val isFenceToggle = trimmed.startsWith("```") || trimmed.startsWith("~~~")
-        if (isFenceToggle) {
-            insideFence = !insideFence
-            builder.append(line).append('\n')
-            continue
-        }
-
-        val normalizedLine =
-                if (insideFence) {
-                    line
-                } else {
-                    line.replace(orderedListMissingSpaceRegex, ". ")
-                            .replace(orderedListBoundaryRegex, "\n")
-                            .replace(unorderedListBoundaryRegex, "\n")
+        for (line in lines) {
+                val trimmed = line.trimStart()
+                val isFenceToggle = trimmed.startsWith("```") || trimmed.startsWith("~~~")
+                if (isFenceToggle) {
+                        insideFence = !insideFence
+                        builder.append(line).append('\n')
+                        continue
                 }
 
-        if (!insideFence && normalizedLine.startsWith("    ")) {
-            builder.append(normalizedLine.removePrefix("    ")).append('\n')
-        } else {
-            builder.append(normalizedLine).append('\n')
-        }
-    }
+                val normalizedLine =
+                        if (insideFence) {
+                                line
+                        } else {
+                                line.replace(orderedListMissingSpaceRegex, ". ")
+                                        .replace(orderedListBoundaryRegex, "\n")
+                                        .replace(unorderedListBoundaryRegex, "\n")
+                        }
 
-    return builder.toString().trimEnd('\n')
+                if (!insideFence && normalizedLine.startsWith("    ")) {
+                        builder.append(normalizedLine.removePrefix("    ")).append('\n')
+                } else {
+                        builder.append(normalizedLine).append('\n')
+                }
+        }
+
+        return builder.toString().trimEnd('\n')
 }

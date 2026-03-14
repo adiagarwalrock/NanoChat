@@ -7,18 +7,8 @@ class StreamingMessageAssembler {
     private val rawBuilder = StringBuilder()
 
     fun append(mode: InferenceMode, chunk: String): String {
-        when (mode) {
-            InferenceMode.REMOTE,
-            InferenceMode.DOWNLOADED -> {
-                rawBuilder.append(chunk)
-            }
-
-            InferenceMode.AICORE -> {
-                rawBuilder.clear()
-                rawBuilder.append(chunk)
-            }
-        }
-
+        if (mode == InferenceMode.AICORE) rawBuilder.clear()
+        rawBuilder.append(chunk)
         return GeneratedTextSanitizer.sanitize(rawBuilder.toString())
     }
 

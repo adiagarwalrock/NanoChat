@@ -34,6 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
@@ -290,202 +291,203 @@ class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
 
         sendJob =
                 viewModelScope.launch {
-                    generationMutex.withLock {
-                        var assistantMessageId: Long? = null
-                        val assembler = StreamingMessageAssembler()
-                        var lastPersistTimeMs = 0L
-                        var lastPersistedLength = 0
-                        var lastPersistedSnapshot = ""
-                        var hasVisibleContent = false
-                        var watchdogTriggered = false
-                        var watchdogJob: Job? = null
+                    generationMutex.withLock { executeGeneration(requestId, sessionId, prompt) }
+                }
+    }
 
-                        try {
-                            val snapshot = settings.value
-                            val mode = snapshot.inferenceMode
-                            Log.d(
-                                    TAG,
-                                    "chat_generation_started requestId=$requestId mode=${mode.name}"
+    private suspend fun executeGeneration(requestId: Long, sessionId: Long, prompt: String) {
+        var assistantMessageId: Long? = null
+        val assembler = StreamingMessageAssembler()
+        var watchdogJob: Job? = null
+        var hasVisibleContent = false
+        var watchdogTriggered = false
+
+        try {
+            val snapshot = settings.value
+            val mode = snapshot.inferenceMode
+            Log.d(TAG, "chat_generation_started requestId=$requestId mode=${mode.name}")
+
+            if (!checkAvailability(mode, snapshot)) return
+
+            val history = withContext(Dispatchers.IO) { repository.recentTurnsFor(mode, sessionId) }
+            assistantMessageId =
+                withContext(Dispatchers.IO) {
+                    repository.saveUserMessage(sessionId, prompt, snapshot)
+                    repository.insertAssistantPlaceholder(sessionId, snapshot)
+                }
+
+            activeAssistantMessageId = assistantMessageId
+            activeAssistantPreview = ""
+            draft.value = ""
+
+            val parentJob = coroutineContext[Job]
+            watchdogJob =
+                viewModelScope.launch {
+                    delay(firstTokenWatchdogMs(mode))
+                    if (!hasVisibleContent && isCurrentRequest(requestId)) {
+                        watchdogTriggered = true
+                        parentJob?.cancel(
+                            GenerationWatchdogTimeout(
+                                "No response arrived in time. Retry or reselect this model."
                             )
-
-                            if (mode == InferenceMode.DOWNLOADED) {
-                                val preparationError =
-                                        withContext(Dispatchers.IO) {
-                                            repository.prepareSelectedLocalModel()
-                                        }
-                                if (!preparationError.isNullOrBlank()) {
-                                    notice.value =
-                                            preparationError.takeIf {
-                                                shouldSurfaceNotice(mode, it)
-                                            }
-                                    return@withLock
-                                }
-                            }
-
-                            val availability =
-                                    withContext(Dispatchers.IO) {
-                                        repository.backendAvailability(mode, snapshot)
-                                    }
-                            if (availability is BackendAvailability.Unavailable) {
-                                notice.value =
-                                        availability.message.takeIf {
-                                            shouldSurfaceNotice(mode, it)
-                                        }
-                                return@withLock
-                            }
-
-                            val history =
-                                    withContext(Dispatchers.IO) {
-                                        repository.recentTurnsFor(mode, sessionId)
-                                    }
-                            val createdAssistantMessageId =
-                                    withContext(Dispatchers.IO) {
-                                        repository.saveUserMessage(sessionId, prompt, snapshot)
-                                        repository.insertAssistantPlaceholder(sessionId, snapshot)
-                                    }
-
-                            assistantMessageId = createdAssistantMessageId
-                            activeAssistantMessageId = createdAssistantMessageId
-                            activeAssistantPreview = ""
-                            draft.value = ""
-
-                            val parentJob = coroutineContext[Job]
-                            watchdogJob = launch {
-                                delay(firstTokenWatchdogMs(mode))
-                                if (!hasVisibleContent && isCurrentRequest(requestId)) {
-                                    watchdogTriggered = true
-                                    parentJob?.cancel(
-                                            GenerationWatchdogTimeout(
-                                                    "No response arrived in time. Retry or reselect this model."
-                                            )
-                                    )
-                                }
-                            }
-
-                            repository.streamResponse(mode, history, prompt, snapshot).collect {
-                                    delta ->
-                                ensureRequestActive(requestId)
-                                val content = assembler.append(mode, delta)
-                                val filtered = filterThinking(content, snapshot.thinkingEffort)
-                                activeAssistantPreview = filtered
-                                if (filtered.isNotBlank()) {
-                                    if (!hasVisibleContent) {
-                                        Log.d(
-                                                TAG,
-                                                "chat_generation_first_visible requestId=$requestId mode=${mode.name}"
-                                        )
-                                    }
-                                    hasVisibleContent = true
-                                }
-
-                                if (mode != InferenceMode.AICORE &&
-                                                shouldPersistStreamSnapshot(
-                                                        filtered,
-                                                        lastPersistTimeMs,
-                                                        lastPersistedLength
-                                                )
-                                ) {
-                                    withContext(Dispatchers.IO) {
-                                        repository.updateAssistantMessage(
-                                                createdAssistantMessageId,
-                                                filtered
-                                        )
-                                    }
-                                    lastPersistTimeMs = System.currentTimeMillis()
-                                    lastPersistedLength = filtered.length
-                                    lastPersistedSnapshot = filtered
-                                }
-                            }
-
-                            ensureRequestActive(requestId)
-
-                            val finalContent =
-                                    filterThinking(assembler.current(), snapshot.thinkingEffort)
-                            if (finalContent.isBlank()) {
-                                throw InferenceException.BackendUnavailable(
-                                        "Local model produced no visible text. Try again or reselect this model."
-                                )
-                            }
-
-                            if (mode == InferenceMode.AICORE ||
-                                            finalContent != lastPersistedSnapshot
-                            ) {
-                                withContext(Dispatchers.IO) {
-                                    repository.updateAssistantMessage(
-                                            createdAssistantMessageId,
-                                            finalContent
-                                    )
-                                }
-                            }
-                        } catch (cancellation: CancellationException) {
-                            Log.d(
-                                    TAG,
-                                    "chat_generation_cancelled requestId=$requestId reason=${cancellation.message.orEmpty()} watchdog=$watchdogTriggered"
-                            )
-                            val cancelledContent =
-                                    when {
-                                        activeAssistantPreview.isNotBlank() ->
-                                                activeAssistantPreview
-                                        watchdogTriggered ||
-                                                cancellation is GenerationWatchdogTimeout ->
-                                                WATCHDOG_TIMEOUT_MESSAGE
-                                        else -> CANCELLATION_MESSAGE
-                                    }
-
-                            assistantMessageId?.let { messageId ->
-                                withContext(NonCancellable + Dispatchers.IO) {
-                                    repository.updateAssistantMessage(messageId, cancelledContent)
-                                }
-                            }
-
-                            if (watchdogTriggered || cancellation is GenerationWatchdogTimeout) {
-                                val mode = settings.value.inferenceMode
-                                notice.value =
-                                        WATCHDOG_TIMEOUT_MESSAGE.takeIf {
-                                            shouldSurfaceNotice(mode, it)
-                                        }
-                            }
-                        } catch (error: Throwable) {
-                            Log.e(
-                                    TAG,
-                                    "chat_generation_failed requestId=$requestId message=${error.message.orEmpty()}",
-                                    error
-                            )
-                            val message =
-                                    userFacingError(error).ifBlank {
-                                        "Unable to complete the request."
-                                    }
-                            val mode = settings.value.inferenceMode
-                            val fallbackContent = activeAssistantPreview.takeIf { it.isNotBlank() }
-                            val persistMessage = fallbackContent ?: message
-                            notice.value =
-                                    if (fallbackContent == null) {
-                                        message.takeIf { shouldSurfaceNotice(mode, it) }
-                                    } else {
-                                        null
-                                    }
-                            assistantMessageId?.let { messageId ->
-                                withContext(Dispatchers.IO) {
-                                    repository.updateAssistantMessage(messageId, persistMessage)
-                                }
-                            }
-                        } finally {
-                            Log.d(
-                                    TAG,
-                                    "chat_generation_finished requestId=$requestId isCurrent=${activeRequestId == requestId}"
-                            )
-                            watchdogJob?.cancel()
-                            if (activeAssistantMessageId == assistantMessageId) {
-                                activeAssistantMessageId = null
-                                activeAssistantPreview = ""
-                            }
-                            cancelledRequestIds.remove(requestId)
-                            if (activeRequestId == requestId) {
-                                isSending.value = false
-                            }
-                        }
+                        )
                     }
                 }
+
+            var lastPersistTimeMs = 0L
+            var lastPersistedLength = 0
+            var lastPersistedSnapshot = ""
+
+            repository.streamResponse(mode, history, prompt, snapshot).collect { delta ->
+                ensureRequestActive(requestId)
+                val content = assembler.append(mode, delta)
+                val filtered = filterThinking(content, snapshot.thinkingEffort)
+                activeAssistantPreview = filtered
+
+                if (filtered.isNotBlank() && !hasVisibleContent) {
+                    Log.d(
+                        TAG,
+                        "chat_generation_first_visible requestId=$requestId mode=${mode.name}"
+                    )
+                    hasVisibleContent = true
+                }
+
+                if (mode != InferenceMode.AICORE &&
+                    shouldPersistStreamSnapshot(
+                        filtered,
+                        lastPersistTimeMs,
+                        lastPersistedLength
+                    )
+                ) {
+                    withContext(Dispatchers.IO) {
+                        repository.updateAssistantMessage(assistantMessageId!!, filtered)
+                    }
+                    lastPersistTimeMs = System.currentTimeMillis()
+                    lastPersistedLength = filtered.length
+                    lastPersistedSnapshot = filtered
+                }
+            }
+
+            ensureRequestActive(requestId)
+            val finalContent = filterThinking(assembler.current(), snapshot.thinkingEffort)
+            if (finalContent.isBlank()) {
+                throw InferenceException.BackendUnavailable(
+                    "Local model produced no visible text. Try again or reselect this model."
+                )
+            }
+
+            if (mode == InferenceMode.AICORE || finalContent != lastPersistedSnapshot) {
+                withContext(Dispatchers.IO) {
+                    repository.updateAssistantMessage(assistantMessageId!!, finalContent)
+                }
+            }
+        } catch (cancellation: CancellationException) {
+            handleGenerationCancellation(
+                requestId,
+                assistantMessageId,
+                watchdogTriggered,
+                cancellation
+            )
+        } catch (error: Throwable) {
+            handleGenerationError(requestId, assistantMessageId, error)
+        } finally {
+            cleanupGeneration(requestId, assistantMessageId, watchdogJob)
+        }
+    }
+
+    private suspend fun checkAvailability(
+        mode: InferenceMode,
+        snapshot: SettingsSnapshot
+    ): Boolean {
+        if (mode == InferenceMode.DOWNLOADED) {
+            val error = withContext(Dispatchers.IO) { repository.prepareSelectedLocalModel() }
+            if (!error.isNullOrBlank()) {
+                notice.value = error.takeIf { shouldSurfaceNotice(mode, it) }
+                return false
+            }
+        }
+
+        val availability =
+            withContext(Dispatchers.IO) { repository.backendAvailability(mode, snapshot) }
+        if (availability is BackendAvailability.Unavailable) {
+            notice.value = availability.message.takeIf { shouldSurfaceNotice(mode, it) }
+            return false
+        }
+        return true
+    }
+
+    private suspend fun handleGenerationCancellation(
+        requestId: Long,
+        assistantMessageId: Long?,
+        watchdogTriggered: Boolean,
+        cancellation: CancellationException
+    ) {
+        Log.d(
+            TAG,
+            "chat_generation_cancelled requestId=$requestId reason=${cancellation.message.orEmpty()} watchdog=$watchdogTriggered"
+        )
+        val content =
+            when {
+                activeAssistantPreview.isNotBlank() -> activeAssistantPreview
+                watchdogTriggered || cancellation is GenerationWatchdogTimeout ->
+                    WATCHDOG_TIMEOUT_MESSAGE
+
+                else -> CANCELLATION_MESSAGE
+            }
+
+        assistantMessageId?.let { id ->
+            withContext(NonCancellable + Dispatchers.IO) {
+                repository.updateAssistantMessage(id, content)
+            }
+        }
+
+        if (watchdogTriggered || cancellation is GenerationWatchdogTimeout) {
+            notice.value =
+                WATCHDOG_TIMEOUT_MESSAGE.takeIf {
+                    shouldSurfaceNotice(settings.value.inferenceMode, it)
+                }
+        }
+    }
+
+    private suspend fun handleGenerationError(
+        requestId: Long,
+        assistantMessageId: Long?,
+        error: Throwable
+    ) {
+        Log.e(
+            TAG,
+            "chat_generation_failed requestId=$requestId message=${error.message.orEmpty()}",
+            error
+        )
+        val message = userFacingError(error).ifBlank { "Unable to complete the request." }
+        val fallbackContent = activeAssistantPreview.takeIf { it.isNotBlank() }
+
+        notice.value =
+            if (fallbackContent == null)
+                message.takeIf { shouldSurfaceNotice(settings.value.inferenceMode, it) }
+            else null
+
+        assistantMessageId?.let { id ->
+            withContext(Dispatchers.IO) {
+                repository.updateAssistantMessage(id, fallbackContent ?: message)
+            }
+        }
+    }
+
+    private fun cleanupGeneration(requestId: Long, assistantMessageId: Long?, watchdogJob: Job?) {
+        Log.d(
+            TAG,
+            "chat_generation_finished requestId=$requestId isCurrent=${activeRequestId == requestId}"
+        )
+        watchdogJob?.cancel()
+        if (activeAssistantMessageId == assistantMessageId) {
+            activeAssistantMessageId = null
+            activeAssistantPreview = ""
+        }
+        cancelledRequestIds.remove(requestId)
+        if (activeRequestId == requestId) {
+            isSending.value = false
+        }
     }
 
     fun stopGeneration() {

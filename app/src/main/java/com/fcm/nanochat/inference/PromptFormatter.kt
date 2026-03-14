@@ -127,11 +127,10 @@ object PromptFormatter {
     private fun String?.toPromptFamily(): DownloadedPromptFamily {
         val normalized = this?.trim()?.lowercase().orEmpty()
         return when {
-            normalized.contains("deepseek") -> DownloadedPromptFamily.DEEPSEEK
-            normalized.contains("qwen") -> DownloadedPromptFamily.QWEN
-            normalized.contains("gemma") -> DownloadedPromptFamily.GEMMA
-            normalized.contains("phi") -> DownloadedPromptFamily.PHI
-            normalized.isBlank() -> DownloadedPromptFamily.GENERIC
+            "deepseek" in normalized -> DownloadedPromptFamily.DEEPSEEK
+            "qwen" in normalized -> DownloadedPromptFamily.QWEN
+            "gemma" in normalized -> DownloadedPromptFamily.GEMMA
+            "phi" in normalized -> DownloadedPromptFamily.PHI
             else -> DownloadedPromptFamily.GENERIC
         }
     }
@@ -142,21 +141,19 @@ object PromptFormatter {
             supportsThinking: Boolean
     ): String {
         if (!supportsThinking) return systemPrompt
-
         val suffix =
                 when (effort) {
-                    ThinkingEffort.NONE -> {
+                    ThinkingEffort.NONE ->
                         " Do not include a <think> block or hidden reasoning in the response."
-                    }
-                    ThinkingEffort.LOW -> {
+
+                    ThinkingEffort.LOW ->
                         " If reasoning helps, keep it brief and place it inside a short <think>...</think> block before the final answer."
-                    }
-                    ThinkingEffort.MEDIUM -> {
+
+                    ThinkingEffort.MEDIUM ->
                         " When reasoning helps, place it inside a <think>...</think> block before the final answer."
-                    }
-                    ThinkingEffort.HIGH -> {
+
+                    ThinkingEffort.HIGH ->
                         " When reasoning helps, place a detailed <think>...</think> block before the final answer."
-                    }
                 }
         return (systemPrompt + suffix).trim()
     }

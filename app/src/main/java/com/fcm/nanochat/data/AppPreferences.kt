@@ -56,7 +56,8 @@ data class AllowlistCacheSnapshot(
 
 class AppPreferences(context: Context) {
     private val appContext = context.applicationContext
-    private val secretStore: SharedPreferences? by lazy(LazyThreadSafetyMode.NONE) {
+    private val secretStore: SharedPreferences? by
+    lazy(LazyThreadSafetyMode.NONE) {
         runCatching { createSecretStore(appContext) }.getOrNull()
     }
 
@@ -75,7 +76,8 @@ class AppPreferences(context: Context) {
                 geminiNanoModelSizeBytes = preferences[Keys.geminiNanoModelSizeBytes] ?: 0,
                 huggingFaceAccountJson = preferences[Keys.huggingFaceAccountJson] ?: "",
                 thinkingEffort = parseThinkingEffort(preferences[Keys.thinkingEffort]),
-                acceleratorPreference = parseAccelerator(preferences[Keys.acceleratorPreference])
+                acceleratorPreference =
+                    parseAccelerator(preferences[Keys.acceleratorPreference])
             )
         }
 
@@ -148,18 +150,12 @@ class AppPreferences(context: Context) {
         topP: Double,
         contextLength: Int
     ) {
-        val normalizedBaseUrl = normalizeBaseUrl(baseUrl)
-        val normalizedModelName = modelName.trim()
-        val clampedTemperature = temperature.coerceIn(0.0, 2.0)
-        val clampedTopP = topP.coerceIn(0.0, 1.0)
-        val clampedContextLength = contextLength.coerceIn(512, 32768)
-
         appContext.dataStore.edit { preferences ->
-            preferences[Keys.baseUrl] = normalizedBaseUrl
-            preferences[Keys.modelName] = normalizedModelName
-            preferences[Keys.temperature] = clampedTemperature
-            preferences[Keys.topP] = clampedTopP
-            preferences[Keys.contextLength] = clampedContextLength
+            preferences[Keys.baseUrl] = normalizeBaseUrl(baseUrl)
+            preferences[Keys.modelName] = modelName.trim()
+            preferences[Keys.temperature] = temperature.coerceIn(0.0, 2.0)
+            preferences[Keys.topP] = topP.coerceIn(0.0, 1.0)
+            preferences[Keys.contextLength] = contextLength.coerceIn(512, 32768)
         }
     }
 
@@ -207,49 +203,31 @@ class AppPreferences(context: Context) {
     }
 
     suspend fun clearPinnedSessions() {
-        appContext.dataStore.edit { preferences ->
-            preferences[Keys.pinnedSessionIds] = emptySet()
-        }
+        appContext.dataStore.edit { preferences -> preferences[Keys.pinnedSessionIds] = emptySet() }
     }
 
-    private fun parseInferenceMode(raw: String?): InferenceMode {
-        return raw?.let {
-            runCatching { InferenceMode.valueOf(it) }
-                .getOrDefault(InferenceMode.REMOTE)
-        } ?: InferenceMode.REMOTE
-    }
+    private fun parseInferenceMode(raw: String?) =
+        raw?.let { runCatching { InferenceMode.valueOf(it) }.getOrNull() }
+            ?: InferenceMode.REMOTE
 
-    private fun parseThinkingEffort(raw: String?): ThinkingEffort {
-        return raw?.let {
-            runCatching { ThinkingEffort.valueOf(it) }
-                .getOrDefault(ThinkingEffort.MEDIUM)
-        } ?: ThinkingEffort.MEDIUM
-    }
+    private fun parseThinkingEffort(raw: String?) =
+        raw?.let { runCatching { ThinkingEffort.valueOf(it) }.getOrNull() }
+            ?: ThinkingEffort.MEDIUM
 
-    private fun parseAccelerator(raw: String?): AcceleratorPreference {
-        return raw?.let {
-            runCatching { AcceleratorPreference.valueOf(it) }
-                .getOrDefault(AcceleratorPreference.AUTO)
-        } ?: AcceleratorPreference.AUTO
-    }
+    private fun parseAccelerator(raw: String?) =
+        raw?.let { runCatching { AcceleratorPreference.valueOf(it) }.getOrNull() }
+            ?: AcceleratorPreference.AUTO
 
     private fun normalizeBaseUrl(raw: String): String {
         return raw.trim().trimEnd('/')
     }
 
     private fun readSecret(key: String): String {
-        return runCatching {
-            secretStore?.getString(key, "").orEmpty()
-        }.getOrDefault("")
+        return runCatching { secretStore?.getString(key, "").orEmpty() }.getOrDefault("")
     }
 
     private fun writeSecretValue(key: String, value: String) {
-        runCatching {
-            secretStore
-                ?.edit()
-                ?.putString(key, value)
-                ?.apply()
-        }
+        runCatching { secretStore?.edit()?.putString(key, value)?.apply() }
     }
 
     private object Keys {
@@ -258,7 +236,8 @@ class AppPreferences(context: Context) {
             stringPreferencesKey("active_local_model_id")
         val baseUrl: Preferences.Key<String> = stringPreferencesKey("base_url")
         val modelName: Preferences.Key<String> = stringPreferencesKey("model_name")
-        val pinnedSessionIds: Preferences.Key<Set<String>> = stringSetPreferencesKey("pinned_session_ids")
+        val pinnedSessionIds: Preferences.Key<Set<String>> =
+            stringSetPreferencesKey("pinned_session_ids")
         val temperature: Preferences.Key<Double> = doublePreferencesKey("temperature")
         val topP: Preferences.Key<Double> = doublePreferencesKey("top_p")
         val contextLength: Preferences.Key<Int> = intPreferencesKey("context_length")
@@ -266,14 +245,11 @@ class AppPreferences(context: Context) {
             longPreferencesKey("gemini_nano_model_size_bytes")
         val huggingFaceAccountJson: Preferences.Key<String> =
             stringPreferencesKey("hugging_face_account_json")
-        val thinkingEffort: Preferences.Key<String> =
-            stringPreferencesKey("thinking_effort")
+        val thinkingEffort: Preferences.Key<String> = stringPreferencesKey("thinking_effort")
         val acceleratorPreference: Preferences.Key<String> =
             stringPreferencesKey("accelerator_preference")
-        val allowlistVersion: Preferences.Key<String> =
-            stringPreferencesKey("allowlist_version")
-        val allowlistJson: Preferences.Key<String> =
-            stringPreferencesKey("allowlist_json")
+        val allowlistVersion: Preferences.Key<String> = stringPreferencesKey("allowlist_version")
+        val allowlistJson: Preferences.Key<String> = stringPreferencesKey("allowlist_json")
         val allowlistLastRefreshEpochMs: Preferences.Key<Long> =
             longPreferencesKey("allowlist_last_refresh_epoch_ms")
     }
@@ -292,9 +268,7 @@ class AppPreferences(context: Context) {
 
 @Suppress("DEPRECATION")
 private fun createSecretStore(context: Context): SharedPreferences {
-    val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
+    val masterKey = MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
 
     return EncryptedSharedPreferences.create(
         context,
