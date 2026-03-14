@@ -26,6 +26,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.runBlocking
 
 private data class StartupFileInspection(
         val path: String,
@@ -495,6 +496,14 @@ internal object LiteRtLmRuntimeFactory {
 
     private fun rootCauseSummary(error: Throwable): String {
         val root = rootCause(error)
+        if (root is UnsatisfiedLinkError) {
+            val msg = root.message?.trim().orEmpty()
+            return if (msg.contains("libLiteRtTopKOpenClSampler.so")) {
+                "GPU acceleration is unavailable on this device (missing OpenCL sampler library)."
+            } else {
+                "Native dependency error: $msg"
+            }
+        }
         val name = root.javaClass.simpleName
         val message = root.message?.trim().orEmpty()
         return if (message.isBlank()) name else "$name: $message"

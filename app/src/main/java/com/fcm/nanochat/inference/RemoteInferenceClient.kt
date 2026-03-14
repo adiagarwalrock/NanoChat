@@ -148,6 +148,19 @@ class RemoteInferenceClient(
     private fun buildRequestBody(request: InferenceRequest): JSONObject {
         val messages = JSONArray()
 
+        val supportsThinking = supportsReasoningParam(request.settings.modelName)
+        val systemContent = PromptFormatter.applyThinkingInstruction(
+            systemPrompt = "You are NanoChat, a helpful AI assistant. Reply in clean Markdown.",
+            effort = request.settings.thinkingEffort,
+            supportsThinking = supportsThinking
+        )
+
+        messages.put(
+            JSONObject()
+                .put("role", "system")
+                .put("content", systemContent)
+        )
+
         request.history.forEach { turn ->
             messages.put(
                 JSONObject()
@@ -194,7 +207,7 @@ class RemoteInferenceClient(
         if (choices.length() == 0) return ""
 
         val delta = choices.optJSONObject(0)?.optJSONObject("delta") ?: return ""
-        
+
         val reasoningText = extractText(delta.opt("reasoning_content"))
         val visibleText = extractText(delta.opt("content"))
 
@@ -219,6 +232,7 @@ class RemoteInferenceClient(
                     }
                 }
             }
+
             else -> ""
         }
     }

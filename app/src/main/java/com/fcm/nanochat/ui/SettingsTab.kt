@@ -151,22 +151,25 @@ internal fun SettingsHome(
     onOpenModelLibrary: () -> Unit
 ) {
     val activePreset = closestBehaviorPreset(state.temperature, state.topP)
-    val remoteConfigured = RemoteConfigValidator.missingFields(
-        baseUrl = state.baseUrl,
-        modelName = state.modelName,
-        apiKey = state.apiKey
-    ).isEmpty()
+    val remoteConfigured =
+        RemoteConfigValidator.missingFields(
+            baseUrl = state.baseUrl,
+            modelName = state.modelName,
+            apiKey = state.apiKey
+        )
+            .isEmpty()
     val onDeviceEnabled = state.geminiStatus.supported && state.geminiStatus.downloaded
     val activeLocalModel = modelState.models.firstOrNull { it.modelId == modelState.activeModelId }
-    val localModelSubtitle = when {
-        activeLocalModel == null -> "No local model selected"
-        activeLocalModel.installState == ModelInstallState.INSTALLED &&
-                activeLocalModel.compatibility is LocalModelCompatibilityState.Ready -> {
-            "${activeLocalModel.displayName} · Ready"
-        }
+    val localModelSubtitle =
+        when {
+            activeLocalModel == null -> "No local model selected"
+            activeLocalModel.installState == ModelInstallState.INSTALLED &&
+                    activeLocalModel.compatibility is LocalModelCompatibilityState.Ready -> {
+                "${activeLocalModel.displayName} · Ready"
+            }
 
-        else -> "${activeLocalModel.displayName} · Needs attention"
-    }
+            else -> "${activeLocalModel.displayName} · Needs attention"
+        }
 
     LazyColumn(
         modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
@@ -178,16 +181,18 @@ internal fun SettingsHome(
                 modelName = displayModelName(state.modelName),
                 behaviorMode = activePreset.title,
                 providerStatus = connectionModeSummary(remoteConfigured),
-                onDeviceStatus = when {
-                    onDeviceEnabled -> "Gemini Nano enabled"
-                    state.geminiStatus.supported -> "Gemini Nano available"
-                    else -> "Gemini Nano unavailable"
-                },
-                onDeviceTone = when {
-                    onDeviceEnabled -> BadgeTone.Positive
-                    state.geminiStatus.supported -> BadgeTone.Neutral
-                    else -> BadgeTone.Warning
-                }
+                onDeviceStatus =
+                    when {
+                        onDeviceEnabled -> "Gemini Nano enabled"
+                        state.geminiStatus.supported -> "Gemini Nano available"
+                        else -> "Gemini Nano unavailable"
+                    },
+                onDeviceTone =
+                    when {
+                        onDeviceEnabled -> BadgeTone.Positive
+                        state.geminiStatus.supported -> BadgeTone.Neutral
+                        else -> BadgeTone.Warning
+                    }
             )
         }
 
@@ -224,7 +229,8 @@ internal fun SettingsHome(
                 SettingsNavigationRow(
                     icon = { Icon(Icons.Outlined.History, contentDescription = null) },
                     title = "Usage and history",
-                    subtitle = "Sessions ${state.stats.sessionCount} · Sent ${state.stats.messagesSent} · Received ${state.stats.messagesReceived}",
+                    subtitle =
+                        "Sessions ${state.stats.sessionCount} · Sent ${state.stats.messagesSent} · Received ${state.stats.messagesReceived}",
                     onClick = { onNavigate(SettingsSection.DataHistory) }
                 )
             }
@@ -266,13 +272,15 @@ internal fun AiConfigurationSettings(
                 SummaryStatusRow(
                     icon = { Icon(Icons.Default.Link, contentDescription = null) },
                     label = "Connection",
-                    value = connectionModeSummary(
-                        RemoteConfigValidator.missingFields(
-                            baseUrl = state.baseUrl,
-                            modelName = state.modelName,
-                            apiKey = state.apiKey
-                        ).isEmpty()
-                    )
+                    value =
+                        connectionModeSummary(
+                            RemoteConfigValidator.missingFields(
+                                baseUrl = state.baseUrl,
+                                modelName = state.modelName,
+                                apiKey = state.apiKey
+                            )
+                                .isEmpty()
+                        )
                 )
             }
         }
@@ -308,11 +316,12 @@ internal fun ConnectionSettings(
     onSaveSettings: () -> Unit = {}
 ) {
     val providerStatus = inferProviderStatus(state.baseUrl)
-    val missingRemoteFields = RemoteConfigValidator.missingFields(
-        baseUrl = state.baseUrl,
-        modelName = state.modelName,
-        apiKey = state.apiKey
-    )
+    val missingRemoteFields =
+        RemoteConfigValidator.missingFields(
+            baseUrl = state.baseUrl,
+            modelName = state.modelName,
+            apiKey = state.apiKey
+        )
 
     var advancedExpanded by rememberSaveable { mutableStateOf(false) }
     var apiKeyVisible by rememberSaveable { mutableStateOf(false) }
@@ -331,21 +340,27 @@ internal fun ConnectionSettings(
                     icon = { Icon(Icons.Default.Link, contentDescription = null) },
                     label = "Remote provider",
                     value = providerStatus,
-                    badge = if (missingRemoteFields.isEmpty()) {
-                        BadgeData("Connected", BadgeTone.Positive)
-                    } else {
-                        BadgeData("Needs setup", BadgeTone.Warning)
-                    }
+                    badge =
+                        if (missingRemoteFields.isEmpty()) {
+                            BadgeData("Connected", BadgeTone.Positive)
+                        } else {
+                            BadgeData("Needs setup", BadgeTone.Warning)
+                        }
                 )
                 SummaryStatusRow(
                     icon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
                     label = "On-device model",
                     value = stringResource(R.string.gemini_nano_title),
-                    badge = when {
-                        state.geminiStatus.supported && state.geminiStatus.downloaded -> BadgeData("Available", BadgeTone.Positive)
-                        state.geminiStatus.supported -> BadgeData("Supported", BadgeTone.Neutral)
-                        else -> BadgeData("Unavailable", BadgeTone.Warning)
-                    }
+                    badge =
+                        when {
+                            state.geminiStatus.supported && state.geminiStatus.downloaded ->
+                                BadgeData("Available", BadgeTone.Positive)
+
+                            state.geminiStatus.supported ->
+                                BadgeData("Supported", BadgeTone.Neutral)
+
+                            else -> BadgeData("Unavailable", BadgeTone.Warning)
+                        }
                 )
 
                 Row(
@@ -355,27 +370,34 @@ internal fun ConnectionSettings(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     StatusBadge(
-                        label = if (state.geminiStatus.supported) "Supported" else "Unsupported",
-                        tone = if (state.geminiStatus.supported) BadgeTone.Positive else BadgeTone.Warning
+                        label =
+                            if (state.geminiStatus.supported) "Supported"
+                            else "Unsupported",
+                        tone =
+                            if (state.geminiStatus.supported) BadgeTone.Positive
+                            else BadgeTone.Warning
                     )
                     StatusBadge(
-                        label = when {
-                            state.geminiStatus.downloaded -> "Downloaded"
-                            state.geminiStatus.downloading -> "Downloading"
-                            else -> "Not downloaded"
-                        },
-                        tone = when {
-                            state.geminiStatus.downloaded -> BadgeTone.Positive
-                            state.geminiStatus.downloading -> BadgeTone.Neutral
-                            else -> BadgeTone.Warning
-                        }
+                        label =
+                            when {
+                                state.geminiStatus.downloaded -> "Downloaded"
+                                state.geminiStatus.downloading -> "Downloading"
+                                else -> "Not downloaded"
+                            },
+                        tone =
+                            when {
+                                state.geminiStatus.downloaded -> BadgeTone.Positive
+                                state.geminiStatus.downloading -> BadgeTone.Neutral
+                                else -> BadgeTone.Warning
+                            }
                     )
                 }
 
-                val sizeLabel = formatModelSize(
-                    status = state.geminiStatus,
-                    unavailableLabel = stringResource(R.string.gemini_size_unavailable)
-                )
+                val sizeLabel =
+                    formatModelSize(
+                        status = state.geminiStatus,
+                        unavailableLabel = stringResource(R.string.gemini_size_unavailable)
+                    )
                 if (sizeLabel.isNotBlank()) {
                     Text(
                         text = "Model size: $sizeLabel",
@@ -386,14 +408,16 @@ internal fun ConnectionSettings(
 
                 if (state.geminiStatus.downloading) {
                     val downloaded = state.geminiStatus.bytesDownloaded ?: 0L
-                    val total = state.geminiStatus.bytesToDownload
-                        ?: state.geminiStatus.lastKnownModelSizeBytes
-                    val progressText = if (total > 0) {
-                        val pct = (downloaded * 100f / total).coerceIn(0f, 100f)
-                        stringResource(R.string.gemini_downloading_percent, pct.toInt())
-                    } else {
-                        stringResource(R.string.gemini_downloading_generic)
-                    }
+                    val total =
+                        state.geminiStatus.bytesToDownload
+                            ?: state.geminiStatus.lastKnownModelSizeBytes
+                    val progressText =
+                        if (total > 0) {
+                            val pct = (downloaded * 100f / total).coerceIn(0f, 100f)
+                            stringResource(R.string.gemini_downloading_percent, pct.toInt())
+                        } else {
+                            stringResource(R.string.gemini_downloading_generic)
+                        }
                     Text(
                         text = progressText,
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
@@ -401,33 +425,30 @@ internal fun ConnectionSettings(
                     )
                 }
 
-                if (!state.geminiStatus.downloaded && state.geminiStatus.supported && state.geminiStatus.downloadable && !state.geminiStatus.downloading) {
+                if (!state.geminiStatus.downloaded &&
+                    state.geminiStatus.supported &&
+                    state.geminiStatus.downloadable &&
+                    !state.geminiStatus.downloading
+                ) {
                     OutlinedButton(
                         modifier = Modifier.fillMaxWidth(),
                         onClick = onDownloadGeminiNano
-                    ) {
-                        Text(stringResource(R.string.gemini_download_gemini))
-                    }
+                    ) { Text(stringResource(R.string.gemini_download_gemini)) }
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onRefreshGeminiStatus) {
                         Text(stringResource(R.string.gemini_refresh_status))
                     }
                 }
 
-                state.geminiStatus.message
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { message ->
-                        Text(
+                state.geminiStatus.message?.takeIf { it.isNotBlank() }?.let { message ->
+                    Text(
                             text = message,
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    )
+                }
             }
         }
 
@@ -459,9 +480,7 @@ internal fun ConnectionSettings(
                     shape = InputShape,
                     singleLine = true,
                     label = { Text("Model name") },
-                    supportingText = {
-                        Text("Model used for remote generation.")
-                    }
+                    supportingText = { Text("Model used for remote generation.") }
                 )
 
                 OutlinedTextField(
@@ -471,41 +490,40 @@ internal fun ConnectionSettings(
                     shape = InputShape,
                     singleLine = true,
                     label = { Text("API key") },
-                    visualTransformation = if (apiKeyVisible) {
-                        VisualTransformation.None
-                    } else {
-                        PasswordVisualTransformation()
-                    },
+                    visualTransformation =
+                        if (apiKeyVisible) {
+                            VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
                     trailingIcon = {
                         IconButton(onClick = { apiKeyVisible = !apiKeyVisible }) {
                             Icon(
-                                imageVector = if (apiKeyVisible) {
-                                    Icons.Default.VisibilityOff
-                                } else {
-                                    Icons.Default.Visibility
-                                },
-                                contentDescription = if (apiKeyVisible) {
-                                    "Hide API key"
-                                } else {
-                                    "Show API key"
-                                }
+                                imageVector =
+                                    if (apiKeyVisible) {
+                                        Icons.Default.VisibilityOff
+                                    } else {
+                                        Icons.Default.Visibility
+                                    },
+                                contentDescription =
+                                    if (apiKeyVisible) {
+                                        "Hide API key"
+                                    } else {
+                                        "Show API key"
+                                    }
                             )
                         }
                     },
-                    supportingText = {
-                        Text("Stored securely on this device.")
-                    }
+                    supportingText = { Text("Stored securely on this device.") }
                 )
 
-                state.saveNotice
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { notice ->
-                        Text(
+                state.saveNotice?.takeIf { it.isNotBlank() }?.let { notice ->
+                    Text(
                             text = notice,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    )
+                }
 
                 Button(
                     onClick = onSaveSettings,
@@ -559,10 +577,13 @@ internal fun ModelControlsSettings(
                                 onTopPChange(preset.topP)
                             },
                             label = { Text(preset.title) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
+                            colors =
+                                FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor =
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor =
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                )
                         )
                     }
                 }
@@ -609,15 +630,13 @@ internal fun ModelControlsSettings(
                     onValueChange = { onContextLengthChange(it.roundToInt()) }
                 )
 
-                state.saveNotice
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { notice ->
-                        Text(
+                state.saveNotice?.takeIf { it.isNotBlank() }?.let { notice ->
+                    Text(
                             text = notice,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    )
+                }
 
                 Button(
                     onClick = onSaveSettings,
@@ -650,10 +669,7 @@ internal fun HuggingFaceConnectionSettings(
         verticalArrangement = Arrangement.spacedBy(SectionSpacing)
     ) {
         item {
-            SettingsPanel(
-                title = "Account",
-                subtitle = "Connected integration status"
-            ) {
+            SettingsPanel(title = "Account", subtitle = "Connected integration status") {
                 when {
                     state.huggingFaceAccount.isValidating -> {
                         Row(
@@ -670,18 +686,18 @@ internal fun HuggingFaceConnectionSettings(
                             )
                         }
                     }
-
                     state.huggingFaceAccount.isValid -> {
                         AccountDetailsCard(
                             account = state.huggingFaceAccount,
                             onRefresh = onValidateHuggingFaceToken
                         )
                     }
-
                     else -> {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             SummaryStatusRow(
-                                icon = { Icon(Icons.Default.VpnKey, contentDescription = null) },
+                                icon = {
+                                    Icon(Icons.Default.VpnKey, contentDescription = null)
+                                },
                                 label = "Connection",
                                 value = "Not connected",
                                 badge = BadgeData("Disconnected", BadgeTone.Warning)
@@ -689,7 +705,10 @@ internal fun HuggingFaceConnectionSettings(
                             Text(
                                 text = state.huggingFaceAccount.message
                                     ?: "Validate your token to fetch account details.",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                                style =
+                                    MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 13.sp
+                                    ),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -712,24 +731,27 @@ internal fun HuggingFaceConnectionSettings(
                     shape = InputShape,
                     singleLine = true,
                     label = { Text("Access token") },
-                    visualTransformation = if (tokenVisible) {
-                        VisualTransformation.None
-                    } else {
-                        PasswordVisualTransformation()
-                    },
+                    visualTransformation =
+                        if (tokenVisible) {
+                            VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
                     trailingIcon = {
                         IconButton(onClick = { tokenVisible = !tokenVisible }) {
                             Icon(
-                                imageVector = if (tokenVisible) {
-                                    Icons.Default.VisibilityOff
-                                } else {
-                                    Icons.Default.Visibility
-                                },
-                                contentDescription = if (tokenVisible) {
-                                    "Hide token"
-                                } else {
-                                    "Show token"
-                                }
+                                imageVector =
+                                    if (tokenVisible) {
+                                        Icons.Default.VisibilityOff
+                                    } else {
+                                        Icons.Default.Visibility
+                                    },
+                                contentDescription =
+                                    if (tokenVisible) {
+                                        "Hide token"
+                                    } else {
+                                        "Show token"
+                                    }
                             )
                         }
                     },
@@ -743,13 +765,15 @@ internal fun HuggingFaceConnectionSettings(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     TextButton(
-                        enabled = state.huggingFaceToken.isNotBlank() && !state.huggingFaceAccount.isValidating,
+                        enabled =
+                            state.huggingFaceToken.isNotBlank() &&
+                                    !state.huggingFaceAccount.isValidating,
                         onClick = onValidateHuggingFaceToken
-                    ) {
-                        Text("Validate token")
-                    }
+                    ) { Text("Validate token") }
                     TextButton(
-                        enabled = state.huggingFaceAccount.isValid && !state.huggingFaceAccount.isValidating,
+                        enabled =
+                            state.huggingFaceAccount.isValid &&
+                                    !state.huggingFaceAccount.isValidating,
                         onClick = onValidateHuggingFaceToken
                     ) {
                         Icon(Icons.Default.Refresh, contentDescription = null)
@@ -758,15 +782,13 @@ internal fun HuggingFaceConnectionSettings(
                     }
                 }
 
-                state.saveNotice
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { notice ->
-                        Text(
+                state.saveNotice?.takeIf { it.isNotBlank() }?.let { notice ->
+                    Text(
                             text = notice,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    )
+                }
 
                 Button(
                     onClick = onSaveSettings,
@@ -789,11 +811,12 @@ internal fun DataHistorySettings(
     onRefreshStats: () -> Unit,
     onClearHistory: () -> Unit
 ) {
-    val missingRemoteFields = RemoteConfigValidator.missingFields(
-        baseUrl = state.baseUrl,
-        modelName = state.modelName,
-        apiKey = state.apiKey
-    )
+    val missingRemoteFields =
+        RemoteConfigValidator.missingFields(
+            baseUrl = state.baseUrl,
+            modelName = state.modelName,
+            apiKey = state.apiKey
+        )
     val remoteConfigured = missingRemoteFields.isEmpty()
     val nanoAvailable = state.geminiStatus.supported && state.geminiStatus.downloaded
     var confirmClearHistory by rememberSaveable { mutableStateOf(false) }
@@ -807,11 +830,7 @@ internal fun DataHistorySettings(
             SettingsPanel(
                 title = "Usage",
                 subtitle = "Conversation activity",
-                trailing = {
-                    TextButton(onClick = onRefreshStats) {
-                        Text("Refresh")
-                    }
-                }
+                trailing = { TextButton(onClick = onRefreshStats) { Text("Refresh") } }
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -840,64 +859,58 @@ internal fun DataHistorySettings(
         }
 
         item {
-            SettingsPanel(
-                title = "System health",
-                subtitle = "Backend and on-device readiness"
-            ) {
+            SettingsPanel(title = "System health", subtitle = "Backend and on-device readiness") {
                 SummaryStatusRow(
                     icon = { Icon(Icons.Default.Link, contentDescription = null) },
                     label = "Remote API",
                     value = if (remoteConfigured) "Configured" else "Setup required",
-                    badge = if (remoteConfigured) {
-                        BadgeData("Connected", BadgeTone.Positive)
-                    } else {
-                        BadgeData("Missing fields", BadgeTone.Warning)
-                    }
+                    badge =
+                        if (remoteConfigured) {
+                            BadgeData("Connected", BadgeTone.Positive)
+                        } else {
+                            BadgeData("Missing fields", BadgeTone.Warning)
+                        }
                 )
                 SummaryStatusRow(
                     icon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
                     label = "Gemini Nano",
-                    value = when {
-                        nanoAvailable -> "Available"
-                        state.geminiStatus.supported -> "Not downloaded"
-                        else -> "Unavailable"
-                    },
-                    badge = when {
-                        nanoAvailable -> BadgeData("Ready", BadgeTone.Positive)
-                        state.geminiStatus.supported -> BadgeData(
-                            "Download needed",
-                            BadgeTone.Neutral
-                        )
+                    value =
+                        when {
+                            nanoAvailable -> "Available"
+                            state.geminiStatus.supported -> "Not downloaded"
+                            else -> "Unavailable"
+                        },
+                    badge =
+                        when {
+                            nanoAvailable -> BadgeData("Ready", BadgeTone.Positive)
+                            state.geminiStatus.supported ->
+                                BadgeData("Download needed", BadgeTone.Neutral)
 
-                        else -> BadgeData("Unavailable", BadgeTone.Warning)
-                    }
+                            else -> BadgeData("Unavailable", BadgeTone.Warning)
+                        }
                 )
             }
         }
 
         item {
-            SettingsPanel(
-                title = "Data",
-                subtitle = "Manage local conversation history"
-            ) {
-                state.clearNotice
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { notice ->
-                        Text(
+            SettingsPanel(title = "Data", subtitle = "Manage local conversation history") {
+                state.clearNotice?.takeIf { it.isNotBlank() }?.let { notice ->
+                    Text(
                             text = notice,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    )
+                }
 
                 Button(
                     onClick = { confirmClearHistory = true },
                     modifier = Modifier.fillMaxWidth(),
                     shape = InputShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        )
                 ) {
                     Icon(Icons.Default.Delete, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
@@ -918,18 +931,15 @@ internal fun DataHistorySettings(
                         confirmClearHistory = false
                         onClearHistory()
                     },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError
-                    )
-                ) {
-                    Text("Delete")
-                }
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        )
+                ) { Text("Delete") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmClearHistory = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { confirmClearHistory = false }) { Text("Cancel") }
             }
         )
     }
@@ -966,26 +976,27 @@ private fun SystemSummaryCard(
             icon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
             label = "On-device AI",
             value = onDeviceStatus,
-            badge = BadgeData(
-                onDeviceStatus.substringAfterLast(' ').replaceFirstChar { it.titlecase() },
-                onDeviceTone
-            )
+            badge =
+                BadgeData(
+                    onDeviceStatus.substringAfterLast(' ').replaceFirstChar {
+                        it.titlecase()
+                    },
+                    onDeviceTone
+                )
         )
     }
 }
 
 @Composable
-private fun SettingsGroup(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit
-) {
+private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium
-            )
+            style =
+                MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
+                )
         )
         Column(verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
     }
@@ -998,37 +1009,35 @@ private fun SettingsNavigationRow(
     subtitle: String,
     onClick: () -> Unit
 ) {
-    Surface(
-        shape = SettingsRowShape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow
-    ) {
+    Surface(shape = SettingsRowShape, color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onClick)
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Box(
-                modifier = Modifier
-                    .clip(IconContainerShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainer)
-                    .padding(8.dp),
+                modifier =
+                    Modifier
+                        .clip(IconContainerShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .padding(8.dp),
                 contentAlignment = Alignment.Center
-            ) {
-                icon()
-            }
+            ) { icon() }
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    style =
+                        MaterialTheme.typography.bodyLarge.copy(
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                 )
                 Text(
                     text = subtitle,
@@ -1072,10 +1081,11 @@ private fun SettingsPanel(
                 ) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        style =
+                            MaterialTheme.typography.titleMedium.copy(
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                     )
                     if (!subtitle.isNullOrBlank()) {
                         Text(
@@ -1111,11 +1121,12 @@ private fun ExpandablePanel(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(InputShape)
-                    .clickable(onClick = onToggle)
-                    .padding(horizontal = 2.dp, vertical = 2.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(InputShape)
+                        .clickable(onClick = onToggle)
+                        .padding(horizontal = 2.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -1125,10 +1136,11 @@ private fun ExpandablePanel(
                 ) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        style =
+                            MaterialTheme.typography.titleMedium.copy(
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                     )
                     Text(
                         text = subtitle,
@@ -1145,13 +1157,13 @@ private fun ExpandablePanel(
 
             AnimatedVisibility(
                 visible = expanded,
-                enter = expandVertically(animationSpec = tween(durationMillis = 180)) +
-                        fadeIn(animationSpec = tween(durationMillis = 160)),
-                exit = shrinkVertically(animationSpec = tween(durationMillis = 160)) +
-                        fadeOut(animationSpec = tween(durationMillis = 120))
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(ItemSpacing), content = content)
-            }
+                enter =
+                    expandVertically(animationSpec = tween(durationMillis = 180)) +
+                            fadeIn(animationSpec = tween(durationMillis = 160)),
+                exit =
+                    shrinkVertically(animationSpec = tween(durationMillis = 160)) +
+                            fadeOut(animationSpec = tween(durationMillis = 120))
+            ) { Column(verticalArrangement = Arrangement.spacedBy(ItemSpacing), content = content) }
         }
     }
 }
@@ -1169,18 +1181,14 @@ private fun SummaryStatusRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Box(
-            modifier = Modifier
-                .clip(IconContainerShape)
-                .background(MaterialTheme.colorScheme.surfaceContainer)
-                .padding(8.dp),
+            modifier =
+                Modifier
+                    .clip(IconContainerShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .padding(8.dp),
             contentAlignment = Alignment.Center
-        ) {
-            icon()
-        }
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
+        ) { icon() }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
@@ -1188,10 +1196,11 @@ private fun SummaryStatusRow(
             )
             Text(
                 text = value,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium
-                ),
+                style =
+                    MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
                 color = MaterialTheme.colorScheme.onSurface
             )
         }
@@ -1218,17 +1227,19 @@ private fun SliderSetting(
         ) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                style =
+                    MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium
+                    )
             )
             Text(
                 text = valueText,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                style =
+                    MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium
+                    )
             )
         }
 
@@ -1242,11 +1253,14 @@ private fun SliderSetting(
             value = value,
             onValueChange = onValueChange,
             valueRange = valueRange,
-            colors = SliderDefaults.colors(
-                thumbColor = MaterialTheme.colorScheme.primary,
-                activeTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.70f),
-                inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-            )
+            colors =
+                SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor =
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.70f),
+                    inactiveTrackColor =
+                        MaterialTheme.colorScheme.surfaceContainerHighest
+                )
         )
     }
 }
@@ -1258,7 +1272,8 @@ private fun UsageTile(
     value: Long,
     modifier: Modifier = Modifier
 ) {
-    val animatedValue by animateIntAsState(
+    val animatedValue by
+    animateIntAsState(
         targetValue = value.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
         animationSpec = tween(durationMillis = 180),
         label = "UsageTileNumber"
@@ -1276,20 +1291,20 @@ private fun UsageTile(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(IconContainerShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainer),
+                modifier =
+                    Modifier
+                        .size(28.dp)
+                        .clip(IconContainerShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainer),
                 contentAlignment = Alignment.Center
-            ) {
-                icon()
-            }
+            ) { icon() }
             Text(
                 text = formatCount(animatedValue.toLong()),
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
+                style =
+                    MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
             )
             Text(
                 text = label,
@@ -1301,25 +1316,21 @@ private fun UsageTile(
 }
 
 @Composable
-private fun StatusBadge(
-    label: String,
-    tone: BadgeTone
-) {
-    val containerColor = when (tone) {
-        BadgeTone.Positive -> MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
-        BadgeTone.Neutral -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
-        BadgeTone.Warning -> MaterialTheme.colorScheme.error.copy(alpha = 0.14f)
-    }
-    val contentColor = when (tone) {
-        BadgeTone.Positive -> MaterialTheme.colorScheme.primary
-        BadgeTone.Neutral -> MaterialTheme.colorScheme.onSurface
-        BadgeTone.Warning -> MaterialTheme.colorScheme.error
-    }
+private fun StatusBadge(label: String, tone: BadgeTone) {
+    val containerColor =
+        when (tone) {
+            BadgeTone.Positive -> MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+            BadgeTone.Neutral -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
+            BadgeTone.Warning -> MaterialTheme.colorScheme.error.copy(alpha = 0.14f)
+        }
+    val contentColor =
+        when (tone) {
+            BadgeTone.Positive -> MaterialTheme.colorScheme.primary
+            BadgeTone.Neutral -> MaterialTheme.colorScheme.onSurface
+            BadgeTone.Warning -> MaterialTheme.colorScheme.error
+        }
 
-    Surface(
-        shape = CircleShape,
-        color = containerColor
-    ) {
+    Surface(shape = CircleShape, color = containerColor) {
         Text(
             text = label,
             color = contentColor,
@@ -1330,16 +1341,10 @@ private fun StatusBadge(
 }
 
 @Composable
-private fun AccountDetailsCard(
-    account: HuggingFaceAccountUi,
-    onRefresh: () -> Unit
-) {
+private fun AccountDetailsCard(account: HuggingFaceAccountUi, onRefresh: () -> Unit) {
     val uriHandler = LocalUriHandler.current
 
-    Surface(
-        shape = SettingsRowShape,
-        color = MaterialTheme.colorScheme.surface
-    ) {
+    Surface(shape = SettingsRowShape, color = MaterialTheme.colorScheme.surface) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1363,22 +1368,29 @@ private fun AccountDetailsCard(
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(
                             text = account.fullName ?: account.username ?: "Unknown account",
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                            style =
+                                MaterialTheme.typography.bodyLarge.copy(
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
                         )
                         account.username?.let { username ->
                             Text(
                                 text = "@$username",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                                style =
+                                    MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 13.sp
+                                    ),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         account.email?.let { email ->
                             Text(
                                 text = email,
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                                style =
+                                    MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 13.sp
+                                    ),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -1399,7 +1411,8 @@ private fun AccountDetailsCard(
                 StatusBadge(label = "Connected", tone = BadgeTone.Positive)
                 account.tokenRole?.let {
                     StatusBadge(
-                        label = "Role: ${it.lowercase().replaceFirstChar { c -> c.titlecase() }}",
+                        label =
+                            "Role: ${it.lowercase().replaceFirstChar { c -> c.titlecase() }}",
                         tone = BadgeTone.Neutral
                     )
                 }
@@ -1419,19 +1432,20 @@ private fun AccountDetailsCard(
 
 @Composable
 private fun Avatar(avatarUrl: String?, name: String) {
-    val initials = name
-        .trim()
-        .split(" ")
-        .filter { it.isNotBlank() }
-        .mapNotNull { it.firstOrNull()?.uppercase() }
-        .take(2)
-        .joinToString("")
+    val initials =
+        name.trim()
+            .split(" ")
+            .filter { it.isNotBlank() }
+            .mapNotNull { it.firstOrNull()?.uppercase() }
+            .take(2)
+            .joinToString("")
 
     Box(
-        modifier = Modifier
-            .size(52.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceContainer),
+        modifier =
+            Modifier
+                .size(52.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceContainer),
         contentAlignment = Alignment.Center
     ) {
         AsyncImage(
@@ -1450,22 +1464,17 @@ private fun Avatar(avatarUrl: String?, name: String) {
     }
 }
 
-private data class BadgeData(
-    val label: String,
-    val tone: BadgeTone
-)
+private data class BadgeData(val label: String, val tone: BadgeTone)
 
 private fun closestBehaviorPreset(temperature: Double, topP: Double): BehaviorPreset {
     return BehaviorPreset.entries.minByOrNull { preset ->
         abs(temperature - preset.temperature) + abs(topP - preset.topP)
-    } ?: BehaviorPreset.Balanced
+    }
+        ?: BehaviorPreset.Balanced
 }
 
 private fun displayModelName(modelName: String): String {
-    val cleaned = modelName
-        .replace('-', ' ')
-        .replace('_', ' ')
-        .trim()
+    val cleaned = modelName.replace('-', ' ').replace('_', ' ').trim()
     return cleaned.ifBlank { "Gemini 3 Flash" }
 }
 
@@ -1474,7 +1483,8 @@ private fun inferProviderStatus(baseUrl: String): String {
     return when {
         normalized.isBlank() -> "Not configured"
         "generativelanguage.googleapis.com" in normalized -> "Gemini via GenAI"
-        "aiplatform.googleapis.com" in normalized || "vertexai" in normalized -> "Gemini via Vertex AI"
+        "aiplatform.googleapis.com" in normalized || "vertexai" in normalized ->
+            "Gemini via Vertex AI"
         "api.openai.com" in normalized -> "OpenAI"
         "anthropic.com" in normalized -> "Anthropic-compatible"
         else -> "OpenAI-compatible"
@@ -1490,12 +1500,11 @@ private fun huggingFaceSubtitle(state: SettingsScreenState): String {
         state.huggingFaceToken.isBlank() -> "Token not set"
         state.huggingFaceAccount.isValidating -> "Validating token"
         state.huggingFaceAccount.isValid -> {
-            val label = state.huggingFaceAccount.fullName
-                ?: state.huggingFaceAccount.username
-                ?: state.huggingFaceAccount.email
+            val label =
+                state.huggingFaceAccount.fullName
+                    ?: state.huggingFaceAccount.username ?: state.huggingFaceAccount.email
             if (label.isNullOrBlank()) "Connected" else "Connected as $label"
         }
-
         !state.huggingFaceAccount.message.isNullOrBlank() -> "Validation failed"
         else -> "Token saved"
     }
@@ -1510,7 +1519,9 @@ private fun formatCount(value: Long): String {
 }
 
 private fun formatModelSize(status: GeminiNanoStatusUi, unavailableLabel: String): String {
-    val size = status.bytesToDownload?.takeIf { it > 0 } ?: status.lastKnownModelSizeBytes.takeIf { it > 0 }
+    val size =
+        status.bytesToDownload?.takeIf { it > 0 }
+            ?: status.lastKnownModelSizeBytes.takeIf { it > 0 }
     return size?.let { humanReadableByteCount(it) } ?: unavailableLabel
 }
 
