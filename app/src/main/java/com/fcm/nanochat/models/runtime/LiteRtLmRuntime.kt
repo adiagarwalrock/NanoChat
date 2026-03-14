@@ -357,6 +357,10 @@ internal object LiteRtLmRuntimeFactory {
             explicit += listOf("gpu", "cpu")
         }
 
+        if (config.strictAccelerator) {
+            return explicit.distinct()
+        }
+
         if ("cpu" !in explicit) {
             explicit += "cpu"
         }
@@ -513,3 +517,4 @@ internal object LiteRtLmRuntimeFactory {
     private const val TMP_MODEL_PATH_PREFIX = "/data/local/tmp"
     private const val TAG = "LiteRtLmRuntime"
 }
+

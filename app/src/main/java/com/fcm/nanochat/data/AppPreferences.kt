@@ -29,8 +29,24 @@ data class SettingsSnapshot(
     val topP: Double = 0.9,
     val contextLength: Int = 4096,
     val geminiNanoModelSizeBytes: Long = 0,
-    val huggingFaceAccountJson: String = ""
+    val huggingFaceAccountJson: String = "",
+    val thinkingEffort: ThinkingEffort = ThinkingEffort.MEDIUM,
+    val acceleratorPreference: AcceleratorPreference = AcceleratorPreference.AUTO
 )
+
+enum class ThinkingEffort {
+    NONE,
+    LOW,
+    MEDIUM,
+    HIGH
+}
+
+enum class AcceleratorPreference {
+    AUTO,
+    CPU,
+    GPU,
+    NNAPI
+}
 
 data class AllowlistCacheSnapshot(
     val version: String = "",
@@ -57,7 +73,9 @@ class AppPreferences(context: Context) {
                 topP = preferences[Keys.topP] ?: DEFAULT_TOP_P,
                 contextLength = preferences[Keys.contextLength] ?: DEFAULT_CONTEXT_LENGTH,
                 geminiNanoModelSizeBytes = preferences[Keys.geminiNanoModelSizeBytes] ?: 0,
-                huggingFaceAccountJson = preferences[Keys.huggingFaceAccountJson] ?: ""
+                huggingFaceAccountJson = preferences[Keys.huggingFaceAccountJson] ?: "",
+                thinkingEffort = parseThinkingEffort(preferences[Keys.thinkingEffort]),
+                acceleratorPreference = parseAccelerator(preferences[Keys.acceleratorPreference])
             )
         }
 
@@ -113,6 +131,14 @@ class AppPreferences(context: Context) {
                 ?.putString(SecretKeys.huggingFaceToken, huggingFaceToken.trim())
                 ?.apply()
         }
+    }
+
+    suspend fun updateThinkingEffort(value: ThinkingEffort) {
+        appContext.dataStore.edit { it[Keys.thinkingEffort] = value.name }
+    }
+
+    suspend fun updateAcceleratorPreference(value: AcceleratorPreference) {
+        appContext.dataStore.edit { it[Keys.acceleratorPreference] = value.name }
     }
 
     suspend fun updateModelSettings(
@@ -193,6 +219,20 @@ class AppPreferences(context: Context) {
         } ?: InferenceMode.REMOTE
     }
 
+    private fun parseThinkingEffort(raw: String?): ThinkingEffort {
+        return raw?.let {
+            runCatching { ThinkingEffort.valueOf(it) }
+                .getOrDefault(ThinkingEffort.MEDIUM)
+        } ?: ThinkingEffort.MEDIUM
+    }
+
+    private fun parseAccelerator(raw: String?): AcceleratorPreference {
+        return raw?.let {
+            runCatching { AcceleratorPreference.valueOf(it) }
+                .getOrDefault(AcceleratorPreference.AUTO)
+        } ?: AcceleratorPreference.AUTO
+    }
+
     private fun normalizeBaseUrl(raw: String): String {
         return raw.trim().trimEnd('/')
     }
@@ -226,6 +266,10 @@ class AppPreferences(context: Context) {
             longPreferencesKey("gemini_nano_model_size_bytes")
         val huggingFaceAccountJson: Preferences.Key<String> =
             stringPreferencesKey("hugging_face_account_json")
+        val thinkingEffort: Preferences.Key<String> =
+            stringPreferencesKey("thinking_effort")
+        val acceleratorPreference: Preferences.Key<String> =
+            stringPreferencesKey("accelerator_preference")
         val allowlistVersion: Preferences.Key<String> =
             stringPreferencesKey("allowlist_version")
         val allowlistJson: Preferences.Key<String> =
@@ -246,6 +290,7 @@ class AppPreferences(context: Context) {
     }
 }
 
+@Suppress("DEPRECATION")
 private fun createSecretStore(context: Context): SharedPreferences {
     val masterKey = MasterKey.Builder(context)
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)

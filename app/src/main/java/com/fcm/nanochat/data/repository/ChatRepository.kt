@@ -90,6 +90,20 @@ class ChatRepository(
             }
         }
 
+    fun observeActiveLocalModelCapabilities(): Flow<LocalModelCapabilities> =
+        combine(
+            localModelRepository.records,
+            localModelRepository.activeModelStatus
+        ) { records, status ->
+            val activeId = status.modelId?.trim()?.lowercase().orEmpty()
+            val record = records.firstOrNull { it.modelId.equals(activeId, ignoreCase = true) }
+            LocalModelCapabilities(
+                modelId = activeId.ifBlank { null },
+                supportsThinking = record?.allowlistedModel?.supportsThinking ?: false,
+                promptFamily = record?.allowlistedModel?.promptFamily
+            )
+        }
+
     fun observeSessions(): Flow<List<ChatSession>> =
         database.sessionDao().observeSessions().map { sessions ->
             sessions.map(ChatSessionEntity::toModel)
@@ -313,6 +327,12 @@ class ChatRepository(
 private fun ActiveModelStatus.unready(message: String): ActiveModelStatus {
     return copy(ready = false, message = message)
 }
+
+data class LocalModelCapabilities(
+    val modelId: String?,
+    val supportsThinking: Boolean,
+    val promptFamily: String?
+)
 
 private fun preparingModelMessage(displayName: String): String {
     return "Selected $displayName. Preparing local model..."

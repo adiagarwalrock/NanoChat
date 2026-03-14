@@ -14,10 +14,19 @@ class GeneratedTextSanitizerTest {
     }
 
     @Test
-    fun `removes think blocks from output`() {
-        val input = "<think>reasoning that should stay hidden</think>\nFinal answer"
+    fun `preserves think blocks by default`() {
+        val input = "<think>reasoning that should stay collapsible</think>\nFinal answer"
 
         val output = GeneratedTextSanitizer.sanitize(input)
+
+        assertEquals(input, output)
+    }
+
+    @Test
+    fun `removes think blocks when requested`() {
+        val input = "<think>reasoning that should stay hidden</think>\nFinal answer"
+
+        val output = GeneratedTextSanitizer.sanitize(input, preserveThinkingBlocks = false)
 
         assertEquals("Final answer", output)
     }
@@ -28,7 +37,7 @@ class GeneratedTextSanitizerTest {
 
         val output = GeneratedTextSanitizer.sanitize(input)
 
-        assertEquals("Hello from Qwen", output)
+        assertEquals("Hello from Qwen", output.trim())
     }
 
     @Test
@@ -40,3 +49,4 @@ class GeneratedTextSanitizerTest {
         assertEquals("", output)
     }
 }
+

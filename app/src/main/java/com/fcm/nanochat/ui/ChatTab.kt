@@ -57,6 +57,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -97,7 +98,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.fcm.nanochat.R
+import com.fcm.nanochat.data.AcceleratorPreference
+import com.fcm.nanochat.data.ThinkingEffort
 import com.fcm.nanochat.inference.InferenceMode
+import com.fcm.nanochat.inference.ReasoningContentParser
 import com.fcm.nanochat.model.ChatMessage
 import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatScreenState
@@ -118,6 +122,7 @@ private val UserBubbleShape = RoundedCornerShape(
 private val ComposerShape = RoundedCornerShape(24.dp)
 private val ControlCardShape = RoundedCornerShape(18.dp)
 private val ModelSeparatorRegex = Regex("[-_]+")
+private val ThinkingBlockRegex = Regex("(?is)<think>(.*?)</think>")
 
 @Composable
 internal fun ChatTab(
@@ -135,6 +140,8 @@ internal fun ChatTab(
     onTemperatureChange: (Double) -> Unit,
     onTopPChange: (Double) -> Unit,
     onContextLengthChange: (Int) -> Unit,
+    onThinkingEffortChange: (ThinkingEffort) -> Unit,
+    onAcceleratorChange: (AcceleratorPreference) -> Unit,
     onMessageInfo: (ChatMessage) -> Unit,
     onDeleteMessage: (ChatMessage) -> Unit
 ) {
@@ -167,6 +174,8 @@ internal fun ChatTab(
                 onTemperatureChange = onTemperatureChange,
                 onTopPChange = onTopPChange,
                 onContextLengthChange = onContextLengthChange,
+                onThinkingEffortChange = onThinkingEffortChange,
+                onAcceleratorChange = onAcceleratorChange,
                 onMessageInfo = onMessageInfo,
                 onDeleteMessage = onDeleteMessage
             )
@@ -195,6 +204,8 @@ internal fun ChatTab(
                     onTemperatureChange = onTemperatureChange,
                     onTopPChange = onTopPChange,
                     onContextLengthChange = onContextLengthChange,
+                    onThinkingEffortChange = onThinkingEffortChange,
+                    onAcceleratorChange = onAcceleratorChange,
                     onMessageInfo = onMessageInfo,
                     onDeleteMessage = onDeleteMessage
                 )
@@ -220,6 +231,8 @@ private fun ChatTabContent(
     onTemperatureChange: (Double) -> Unit,
     onTopPChange: (Double) -> Unit,
     onContextLengthChange: (Int) -> Unit,
+    onThinkingEffortChange: (ThinkingEffort) -> Unit,
+    onAcceleratorChange: (AcceleratorPreference) -> Unit,
     onMessageInfo: (ChatMessage) -> Unit,
     onDeleteMessage: (ChatMessage) -> Unit
 ) {
@@ -337,9 +350,15 @@ private fun ChatTabContent(
             temperature = settingsState.temperature,
             topP = settingsState.topP,
             contextLength = settingsState.contextLength,
+            thinkingEffort = settingsState.thinkingEffort,
+            acceleratorPreference = settingsState.acceleratorPreference,
+            showThinkingControls = shouldShowThinkingControls(state, settingsState),
+            showAcceleratorControls = state.inferenceMode == InferenceMode.DOWNLOADED,
             onTemperatureChange = onTemperatureChange,
             onTopPChange = onTopPChange,
             onContextLengthChange = onContextLengthChange,
+            onThinkingEffortChange = onThinkingEffortChange,
+            onAcceleratorChange = onAcceleratorChange,
             onDismiss = { controlsVisible = false }
         )
     }
@@ -351,9 +370,15 @@ private fun ModelControlsSheet(
     temperature: Double,
     topP: Double,
     contextLength: Int,
+    thinkingEffort: ThinkingEffort,
+    acceleratorPreference: AcceleratorPreference,
+    showThinkingControls: Boolean,
+    showAcceleratorControls: Boolean,
     onTemperatureChange: (Double) -> Unit,
     onTopPChange: (Double) -> Unit,
     onContextLengthChange: (Int) -> Unit,
+    onThinkingEffortChange: (ThinkingEffort) -> Unit,
+    onAcceleratorChange: (AcceleratorPreference) -> Unit,
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(
@@ -422,6 +447,38 @@ private fun ModelControlsSheet(
                         formatter = { it.toInt().toString() },
                         onValueChange = { onContextLengthChange(it.toInt()) }
                     )
+
+                    if (showThinkingControls) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        LabeledChipRow(
+                            label = stringResource(id = R.string.thinking_effort_label),
+                            description = stringResource(id = R.string.thinking_effort_description),
+                            options = listOf(
+                                ChipOption(stringResource(id = R.string.thinking_effort_none), ThinkingEffort.NONE),
+                                ChipOption(stringResource(id = R.string.thinking_effort_low), ThinkingEffort.LOW),
+                                ChipOption(stringResource(id = R.string.thinking_effort_medium), ThinkingEffort.MEDIUM),
+                                ChipOption(stringResource(id = R.string.thinking_effort_high), ThinkingEffort.HIGH)
+                            ),
+                            selected = thinkingEffort,
+                            onSelected = onThinkingEffortChange
+                        )
+                    }
+
+                    if (showAcceleratorControls) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        LabeledChipRow(
+                            label = stringResource(id = R.string.accelerator_label),
+                            description = stringResource(id = R.string.accelerator_description),
+                            options = listOf(
+                                ChipOption(stringResource(id = R.string.accelerator_auto), AcceleratorPreference.AUTO),
+                                ChipOption(stringResource(id = R.string.accelerator_cpu), AcceleratorPreference.CPU),
+                                ChipOption(stringResource(id = R.string.accelerator_gpu), AcceleratorPreference.GPU),
+                                ChipOption(stringResource(id = R.string.accelerator_nnapi), AcceleratorPreference.NNAPI)
+                            ),
+                            selected = acceleratorPreference,
+                            onSelected = onAcceleratorChange
+                        )
+                    }
                 }
             }
 
@@ -485,6 +542,45 @@ private fun LabeledSlider(
                 inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
             )
         )
+    }
+}
+
+private data class ChipOption<T>(val label: String, val value: T)
+
+@Composable
+private fun <T> LabeledChipRow(
+    label: String,
+    description: String,
+    options: List<ChipOption<T>>,
+    selected: T,
+    onSelected: (T) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            options.forEach { option ->
+                FilterChip(
+                    selected = option.value == selected,
+                    onClick = { onSelected(option.value) },
+                    label = { Text(option.label) }
+                )
+            }
+        }
     }
 }
 
@@ -849,6 +945,7 @@ private fun MessageRow(
     onDeleteMessage: (ChatMessage) -> Unit
 ) {
     val isUser = message.role == ChatRole.USER
+    @Suppress("DEPRECATION")
     val clipboardManager = LocalClipboardManager.current
     val haptics = LocalHapticFeedback.current
     val context = LocalContext.current
@@ -925,13 +1022,19 @@ private fun MessageRow(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
-                        MarkdownMessage(
-                            content = message.content,
-                            textColor = MaterialTheme.colorScheme.onSurface,
-                            fontSizeSp = 16f,
-                            lineSpacingMultiplier = 1.45f,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        val (thinking, visible) = splitThinking(message.content)
+                        if (thinking != null) {
+                            ThinkAccordion(thinkingText = thinking)
+                        }
+                        if (visible.isNotBlank()) {
+                            MarkdownMessage(
+                                content = visible,
+                                textColor = MaterialTheme.colorScheme.onSurface,
+                                fontSizeSp = 16f,
+                                lineSpacingMultiplier = 1.45f,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
                 }
             }
@@ -1079,6 +1182,78 @@ private fun TypingDot(alpha: Float) {
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha))
     )
+}
+
+private fun shouldShowThinkingControls(
+    state: ChatScreenState,
+    settings: SettingsScreenState
+): Boolean {
+    return when (state.inferenceMode) {
+        InferenceMode.DOWNLOADED -> state.localModelSupportsThinking
+        InferenceMode.REMOTE -> supportsRemoteThinking(settings.modelName)
+        InferenceMode.AICORE -> false
+    }
+}
+
+private fun supportsRemoteThinking(modelName: String): Boolean {
+    val normalized = modelName.trim().lowercase()
+    if (normalized.isBlank()) return false
+    return listOf("o1", "o3", "deepseek", "reason", "think")
+        .any { hint -> normalized.contains(hint) }
+}
+
+private fun splitThinking(content: String): Pair<String?, String> {
+    val parsed = ReasoningContentParser.split(content)
+    return parsed.thinking to parsed.visible
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ThinkAccordion(thinkingText: String) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        tonalElevation = 1.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize()
+            .combinedClickable(onClick = { expanded = !expanded }, onLongClick = { expanded = !expanded })
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = stringResource(id = R.string.thinking_section_title),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.graphicsLayer { rotationZ = if (expanded) 180f else 0f }
+                )
+            }
+
+            if (expanded) {
+                MarkdownMessage(
+                    content = thinkingText,
+                    textColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSizeSp = 14f,
+                    lineSpacingMultiplier = 1.35f,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -1312,7 +1487,10 @@ private fun shareMessage(context: android.content.Context, content: String) {
 private fun normalizeLists(raw: String): String {
     if (raw.isBlank()) return raw
 
-    val lines = raw.lines()
+    val orderedListMissingSpaceRegex = Regex("(?<=\\b\\d)\\.(?=[A-Z])")
+    val orderedListBoundaryRegex = Regex("(?<=[\\p{L}\\p{N}\\)\\]\\.!?:])(?=\\d+\\.\\s*[A-Z])")
+    val unorderedListBoundaryRegex = Regex("(?<=[\\p{L}\\p{N}\\)\\]\\.!?:])(?=(?:[-*+]\\s+[A-Z]))")
+    val lines = raw.replace("\r\n", "\n").replace('\r', '\n').lines()
     val builder = StringBuilder()
     var insideFence = false
 
@@ -1325,12 +1503,25 @@ private fun normalizeLists(raw: String): String {
             continue
         }
 
-        if (!insideFence && line.startsWith("    ")) {
-            builder.append(line.removePrefix("    ")).append('\n')
+        val normalizedLine = if (insideFence) {
+            line
         } else {
-            builder.append(line).append('\n')
+            line
+                .replace(orderedListMissingSpaceRegex, ". ")
+                .replace(orderedListBoundaryRegex, "\n")
+                .replace(unorderedListBoundaryRegex, "\n")
+        }
+
+        if (!insideFence && normalizedLine.startsWith("    ")) {
+            builder.append(normalizedLine.removePrefix("    ")).append('\n')
+        } else {
+            builder.append(normalizedLine).append('\n')
         }
     }
 
     return builder.toString().trimEnd('\n')
 }
+
+
+
+

@@ -153,4 +153,17 @@
     <string name="gemini_downloading_generic">Downloading…</string>
     <string name="gemini_downloading_percent">Downloading… %1$d%%</string>
     <string name="gemini_size_unavailable">Size unavailable</string>
+    <string name="thinking_effort_label">Thinking effort</string>
+    <string name="thinking_effort_description">Control how much reasoning the model performs.</string>
+    <string name="thinking_effort_none">None</string>
+    <string name="thinking_effort_low">Low</string>
+    <string name="thinking_effort_medium">Medium</string>
+    <string name="thinking_effort_high">High</string>
+    <string name="accelerator_label">Accelerator</string>
+    <string name="accelerator_description">Choose where local models run.</string>
+    <string name="accelerator_auto">Auto</string>
+    <string name="accelerator_cpu">CPU</string>
+    <string name="accelerator_gpu">GPU</string>
+    <string name="accelerator_nnapi">NNAPI</string>
+    <string name="thinking_section_title">Thought process</string>
 </resources>

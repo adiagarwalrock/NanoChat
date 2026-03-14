@@ -48,4 +48,17 @@ class StreamingMessageAssemblerTest {
         assertEquals("Hello there", result)
         assertEquals("Hello there", assembler.current())
     }
+
+    @Test
+    fun `assembler preserves think blocks for later accordion rendering`() {
+        val assembler = StreamingMessageAssembler()
+
+        val result = assembler.append(
+            InferenceMode.DOWNLOADED,
+            "<think>Step by step</think>Final answer"
+        )
+
+        assertEquals("<think>Step by step</think>Final answer", result)
+        assertEquals("<think>Step by step</think>Final answer", assembler.current())
+    }
 }

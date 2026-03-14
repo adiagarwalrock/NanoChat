@@ -533,6 +533,8 @@ internal fun ModelControlsSettings(
     onTemperatureChange: (Double) -> Unit,
     onTopPChange: (Double) -> Unit,
     onContextLengthChange: (Int) -> Unit,
+    onThinkingEffortChange: (com.fcm.nanochat.data.ThinkingEffort) -> Unit = {},
+    onAcceleratorChange: (com.fcm.nanochat.data.AcceleratorPreference) -> Unit = {},
     onSaveSettings: () -> Unit = {}
 ) {
     var advancedExpanded by rememberSaveable { mutableStateOf(false) }

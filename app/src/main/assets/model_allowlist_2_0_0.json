@@ -1,5 +1,5 @@
 {
-  "version": "1_0_10",
+  "version": "2_0_0",
   "models": [
     {
       "name": "Qwen2.5-1.5B-Instruct",
@@ -66,6 +66,38 @@
       "memoryTier": "high"
     },
     {
+      "name": "Gemma3-1B-IT",
+      "modelId": "litert-community/Gemma3-1B-IT",
+      "modelFile": "gemma3-1b-it-int4.litertlm",
+      "description": "A variant of [google/Gemma-3-1B-IT](https://huggingface.co/google/Gemma-3-1B-IT) with 4-bit quantization ready for deployment on Android using [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM/blob/main/kotlin/README.md).",
+      "sizeInBytes": 584417280,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "42d538a932e8d5b12e6b3b455f5572560bd60b2c",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 1024,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ],
+      "llmSupportImage": false,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat"
+      ],
+      "memoryTier": "mid"
+    },
+    {
       "name": "DeepSeek-R1-Distill-Qwen-1.5B",
       "modelId": "litert-community/DeepSeek-R1-Distill-Qwen-1.5B",
       "modelFile": "DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm",
@@ -78,7 +110,7 @@
         "topP": 0.95,
         "temperature": 1.0,
         "maxTokens": 4096,
-        "accelerators": "gpu,cpu"
+        "accelerators": "cpu"
       },
       "taskTypes": [
         "llm_chat",
@@ -110,7 +142,7 @@
         "topP": 0.95,
         "temperature": 1.0,
         "maxTokens": 4096,
-        "accelerators": "cpu,gpu"
+        "accelerators": "gpu,cpu"
       },
       "taskTypes": [
         "llm_chat",
@@ -145,7 +177,7 @@
         "topP": 0.95,
         "temperature": 1.0,
         "maxTokens": 4096,
-        "accelerators": "cpu,gpu"
+        "accelerators": "gpu,cpu"
       },
       "taskTypes": [
         "llm_chat",
@@ -166,6 +198,83 @@
       ],
       "memoryTier": "high",
       "isExperimental": true
+    },
+    {
+      "name": "Phi-4-mini-instruct",
+      "modelId": "litert-community/Phi-4-mini-instruct",
+      "modelFile": "Phi-4-mini-instruct_multi-prefill-seq_q8_ekv4096.litertlm",
+      "description": "Compact yet powerful reasoning model from Microsoft.",
+      "sizeInBytes": 4096000000,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "8cd368be75fdb94d5a6f6f5b40f1ab22a6c2543e",
+      "defaultConfig": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.8,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ],
+      "llmSupportImage": false,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "reasoning"
+      ],
+      "memoryTier": "high"
+    },
+    {
+      "name": "TinyGarden-270M",
+      "modelId": "litert-community/functiongemma-270m-ft-tiny-garden",
+      "modelFile": "tiny_garden_q8_ekv1024.litertlm",
+      "description": "Fine-tuned Function Gemma 270M model for Tiny Garden.",
+      "sizeInBytes": 288964608,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "c205853ff82da86141a1105faa2344a8b176dfe7",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 0.0,
+        "maxTokens": 1024,
+        "accelerators": "cpu"
+      },
+      "taskTypes": [
+        "llm_tiny_garden"
+      ],
+      "bestForTaskTypes": [
+        "llm_tiny_garden"
+      ]
+    },
+    {
+      "name": "MobileActions-270M",
+      "modelId": "litert-community/functiongemma-270m-ft-mobile-actions",
+      "modelFile": "mobile_actions_q8_ekv1024.litertlm",
+      "description": "Fine-tuned Function Gemma 270M model for Mobile Actions.",
+      "sizeInBytes": 288964608,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "38942192c9b723af836d489074823ff33d4a3e7a",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 0.0,
+        "maxTokens": 1024,
+        "accelerators": "cpu"
+      },
+      "taskTypes": [
+        "llm_mobile_actions"
+      ],
+      "bestForTaskTypes": [
+        "llm_mobile_actions"
+      ]
     }
   ]
 }

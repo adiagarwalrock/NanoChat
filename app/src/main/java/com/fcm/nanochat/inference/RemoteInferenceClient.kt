@@ -1,6 +1,7 @@
 package com.fcm.nanochat.inference
 
 import com.fcm.nanochat.data.SettingsSnapshot
+import com.fcm.nanochat.data.ThinkingEffort
 import com.fcm.nanochat.model.ChatRole
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -166,6 +167,15 @@ class RemoteInferenceClient(
             .put("stream", true)
             .put("messages", messages)
             .apply {
+                val effort = request.settings.thinkingEffort
+                if (effort != ThinkingEffort.NONE && supportsReasoningParam(request.settings.modelName)) {
+                    put("reasoning_effort", when (effort) {
+                        ThinkingEffort.LOW -> "low"
+                        ThinkingEffort.MEDIUM -> "medium"
+                        ThinkingEffort.HIGH -> "high"
+                        ThinkingEffort.NONE -> null
+                    })
+                }
                 if (request.settings.temperature > 0) {
                     put("temperature", request.settings.temperature)
                 }
@@ -184,9 +194,22 @@ class RemoteInferenceClient(
         if (choices.length() == 0) return ""
 
         val delta = choices.optJSONObject(0)?.optJSONObject("delta") ?: return ""
-        val content = delta.opt("content") ?: return ""
+        val reasoning = delta.opt("reasoning_content")
+        val reasoningText = when (reasoning) {
+            is String -> reasoning
+            is JSONArray -> buildString {
+                for (index in 0 until reasoning.length()) {
+                    val item = reasoning.opt(index)
+                    if (item is JSONObject) {
+                        append(item.optString("text"))
+                    }
+                }
+            }
+            else -> ""
+        }
 
-        return when (content) {
+        val content = delta.opt("content")
+        val visibleText = when (content) {
             is String -> content
             is JSONArray -> buildString {
                 for (index in 0 until content.length()) {
@@ -196,9 +219,23 @@ class RemoteInferenceClient(
                     }
                 }
             }
-
             else -> ""
         }
+
+        return buildString {
+            if (reasoningText.isNotBlank()) {
+                append("<think>")
+                append(reasoningText)
+                append("</think>")
+            }
+            append(visibleText)
+        }
+    }
+
+    private fun supportsReasoningParam(modelName: String): Boolean {
+        val normalized = modelName.trim().lowercase()
+        if (normalized.isBlank()) return false
+        return listOf("o1", "o3", "deepseek", "reason", "think").any { normalized.contains(it) }
     }
 
     private fun configurationMessage(field: RemoteConfigField): String {

@@ -86,6 +86,8 @@ fun NanoChatApp(
     onTemperatureChange: (Double) -> Unit = {},
     onTopPChange: (Double) -> Unit = {},
     onContextLengthChange: (Int) -> Unit = {},
+    onThinkingEffortChange: (com.fcm.nanochat.data.ThinkingEffort) -> Unit = {},
+    onAcceleratorChange: (com.fcm.nanochat.data.AcceleratorPreference) -> Unit = {},
     onSaveSettings: () -> Unit = {},
     onClearHistory: () -> Unit = {},
     onRefreshStats: () -> Unit = {},
@@ -171,11 +173,13 @@ fun NanoChatApp(
                         },
                         onTemperatureChange = onTemperatureChange,
                         onTopPChange = onTopPChange,
-                        onContextLengthChange = onContextLengthChange,
-                        onMessageInfo = {},
-                        onDeleteMessage = { message -> onDeleteMessage(message.id) }
-                    )
-                }
+                         onContextLengthChange = onContextLengthChange,
+                         onThinkingEffortChange = onThinkingEffortChange,
+                         onAcceleratorChange = onAcceleratorChange,
+                         onMessageInfo = {},
+                         onDeleteMessage = { message -> onDeleteMessage(message.id) }
+                     )
+                 }
 
                 AppDestination.Models -> {
                     ModelsPage(
@@ -222,13 +226,15 @@ fun NanoChatApp(
                         onHuggingFaceTokenChange = onHuggingFaceTokenChange,
                         onValidateHuggingFaceToken = onValidateHuggingFaceToken,
                         onTemperatureChange = onTemperatureChange,
-                        onTopPChange = onTopPChange,
-                        onContextLengthChange = onContextLengthChange,
-                        onSaveSettings = onSaveSettings,
-                        onClearHistory = onClearHistory,
-                        onRefreshStats = onRefreshStats,
-                        onRefreshGeminiStatus = onRefreshGeminiStatus,
-                        onDownloadGeminiNano = onDownloadGeminiNano
+                         onTopPChange = onTopPChange,
+                         onContextLengthChange = onContextLengthChange,
+                         onThinkingEffortChange = onThinkingEffortChange,
+                         onAcceleratorChange = onAcceleratorChange,
+                         onSaveSettings = onSaveSettings,
+                         onClearHistory = onClearHistory,
+                         onRefreshStats = onRefreshStats,
+                         onRefreshGeminiStatus = onRefreshGeminiStatus,
+                         onDownloadGeminiNano = onDownloadGeminiNano
                     )
                 }
             }
@@ -318,6 +324,8 @@ private fun SettingsPage(
     onTemperatureChange: (Double) -> Unit,
     onTopPChange: (Double) -> Unit,
     onContextLengthChange: (Int) -> Unit,
+    onThinkingEffortChange: (com.fcm.nanochat.data.ThinkingEffort) -> Unit,
+    onAcceleratorChange: (com.fcm.nanochat.data.AcceleratorPreference) -> Unit,
     onSaveSettings: () -> Unit,
     onClearHistory: () -> Unit,
     onRefreshStats: () -> Unit,
@@ -397,6 +405,8 @@ private fun SettingsPage(
                 onTemperatureChange = onTemperatureChange,
                 onTopPChange = onTopPChange,
                 onContextLengthChange = onContextLengthChange,
+                onThinkingEffortChange = onThinkingEffortChange,
+                onAcceleratorChange = onAcceleratorChange,
                 onSaveSettings = onSaveSettings
             )
 

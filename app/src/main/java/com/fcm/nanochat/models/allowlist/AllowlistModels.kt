@@ -19,7 +19,8 @@ data class AllowlistDefaultConfig(
     val topP: Double,
     val temperature: Double,
     val maxTokens: Int,
-    val accelerators: String
+    val accelerators: String,
+    val strictAccelerator: Boolean = false
 ) {
     val acceleratorHints: List<String>
         get() = accelerators
@@ -53,7 +54,9 @@ data class AllowlistedModel(
     val acceleratorHints: List<String>,
     val downloadUrl: String,
     val fileType: String,
-    val supportedAbis: List<String>
+    val supportedAbis: List<String>,
+    val promptFamily: String?,
+    val supportsThinking: Boolean
 )
 
 data class AllowlistSnapshot(
@@ -155,6 +158,16 @@ internal object AllowlistParser {
         }
         val fileType = modelFile.substringAfterLast('.', missingDelimiterValue = "").lowercase()
         val supportedAbis = optStringList("supportedAbis")
+        val promptFamily = optString("promptFamily").ifBlank { null }
+        val supportsThinking = if (has("supportsThinking")) {
+            optBoolean("supportsThinking", false)
+        } else {
+            inferSupportsThinking(
+                modelId = modelId,
+                supportedUseCases = supportedUseCases,
+                description = description
+            )
+        }
 
         return AllowlistedModel(
             id = modelId.lowercase(),
@@ -181,7 +194,9 @@ internal object AllowlistParser {
             acceleratorHints = acceleratorHints,
             downloadUrl = downloadUrl,
             fileType = fileType,
-            supportedAbis = supportedAbis
+            supportedAbis = supportedAbis,
+            promptFamily = promptFamily,
+            supportsThinking = supportsThinking
         )
     }
 
@@ -196,4 +211,23 @@ internal object AllowlistParser {
             }
         }
     }
+
+    private fun inferSupportsThinking(
+        modelId: String,
+        supportedUseCases: List<String>,
+        description: String
+    ): Boolean {
+        val normalizedSignals = buildList {
+            add(modelId.lowercase())
+            add(description.lowercase())
+            addAll(supportedUseCases.map(String::lowercase))
+        }
+
+        return normalizedSignals.any { signal ->
+            signal.contains("reason") ||
+                signal.contains("analysis") ||
+                signal.contains("thinking")
+        }
+    }
 }
+

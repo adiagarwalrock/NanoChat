@@ -179,7 +179,8 @@ class ModelRuntimeManager(
             config.topP.toString(),
             config.temperature.toString(),
             config.maxTokens.toString(),
-            config.accelerators
+            config.accelerators,
+            config.strictAccelerator.toString()
         ).joinToString(separator = "|")
     }
 }
