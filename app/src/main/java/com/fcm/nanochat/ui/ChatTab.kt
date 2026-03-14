@@ -19,7 +19,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -86,6 +85,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -138,18 +138,19 @@ internal fun ChatTab(
     onMessageInfo: (ChatMessage) -> Unit,
     onDeleteMessage: (ChatMessage) -> Unit
 ) {
-    BoxWithConstraints(
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp.dp
+    val compact = screenWidthDp < 700.dp
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val horizontalPadding = if (compact) 16.dp else 24.dp
+    val contentModifier = Modifier
+        .fillMaxSize()
+        .padding(horizontal = horizontalPadding)
+
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        val compact = maxWidth < 700.dp
-        val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-        val horizontalPadding = if (compact) 16.dp else 24.dp
-        val contentModifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = horizontalPadding)
-
         if (compact) {
             ChatTabContent(
                 state = state,

@@ -24,6 +24,7 @@ class ModelRuntimeManager(
 
     private var activeModelId: String? = null
     private var activeModelPath: String? = null
+    private var activeConfigSignature: String? = null
     private var activeRuntime: LocalModelRuntime? = null
 
     private val _loadState = MutableStateFlow(RuntimeLoadState())
@@ -41,7 +42,8 @@ class ModelRuntimeManager(
             mutex.withLock {
                 val shouldReuse = activeRuntime != null &&
                     activeModelId == modelId &&
-                    activeModelPath == modelPath
+                        activeModelPath == modelPath &&
+                        activeConfigSignature == configSignature(defaultConfig)
                 if (shouldReuse) {
                     Log.d(TAG, "Reusing local runtime for modelId=$modelId")
                     _loadState.value = RuntimeLoadState(
@@ -65,6 +67,7 @@ class ModelRuntimeManager(
                 activeRuntime = null
                 activeModelId = null
                 activeModelPath = null
+                activeConfigSignature = null
 
                 val initStart = System.currentTimeMillis()
                 val runtime = runCatching {
@@ -90,6 +93,7 @@ class ModelRuntimeManager(
 
                 activeModelId = modelId
                 activeModelPath = modelPath
+                activeConfigSignature = configSignature(defaultConfig)
                 activeRuntime = runtime
 
                 _loadState.value = RuntimeLoadState(
@@ -114,6 +118,7 @@ class ModelRuntimeManager(
                 activeRuntime = null
                 activeModelId = null
                 activeModelPath = null
+                activeConfigSignature = null
                 _loadState.value = RuntimeLoadState(
                     phase = if (reason == RuntimeReleaseReason.EJECTED) {
                         RuntimeLoadPhase.EJECTED
@@ -166,5 +171,15 @@ class ModelRuntimeManager(
 
     private companion object {
         const val TAG = "ModelRuntimeManager"
+    }
+
+    private fun configSignature(config: AllowlistDefaultConfig): String {
+        return listOf(
+            config.topK.toString(),
+            config.topP.toString(),
+            config.temperature.toString(),
+            config.maxTokens.toString(),
+            config.accelerators
+        ).joinToString(separator = "|")
     }
 }

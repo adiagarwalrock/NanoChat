@@ -21,4 +21,22 @@ class GeneratedTextSanitizerTest {
 
         assertEquals("Final answer", output)
     }
+
+    @Test
+    fun `removes chat template role artifacts`() {
+        val input = "<|im_start|>assistant\nHello from Qwen<|im_end|>"
+
+        val output = GeneratedTextSanitizer.sanitize(input)
+
+        assertEquals("Hello from Qwen", output)
+    }
+
+    @Test
+    fun `returns empty for control-only chunks`() {
+        val input = "<|im_start|>assistant\n<|im_end|>"
+
+        val output = GeneratedTextSanitizer.sanitize(input)
+
+        assertEquals("", output)
+    }
 }

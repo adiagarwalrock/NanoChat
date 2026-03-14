@@ -2,9 +2,26 @@ package com.fcm.nanochat.inference
 
 import com.fcm.nanochat.model.ChatRole
 
+enum class DownloadedPromptFamily {
+    QWEN,
+    DEEPSEEK,
+    GEMMA,
+    GENERIC
+}
+
+data class DownloadedPrompt(
+    val family: DownloadedPromptFamily,
+    val systemInstruction: String,
+    val userMessage: String
+)
+
 object PromptFormatter {
-    private const val USER_TAG = "<|user|>"
-    private const val ASSISTANT_TAG = "<|assistant|>"
+    private const val DEFAULT_SYSTEM_PROMPT =
+        "You are NanoChat, a concise and helpful local assistant."
+    private const val DEEPSEEK_SYSTEM_PROMPT =
+        "You are NanoChat. Be concise, and show reasoning only when needed."
+    private const val GEMMA_SYSTEM_PROMPT =
+        "You are NanoChat running locally on Gemma. Keep answers clear and actionable."
 
     fun historyWindow(history: List<ChatTurn>, maxTurns: Int): List<ChatTurn> {
         if (history.size <= maxTurns) return history
@@ -36,39 +53,69 @@ object PromptFormatter {
         maxTurns: Int = 20,
         modelId: String? = null
     ): String {
-        val normalizedModelId = modelId?.trim()?.lowercase().orEmpty()
-        if (usesSpeakerPrompt(normalizedModelId)) {
-            return flattenForInstructionTunedModel(history, prompt, maxTurns)
-        }
-
-        val recentTurns = historyWindow(history, maxTurns)
-        val conversation = buildString {
-            recentTurns.forEach { turn ->
-                val tag = if (turn.role == ChatRole.USER) USER_TAG else ASSISTANT_TAG
-                append(tag)
-                append('\n')
-                append(normalizedTurnContent(turn))
-                append('\n')
-            }
-            append(USER_TAG)
-            append('\n')
-            append(prompt.trim())
-            append('\n')
-            append(ASSISTANT_TAG)
-            append('\n')
-        }
-        return conversation.trimEnd()
+        return formatDownloadedPrompt(
+            history = history,
+            prompt = prompt,
+            maxTurns = maxTurns,
+            modelId = modelId
+        ).userMessage
     }
 
-    private fun flattenForInstructionTunedModel(
+    fun formatDownloadedPrompt(
+        history: List<ChatTurn>,
+        prompt: String,
+        maxTurns: Int = 20,
+        modelId: String? = null
+    ): DownloadedPrompt {
+        val family = detectDownloadedPromptFamily(modelId)
+        val systemPrompt = when (family) {
+            DownloadedPromptFamily.DEEPSEEK -> DEEPSEEK_SYSTEM_PROMPT
+            DownloadedPromptFamily.GEMMA -> GEMMA_SYSTEM_PROMPT
+            DownloadedPromptFamily.QWEN,
+            DownloadedPromptFamily.GENERIC -> DEFAULT_SYSTEM_PROMPT
+        }
+
+        return DownloadedPrompt(
+            family = family,
+            systemInstruction = systemPrompt,
+            userMessage = when (family) {
+                DownloadedPromptFamily.QWEN -> buildQwenUserMessage(prompt)
+                DownloadedPromptFamily.DEEPSEEK -> buildQwenUserMessage(prompt)
+                DownloadedPromptFamily.GEMMA,
+                DownloadedPromptFamily.GENERIC -> buildSpeakerContextMessage(
+                    history = history,
+                    prompt = prompt,
+                    maxTurns = maxTurns
+                )
+            }
+        )
+    }
+
+    fun detectDownloadedPromptFamily(modelId: String?): DownloadedPromptFamily {
+        val normalizedModelId = modelId?.trim()?.lowercase().orEmpty()
+        if (normalizedModelId.isBlank()) {
+            return DownloadedPromptFamily.GENERIC
+        }
+
+        return when {
+            "deepseek" in normalizedModelId -> DownloadedPromptFamily.DEEPSEEK
+            "qwen" in normalizedModelId -> DownloadedPromptFamily.QWEN
+            "gemma" in normalizedModelId -> DownloadedPromptFamily.GEMMA
+            else -> DownloadedPromptFamily.GENERIC
+        }
+    }
+
+    private fun buildQwenUserMessage(prompt: String): String {
+        return prompt.trim()
+    }
+
+    private fun buildSpeakerContextMessage(
         history: List<ChatTurn>,
         prompt: String,
         maxTurns: Int
     ): String {
         val recentTurns = historyWindow(history, maxTurns)
         return buildString {
-            append("You are NanoChat, a concise and helpful local assistant.")
-            append('\n')
             recentTurns.forEach { turn ->
                 append(if (turn.role == ChatRole.USER) "User: " else "Assistant: ")
                 append(normalizedTurnContent(turn))
@@ -76,14 +123,7 @@ object PromptFormatter {
             }
             append("User: ")
             append(prompt.trim())
-            append('\n')
-            append("Assistant:")
         }.trim()
-    }
-
-    private fun usesSpeakerPrompt(normalizedModelId: String): Boolean {
-        if (normalizedModelId.isBlank()) return false
-        return "deepseek" in normalizedModelId || "qwen" in normalizedModelId
     }
 
     private fun normalizedTurnContent(turn: ChatTurn): String {

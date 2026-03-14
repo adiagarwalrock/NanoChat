@@ -10,6 +10,9 @@ object GeneratedTextSanitizer {
     private val inlineControlTokenRegex = Regex(
         pattern = """(?i)\s*(<\|assistant\|>|<\|user\|>|<\|system\|>|<\|im_start\|>|<\|im_end\|>|<\|eot_id\|>|<\|endoftext\|>|<\|begin_of_text\|>|<s>|</s>|<assistant>|</assistant>|<user>|</user>)\s*"""
     )
+    private val standaloneRoleLineRegex = Regex(
+        pattern = """(?im)^\s*(assistant|user|system)\s*$"""
+    )
     private val completeThinkBlockRegex = Regex(
         pattern = """(?is)<think>.*?</think>"""
     )
@@ -45,6 +48,7 @@ object GeneratedTextSanitizer {
 
         return normalized
             .replace(inlineControlTokenRegex, " ")
+            .replace(standaloneRoleLineRegex, "")
             .replace(Regex("(?i)^\\s*assistant\\s*:\\s*"), "")
             .replace(Regex("\n{3,}"), "\n\n")
             .replace(Regex("[ \\t]{2,}"), " ")

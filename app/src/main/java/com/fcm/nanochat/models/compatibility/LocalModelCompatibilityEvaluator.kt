@@ -14,18 +14,12 @@ class LocalModelCompatibilityEvaluator(
 ) {
     private val appContext = context.applicationContext
 
-    suspend fun evaluate(
+    fun evaluate(
         model: AllowlistedModel,
         installedPath: String?,
         installState: ModelInstallState,
         tokenPresent: Boolean
     ): LocalModelCompatibilityState {
-        if (!isAndroidSupported()) {
-            return LocalModelCompatibilityState.UnsupportedDevice(
-                "Android 12 or newer is required for local model execution."
-            )
-        }
-
         if (!isFileTypeSupported(model.fileType)) {
             return LocalModelCompatibilityState.UnsupportedDevice(
                 "Unsupported model file type: ${model.fileType.ifBlank { "unknown" }}."
@@ -123,8 +117,6 @@ class LocalModelCompatibilityEvaluator(
         val totalMemGb = memoryInfo.totalMem.toDouble() / 1_000_000_000.0
         return floor(totalMemGb).toInt().coerceAtLeast(1)
     }
-
-    private fun isAndroidSupported(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     private fun isFileTypeSupported(fileType: String): Boolean {
         return fileType == "litertlm"

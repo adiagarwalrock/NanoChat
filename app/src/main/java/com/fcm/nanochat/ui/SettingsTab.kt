@@ -424,13 +424,15 @@ internal fun ConnectionSettings(
                     }
                 }
 
-                if (!state.geminiStatus.message.isNullOrBlank()) {
-                    Text(
-                        text = state.geminiStatus.message.orEmpty(),
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                state.geminiStatus.message
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
             }
         }
 
@@ -500,13 +502,15 @@ internal fun ConnectionSettings(
                     }
                 )
 
-                if (!state.saveNotice.isNullOrBlank()) {
-                    Text(
-                        text = state.saveNotice.orEmpty(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+                state.saveNotice
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { notice ->
+                        Text(
+                            text = notice,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
 
                 Button(
                     onClick = onSaveSettings,
@@ -608,13 +612,15 @@ internal fun ModelControlsSettings(
                     onValueChange = { onContextLengthChange(it.roundToInt()) }
                 )
 
-                if (!state.saveNotice.isNullOrBlank()) {
-                    Text(
-                        text = state.saveNotice.orEmpty(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+                state.saveNotice
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { notice ->
+                        Text(
+                            text = notice,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
 
                 Button(
                     onClick = onSaveSettings,
@@ -755,13 +761,15 @@ internal fun HuggingFaceConnectionSettings(
                     }
                 }
 
-                if (!state.saveNotice.isNullOrBlank()) {
-                    Text(
-                        text = state.saveNotice.orEmpty(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+                state.saveNotice
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { notice ->
+                        Text(
+                            text = notice,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
 
                 Button(
                     onClick = onSaveSettings,
@@ -875,13 +883,15 @@ internal fun DataHistorySettings(
                 title = "Data",
                 subtitle = "Manage local conversation history"
             ) {
-                if (!state.clearNotice.isNullOrBlank()) {
-                    Text(
-                        text = state.clearNotice.orEmpty(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+                state.clearNotice
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { notice ->
+                        Text(
+                            text = notice,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
 
                 Button(
                     onClick = { confirmClearHistory = true },

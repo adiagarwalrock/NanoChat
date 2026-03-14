@@ -37,33 +37,76 @@ class PromptFormatterTest {
     }
 
     @Test
-    fun `flattenForDownloadedModel emits chatml structure`() {
-        val prompt = PromptFormatter.flattenForDownloadedModel(
-            history = listOf(
-                ChatTurn(ChatRole.USER, "Hello"),
-                ChatTurn(ChatRole.ASSISTANT, "Hi there")
-            ),
-            prompt = "How are you?"
-        )
-
-        assertTrue(prompt.contains("<|user|>\nHello"))
-        assertTrue(prompt.contains("<|assistant|>\nHi there"))
-        assertTrue(prompt.endsWith("<|assistant|>"))
-    }
-
-    @Test
-    fun `flattenForDownloadedModel uses speaker format for deepseek and qwen`() {
-        val prompt = PromptFormatter.flattenForDownloadedModel(
+    fun `formatDownloadedPrompt uses qwen family template without marker mixing`() {
+        val formatted = PromptFormatter.formatDownloadedPrompt(
             history = listOf(
                 ChatTurn(ChatRole.USER, "Hello"),
                 ChatTurn(ChatRole.ASSISTANT, "Hi there")
             ),
             prompt = "How are you?",
-            modelId = "deepseek-r1-distill-qwen-1.5b"
+            modelId = "litert-community/Qwen2.5-1.5B-Instruct"
         )
 
-        assertTrue(prompt.contains("User: Hello"))
-        assertTrue(prompt.contains("Assistant: Hi there"))
-        assertTrue(prompt.endsWith("Assistant:"))
+        assertEquals(DownloadedPromptFamily.QWEN, formatted.family)
+        assertEquals(
+            "You are NanoChat, a concise and helpful local assistant.",
+            formatted.systemInstruction
+        )
+        assertEquals(
+            "How are you?",
+            formatted.userMessage
+        )
+        assertTrue("<|user|>" !in formatted.userMessage)
+        assertTrue("<|assistant|>" !in formatted.userMessage)
+        assertTrue("<|im_start|>" !in formatted.userMessage)
+        assertTrue("<|im_end|>" !in formatted.userMessage)
+        assertTrue("System:" !in formatted.userMessage)
+        assertTrue("User:" !in formatted.userMessage)
+    }
+
+    @Test
+    fun `formatDownloadedPrompt uses family specific system prompt`() {
+        val gemma = PromptFormatter.formatDownloadedPrompt(
+            history = listOf(
+                ChatTurn(ChatRole.USER, "Hello"),
+                ChatTurn(ChatRole.ASSISTANT, "Hi there")
+            ),
+            prompt = "How are you?",
+            modelId = "google/gemma-3n-E2B-it-litert-lm"
+        )
+        val deepseek = PromptFormatter.formatDownloadedPrompt(
+            history = emptyList(),
+            prompt = "Explain this.",
+            modelId = "litert-community/DeepSeek-R1-Distill-Qwen-1.5B"
+        )
+
+        assertEquals(DownloadedPromptFamily.GEMMA, gemma.family)
+        assertEquals(
+            "You are NanoChat running locally on Gemma. Keep answers clear and actionable.",
+            gemma.systemInstruction
+        )
+        assertTrue(gemma.userMessage.endsWith("User: How are you?"))
+        assertEquals(DownloadedPromptFamily.DEEPSEEK, deepseek.family)
+        assertEquals(
+            "You are NanoChat. Be concise, and show reasoning only when needed.",
+            deepseek.systemInstruction
+        )
+        assertEquals("Explain this.", deepseek.userMessage)
+    }
+
+    @Test
+    fun `flattenForDownloadedModel for qwen keeps only user message payload`() {
+        val prompt = PromptFormatter.flattenForDownloadedModel(
+            history = listOf(
+                ChatTurn(ChatRole.USER, "Hello"),
+                ChatTurn(ChatRole.ASSISTANT, "<|assistant|>\nAssistant: Hi there")
+            ),
+            prompt = "How are you?",
+            modelId = "litert-community/Qwen2.5-1.5B-Instruct"
+        )
+
+        assertEquals("How are you?", prompt)
+        assertTrue("Assistant:" !in prompt)
+        assertTrue("User:" !in prompt)
     }
 }

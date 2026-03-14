@@ -1,5 +1,6 @@
 package com.fcm.nanochat.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -257,6 +258,7 @@ class ChatViewModel(
                 try {
                     val snapshot = settings.value
                     val mode = snapshot.inferenceMode
+                    Log.d(TAG, "chat_generation_started requestId=$requestId mode=${mode.name}")
 
                     if (mode == InferenceMode.DOWNLOADED) {
                         val preparationError = withContext(Dispatchers.IO) {
@@ -307,6 +309,12 @@ class ChatViewModel(
                         val content = assembler.append(mode, delta)
                         activeAssistantPreview = content
                         if (content.isNotBlank()) {
+                            if (!hasVisibleContent) {
+                                Log.d(
+                                    TAG,
+                                    "chat_generation_first_visible requestId=$requestId mode=${mode.name}"
+                                )
+                            }
                             hasVisibleContent = true
                         }
 
@@ -348,6 +356,10 @@ class ChatViewModel(
                         }
                     }
                 } catch (cancellation: CancellationException) {
+                    Log.d(
+                        TAG,
+                        "chat_generation_cancelled requestId=$requestId reason=${cancellation.message.orEmpty()} watchdog=$watchdogTriggered"
+                    )
                     val cancelledContent = when {
                         activeAssistantPreview.isNotBlank() -> activeAssistantPreview
                         watchdogTriggered || cancellation is GenerationWatchdogTimeout -> WATCHDOG_TIMEOUT_MESSAGE
@@ -366,16 +378,31 @@ class ChatViewModel(
                             WATCHDOG_TIMEOUT_MESSAGE.takeIf { shouldSurfaceNotice(mode, it) }
                     }
                 } catch (error: Throwable) {
+                    Log.e(
+                        TAG,
+                        "chat_generation_failed requestId=$requestId message=${error.message.orEmpty()}",
+                        error
+                    )
                     val message =
                         userFacingError(error).ifBlank { "Unable to complete the request." }
                     val mode = settings.value.inferenceMode
-                    notice.value = message.takeIf { shouldSurfaceNotice(mode, it) }
+                    val fallbackContent = activeAssistantPreview.takeIf { it.isNotBlank() }
+                    val persistMessage = fallbackContent ?: message
+                    notice.value = if (fallbackContent == null) {
+                        message.takeIf { shouldSurfaceNotice(mode, it) }
+                    } else {
+                        null
+                    }
                     assistantMessageId?.let { messageId ->
                         withContext(Dispatchers.IO) {
-                            repository.updateAssistantMessage(messageId, message)
+                            repository.updateAssistantMessage(messageId, persistMessage)
                         }
                     }
                 } finally {
+                    Log.d(
+                        TAG,
+                        "chat_generation_finished requestId=$requestId isCurrent=${activeRequestId == requestId}"
+                    )
                     watchdogJob?.cancel()
                     if (activeAssistantMessageId == assistantMessageId) {
                         activeAssistantMessageId = null
@@ -456,11 +483,13 @@ class ChatViewModel(
         }
     }
 
-    private fun shouldSurfaceNotice(mode: InferenceMode, _message: String): Boolean {
+    private fun shouldSurfaceNotice(mode: InferenceMode, message: String): Boolean {
+        if (message.isBlank()) return false
         return mode != InferenceMode.DOWNLOADED
     }
 
     private companion object {
+        const val TAG = "ChatViewModel"
         const val STREAM_PERSIST_INTERVAL_MS = 180L
         const val STREAM_PERSIST_MIN_LENGTH_DELTA = 24
         const val LOCAL_FIRST_TOKEN_WATCHDOG_MS = 18_000L

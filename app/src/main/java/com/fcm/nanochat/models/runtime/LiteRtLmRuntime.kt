@@ -5,15 +5,27 @@ import android.content.pm.ApplicationInfo
 import android.util.Log
 import com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig
 import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Content
+import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.ExperimentalApi
 import com.google.ai.edge.litertlm.ExperimentalFlags
+import com.google.ai.edge.litertlm.Message
+import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import java.io.File
 import java.io.FileInputStream
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 private data class StartupFileInspection(
     val path: String,
@@ -28,21 +40,177 @@ internal class LiteRtLmRuntime(
     private val engine: Engine,
     private val samplerConfig: SamplerConfig?
 ) : LocalModelRuntime {
-    override fun generate(prompt: String): String {
-        val request = prompt.trim()
-        if (request.isBlank()) return ""
+    private val generationCounter = AtomicLong(0L)
+    private val activeConversation = AtomicReference<ActiveConversation?>(null)
 
-        return engine.createConversation(
-            ConversationConfig(samplerConfig = samplerConfig)
-        ).use { conversation ->
-            conversation.sendMessage(request).toString().trim()
+    override fun stream(prompt: String, systemInstruction: String?): Flow<String> = callbackFlow {
+        val request = prompt.trim()
+        if (request.isBlank()) {
+            channel.close()
+            return@callbackFlow
+        }
+
+        cancelAndDrainActiveConversation(reason = "superseded")
+
+        val generationId = generationCounter.incrementAndGet()
+        val gate = StreamLifecycleGate()
+        val normalizedSystemInstruction = systemInstruction
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { Contents.of(listOf(Content.Text(it))) }
+
+        val conversation = engine.createConversation(
+            ConversationConfig(
+                samplerConfig = samplerConfig,
+                systemInstruction = normalizedSystemInstruction
+            )
+        )
+        val active = ActiveConversation(
+            generationId = generationId,
+            conversation = conversation,
+            gate = gate
+        )
+        activeConversation.set(active)
+        Log.d(TAG, "Starting local generation generationId=$generationId")
+
+        val contents = Contents.of(listOf(Content.Text(request)))
+
+        val callback = object : MessageCallback {
+            override fun onMessage(message: Message) {
+                if (!isCurrentGeneration(generationId, conversation)) {
+                    return
+                }
+                val chunk = message.toString()
+                if (chunk != "null") {
+                    trySend(chunk)
+                }
+            }
+
+            override fun onDone() {
+                if (!finishGeneration(generationId, conversation, reason = "done")) {
+                    return
+                }
+                channel.close()
+            }
+
+            override fun onError(throwable: Throwable) {
+                if (!finishGeneration(generationId, conversation, reason = "error")) {
+                    return
+                }
+                channel.close(throwable)
+            }
+        }
+
+        runCatching {
+            conversation.sendMessageAsync(contents, callback)
+        }.onFailure { error ->
+            if (!finishGeneration(generationId, conversation, reason = "send_message_failure")) {
+                return@onFailure
+            }
+            channel.close(error)
+        }
+
+        awaitClose {
+            cancelActiveGeneration("await_close")
         }
     }
 
+    override fun cancelActiveGeneration(reason: String) {
+        val active = activeConversation.get() ?: return
+        if (!active.gate.tryCancel()) {
+            return
+        }
+
+        Log.d(
+            TAG,
+            "Cancelling active local generation generationId=${active.generationId} reason=$reason"
+        )
+        runCatching { active.conversation.cancelProcess() }
+    }
+
     override fun close() {
+        val active = activeConversation.getAndSet(null)
+        if (active != null) {
+            active.gate.tryCancel()
+            if (active.gate.tryFinalize()) {
+                runCatching { active.conversation.cancelProcess() }
+                runCatching { active.conversation.close() }
+            }
+        }
         runCatching { engine.close() }
     }
 
+    private companion object {
+        const val TAG = "LiteRtLmRuntime"
+        const val SUPERSEDE_DRAIN_POLL_MS = 50L
+        const val SUPERSEDE_DRAIN_ATTEMPTS = 20
+    }
+
+    private data class ActiveConversation(
+        val generationId: Long,
+        val conversation: Conversation,
+        val gate: StreamLifecycleGate
+    )
+
+    private fun isCurrentGeneration(generationId: Long, conversation: Conversation): Boolean {
+        val active = activeConversation.get() ?: return false
+        return active.generationId == generationId && active.conversation === conversation
+    }
+
+    private fun finishGeneration(
+        generationId: Long,
+        conversation: Conversation,
+        reason: String
+    ): Boolean {
+        val active = activeConversation.get() ?: return false
+        if (active.generationId != generationId || active.conversation !== conversation) {
+            return false
+        }
+        if (!active.gate.tryFinalize()) {
+            return false
+        }
+
+        activeConversation.compareAndSet(active, null)
+        Log.d(TAG, "Finalizing local generation generationId=$generationId reason=$reason")
+        runCatching { conversation.close() }
+        return true
+    }
+
+    private suspend fun cancelAndDrainActiveConversation(reason: String) {
+        if (activeConversation.get() == null) {
+            return
+        }
+        cancelActiveGeneration(reason)
+
+        repeat(SUPERSEDE_DRAIN_ATTEMPTS) {
+            if (activeConversation.get() == null) {
+                return
+            }
+            delay(SUPERSEDE_DRAIN_POLL_MS)
+        }
+
+        val stale = activeConversation.getAndSet(null) ?: return
+        if (!stale.gate.tryFinalize()) {
+            return
+        }
+
+        Log.w(
+            TAG,
+            "Forcing local generation finalization generationId=${stale.generationId} reason=$reason"
+        )
+        runCatching { stale.conversation.cancelProcess() }
+        runCatching { stale.conversation.close() }
+    }
+
+}
+
+internal class StreamLifecycleGate {
+    private val cancelled = AtomicBoolean(false)
+    private val finalized = AtomicBoolean(false)
+
+    fun tryCancel(): Boolean = cancelled.compareAndSet(false, true)
+
+    fun tryFinalize(): Boolean = finalized.compareAndSet(false, true)
 }
 
 internal object LiteRtLmRuntimeFactory {

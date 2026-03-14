@@ -2,13 +2,14 @@ package com.fcm.nanochat.models.download
 
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.io.path.createTempFile
 
 class DownloadIntegrityValidatorTest {
     private val validator = DownloadIntegrityValidator()
 
     @Test
     fun `validate succeeds for matching non-empty file`() {
-        val file = createTempFile(prefix = "nanochat", suffix = ".part")
+        val file = createTempFile(prefix = "nanochat", suffix = ".part").toFile()
         file.writeBytes(ByteArray(16) { 1 })
 
         val result = validator.validate(
@@ -23,7 +24,7 @@ class DownloadIntegrityValidatorTest {
 
     @Test
     fun `validate fails on size mismatch`() {
-        val file = createTempFile(prefix = "nanochat", suffix = ".part")
+        val file = createTempFile(prefix = "nanochat", suffix = ".part").toFile()
         file.writeBytes(ByteArray(8) { 1 })
 
         val result = validator.validate(
@@ -38,7 +39,7 @@ class DownloadIntegrityValidatorTest {
 
     @Test
     fun `validate fails on empty file`() {
-        val file = createTempFile(prefix = "nanochat", suffix = ".part")
+        val file = createTempFile(prefix = "nanochat", suffix = ".part").toFile()
         file.writeBytes(ByteArray(0))
 
         val result = validator.validate(
