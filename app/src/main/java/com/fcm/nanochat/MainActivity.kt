@@ -12,34 +12,21 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fcm.nanochat.ui.NanoChatApp
 import com.fcm.nanochat.ui.theme.NanoChatTheme
 import com.fcm.nanochat.viewmodel.ChatViewModel
-import com.fcm.nanochat.viewmodel.ChatViewModelFactory
 import com.fcm.nanochat.viewmodel.ModelManagerViewModel
-import com.fcm.nanochat.viewmodel.ModelManagerViewModelFactory
 import com.fcm.nanochat.viewmodel.SettingsViewModel
-import com.fcm.nanochat.viewmodel.SettingsViewModelFactory
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val container = (application as NanoChatApplication).container
-
         setContent {
             NanoChatTheme {
-                val chatViewModel: ChatViewModel = viewModel(
-                    factory = ChatViewModelFactory(container.chatRepository)
-                )
-                val settingsViewModel: SettingsViewModel = viewModel(
-                    factory = SettingsViewModelFactory(
-                        container.preferences,
-                        container.chatRepository,
-                        container.httpClient
-                    )
-                )
-                val modelManagerViewModel: ModelManagerViewModel = viewModel(
-                    factory = ModelManagerViewModelFactory(container.localModelRepository)
-                )
+                val chatViewModel: ChatViewModel = viewModel()
+                val settingsViewModel: SettingsViewModel = viewModel()
+                val modelManagerViewModel: ModelManagerViewModel = viewModel()
 
                 val chatState by chatViewModel.uiState.collectAsStateWithLifecycle()
                 val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()

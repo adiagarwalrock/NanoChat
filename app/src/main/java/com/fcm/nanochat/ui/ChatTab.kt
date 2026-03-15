@@ -146,9 +146,13 @@ internal fun ChatTab(
         val compact = screenWidthDp < 700.dp
         val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
         val horizontalPadding = if (compact) 16.dp else 24.dp
-        val contentModifier = Modifier.fillMaxSize().padding(horizontal = horizontalPadding)
+        val contentModifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = horizontalPadding)
 
-        Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Box(modifier = modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)) {
                 if (compact) {
                         ChatTabContent(
                                 state = state,
@@ -174,7 +178,9 @@ internal fun ChatTab(
                         Row(modifier = Modifier.fillMaxSize()) {
                                 SessionsRail(
                                         state = state,
-                                        modifier = Modifier.width(280.dp).fillMaxSize(),
+                                        modifier = Modifier
+                                                .width(280.dp)
+                                                .fillMaxSize(),
                                         onCreateSession = onCreateSession,
                                         onSelectSession = onOpenSessions
                                 )
@@ -262,7 +268,8 @@ private fun ChatTabContent(
                         onStop = onStopGeneration,
                         onRetry = onRetryLast,
                         modifier =
-                                Modifier.align(Alignment.BottomCenter)
+                                Modifier
+                                        .align(Alignment.BottomCenter)
                                         .onSizeChanged { composerHeightPx = it.height }
                                         .navigationBarsPadding()
                                         .imePadding()
@@ -325,7 +332,8 @@ private fun ModelControlsSheet(
         ) {
                 Column(
                         modifier =
-                                Modifier.fillMaxWidth()
+                                Modifier
+                                        .fillMaxWidth()
                                         .padding(horizontal = 18.dp, vertical = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
@@ -344,7 +352,9 @@ private fun ModelControlsSheet(
                                 color = MaterialTheme.colorScheme.surfaceContainerHigh
                         ) {
                                 Column(
-                                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                                        modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(14.dp),
                                         verticalArrangement = Arrangement.spacedBy(14.dp)
                                 ) {
                                         LabeledSlider(
@@ -679,7 +689,8 @@ private fun ChatTopBar(
         Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
                         modifier =
-                                Modifier.fillMaxWidth()
+                                Modifier
+                                        .fillMaxWidth()
                                         .statusBarsPadding()
                                         .padding(top = 6.dp, bottom = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -703,7 +714,9 @@ private fun ChatTopBar(
                         }
 
                         Box(
-                                modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                                modifier = Modifier
+                                        .weight(1f)
+                                        .padding(horizontal = 12.dp),
                                 contentAlignment = Alignment.Center
                         ) {
                                 Box {
@@ -718,7 +731,8 @@ private fun ChatTopBar(
                                         ) {
                                                 Row(
                                                         modifier =
-                                                                Modifier.animateContentSize()
+                                                                Modifier
+                                                                        .animateContentSize()
                                                                         .padding(
                                                                                 horizontal = 14.dp,
                                                                                 vertical = 8.dp
@@ -730,7 +744,8 @@ private fun ChatTopBar(
                                                 ) {
                                                         Box(
                                                                 modifier =
-                                                                        Modifier.size(7.dp)
+                                                                        Modifier
+                                                                                .size(7.dp)
                                                                                 .clip(CircleShape)
                                                                                 .background(
                                                                                         statusDotColor
@@ -760,7 +775,8 @@ private fun ChatTopBar(
                                                                         MaterialTheme.colorScheme
                                                                                 .onSurfaceVariant,
                                                                 modifier =
-                                                                        Modifier.size(18.dp)
+                                                                        Modifier
+                                                                                .size(18.dp)
                                                                                 .graphicsLayer {
                                                                                         rotationZ =
                                                                                                 chevronRotation
@@ -949,7 +965,8 @@ private fun LocalModelStatusSurface(
         ) {
                 Column(
                         modifier =
-                                Modifier.fillMaxWidth()
+                                Modifier
+                                        .fillMaxWidth()
                                         .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -1026,29 +1043,103 @@ private fun MessageList(
         onRetryLast: () -> Unit,
         onDeleteMessage: (ChatMessage) -> Unit
 ) {
-        LazyColumn(
-                state = listState,
-                modifier = modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(top = 12.dp, bottom = bottomPadding)
-        ) {
-                itemsIndexed(messages, key = { _, message -> message.id }) { index, message ->
-                        val sameRoleAsPrevious = messages.getOrNull(index - 1)?.role == message.role
-                        val topPadding =
-                                when {
-                                        index == 0 -> 2.dp
-                                        sameRoleAsPrevious -> 10.dp
-                                        else -> 18.dp
-                                }
+        if (messages.isEmpty() && !isSending) {
+                EmptyChatGreeting(bottomPadding = bottomPadding, modifier = modifier)
+        } else {
+                LazyColumn(
+                        state = listState,
+                        modifier = modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(top = 12.dp, bottom = bottomPadding)
+                ) {
+                        itemsIndexed(messages, key = { _, message -> message.id }) { index, message
+                                ->
+                                val sameRoleAsPrevious =
+                                        messages.getOrNull(index - 1)?.role == message.role
+                                val topPadding =
+                                        when {
+                                                index == 0 -> 2.dp
+                                                sameRoleAsPrevious -> 10.dp
+                                                else -> 18.dp
+                                        }
 
-                        MessageRow(
-                                message = message,
-                                isSending = isSending,
-                                modifier = Modifier.padding(top = topPadding),
-                                onMessageInfo = onMessageInfo,
-                                onRetryLast = onRetryLast,
-                                onDeleteMessage = onDeleteMessage
-                        )
+                                MessageRow(
+                                        message = message,
+                                        isSending = isSending,
+                                        modifier = Modifier.padding(top = topPadding),
+                                        onMessageInfo = onMessageInfo,
+                                        onRetryLast = onRetryLast,
+                                        onDeleteMessage = onDeleteMessage
+                                )
+                        }
                 }
+        }
+}
+
+@Composable
+private fun EmptyChatGreeting(bottomPadding: Dp, modifier: Modifier = Modifier) {
+        val density = LocalDensity.current
+        var visible by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) { visible = true }
+
+        val alpha by
+        animateFloatAsState(
+                targetValue = if (visible) 1f else 0f,
+                animationSpec = tween(600),
+                label = "GreetingFade"
+        )
+
+        val translateY by
+        animateFloatAsState(
+                targetValue = if (visible) 0f else 24f,
+                animationSpec = tween(600),
+                label = "GreetingSlide"
+        )
+
+        Column(
+                modifier =
+                        modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 28.dp)
+                                .padding(bottom = bottomPadding)
+                                .graphicsLayer {
+                                        this.alpha = alpha
+                                        translationY = with(density) { translateY.dp.toPx() }
+                                },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+        ) {
+                Surface(
+                        modifier = Modifier.size(80.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                ) {
+                        Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                        imageVector = Icons.Default.Star,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(38.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                )
+                        }
+                }
+
+                Spacer(modifier = Modifier.height(28.dp))
+
+                Text(
+                        text = stringResource(id = R.string.empty_chat_title),
+                        style = MaterialTheme.typography.headlineMedium,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onBackground
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                        text = stringResource(id = R.string.empty_chat_subtitle),
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
         }
 }
 
@@ -1088,15 +1179,18 @@ private fun MessageRow(
 
         Row(
                 modifier =
-                        modifier.fillMaxWidth().graphicsLayer {
-                                this.alpha = alpha
-                                translationY = with(density) { offsetY.dp.toPx() }
-                        },
+                        modifier
+                                .fillMaxWidth()
+                                .graphicsLayer {
+                                        this.alpha = alpha
+                                        translationY = with(density) { offsetY.dp.toPx() }
+                                },
                 horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
         ) {
                 Box(modifier = Modifier.fillMaxWidth(if (isUser) 0.76f else 0.96f)) {
                         val interactionModifier =
-                                Modifier.fillMaxWidth()
+                                Modifier
+                                        .fillMaxWidth()
                                         .combinedClickable(
                                                 onClick = { onMessageInfo(message) },
                                                 onLongClick = {
@@ -1127,7 +1221,8 @@ private fun MessageRow(
                                                 fontSizeSp = 15f,
                                                 lineSpacingMultiplier = 1.33f,
                                                 modifier =
-                                                        Modifier.fillMaxWidth()
+                                                        Modifier
+                                                                .fillMaxWidth()
                                                                 .padding(
                                                                         horizontal = 14.dp,
                                                                         vertical = 11.dp
@@ -1315,7 +1410,8 @@ private fun TypingIndicator() {
 private fun TypingDot(alpha: Float) {
         Box(
                 modifier =
-                        Modifier.size(6.dp)
+                        Modifier
+                                .size(6.dp)
                                 .clip(CircleShape)
                                 .background(
                                         MaterialTheme.colorScheme.onSurfaceVariant.copy(
@@ -1400,7 +1496,8 @@ private fun ThinkAccordion(thinkingText: String) {
                 color = MaterialTheme.colorScheme.surfaceContainerHighest,
                 tonalElevation = 1.dp,
                 modifier =
-                        Modifier.fillMaxWidth()
+                        Modifier
+                                .fillMaxWidth()
                                 .animateContentSize()
                                 .combinedClickable(
                                         onClick = { expanded = !expanded },
@@ -1558,7 +1655,8 @@ private fun Composer(
         ) {
                 Column(
                         modifier =
-                                Modifier.fillMaxWidth()
+                                Modifier
+                                        .fillMaxWidth()
                                         .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {

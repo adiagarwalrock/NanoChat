@@ -20,6 +20,7 @@ markwon = "4.6.2"
 aicore = "0.0.1-exp02"
 mlkitPrompt = "1.0.0-beta1"
 litertlmAndroid = "0.9.0-alpha06"
+hilt = "2.59.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -56,9 +57,12 @@ markwon-ext-latex = { group = "io.noties.markwon", name = "ext-latex", version.r
 google-aicore = { group = "com.google.ai.edge.aicore", name = "aicore", version.ref = "aicore" }
 google-mlkit-prompt = { group = "com.google.mlkit", name = "genai-prompt", version.ref = "mlkitPrompt" }
 google-litertlm-android = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertlmAndroid" }
+hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
+hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }

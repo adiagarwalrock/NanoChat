@@ -2,7 +2,6 @@ package com.fcm.nanochat.viewmodel
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.fcm.nanochat.data.SettingsSnapshot
 import com.fcm.nanochat.data.ThinkingEffort
@@ -17,6 +16,8 @@ import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.ChatSession
 import com.fcm.nanochat.models.registry.ActiveModelStatus
+import com.fcm.nanochat.notifications.AppVisibilityTracker
+import com.fcm.nanochat.notifications.NotificationCoordinator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -34,10 +35,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlin.coroutines.coroutineContext
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
+@HiltViewModel
+class ChatViewModel @Inject constructor(
+    private val repository: ChatRepository,
+    private val notificationCoordinator: NotificationCoordinator,
+    private val appVisibilityTracker: AppVisibilityTracker
+) : ViewModel() {
     private val defaultLocalModelCapabilities =
             LocalModelCapabilities(modelId = null, supportsThinking = false, promptFamily = null)
     private val generationMutex = Mutex()
@@ -381,6 +389,8 @@ class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
                     repository.updateAssistantMessage(assistantMessageId!!, finalContent)
                 }
             }
+
+            maybeNotifyChatResponse(sessionId, finalContent)
         } catch (cancellation: CancellationException) {
             handleGenerationCancellation(
                 requestId,
@@ -566,6 +576,19 @@ class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
         }
     }
 
+    private fun maybeNotifyChatResponse(sessionId: Long, content: String) {
+        if (appVisibilityTracker.isForeground) return
+        val title = sessions.value.firstOrNull { it.id == sessionId }?.title ?: "Chat"
+        val preview = content.trim().lineSequence().firstOrNull().orEmpty()
+        if (preview.isBlank()) return
+
+        notificationCoordinator.notifyChatResponse(
+            sessionId = sessionId,
+            sessionTitle = title,
+            preview = preview
+        )
+    }
+
     private companion object {
         const val TAG = "ChatViewModel"
         const val STREAM_PERSIST_INTERVAL_MS = 180L
@@ -586,12 +609,3 @@ private data class SessionUiState(
         val selectedSessionId: Long?,
         val messages: List<ChatMessage>
 )
-
-class ChatViewModelFactory(private val repository: ChatRepository) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(ChatViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST") return ChatViewModel(repository) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
-    }
-}
