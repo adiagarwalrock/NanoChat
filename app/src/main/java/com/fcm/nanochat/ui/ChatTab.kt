@@ -7,6 +7,7 @@ import android.text.method.LinkMovementMethod
 import android.widget.TextView
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
+
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -78,6 +79,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
@@ -239,11 +241,12 @@ private fun ChatTabContent(
                                 selectedMode = state.inferenceMode,
                                 modelName = settingsState.modelName,
                                 activeLocalModelName = state.activeLocalModelName,
+                                isLocalModelReady = state.isLocalModelReady,
                                 onInferenceModeChange = onInferenceModeChange,
                                 onOpenSessions = onOpenSessions
                         )
 
-                        if (state.inferenceMode == InferenceMode.DOWNLOADED) {
+                        if (state.inferenceMode == InferenceMode.DOWNLOADED && !state.isLocalModelReady) {
                                 LocalModelStatusSurface(
                                         modelName = state.activeLocalModelName,
                                         isReady = state.isLocalModelReady,
@@ -263,16 +266,36 @@ private fun ChatTabContent(
                                         onOpenModelGallery = onOpenModelGallery
                                 )
                         } else {
-                                MessageList(
-                                        messages = state.messages,
-                                        isSending = state.isSending,
-                                        listState = listState,
-                                        bottomPadding = bottomPadding,
-                                        onMessageInfo = onMessageInfo,
-                                        onRetryLast = onRetryLast,
-                                        onDeleteMessage = onDeleteMessage,
-                                        modifier = Modifier.weight(1f)
-                                )
+                                Box(modifier = Modifier.weight(1f)) {
+                                        MessageList(
+                                                messages = state.messages,
+                                                isSending = state.isSending,
+                                                listState = listState,
+                                                bottomPadding = bottomPadding + 20.dp,
+                                                onMessageInfo = onMessageInfo,
+                                                onRetryLast = onRetryLast,
+                                                onDeleteMessage = onDeleteMessage,
+                                                modifier = Modifier.fillMaxSize()
+                                        )
+
+                                        // Soft top-fade overlay — only visible when scrolled
+                                        if (listState.canScrollBackward) {
+                                                Box(
+                                                        modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .height(32.dp)
+                                                                .align(Alignment.TopCenter)
+                                                                .background(
+                                                                        Brush.verticalGradient(
+                                                                                colors = listOf(
+                                                                                        MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
+                                                                                        MaterialTheme.colorScheme.background.copy(alpha = 0f)
+                                                                                )
+                                                                        )
+                                                                )
+                                                )
+                                        }
+                                }
                         }
                 }
 
@@ -668,6 +691,7 @@ private fun ChatTopBar(
         selectedMode: InferenceMode,
         modelName: String,
         activeLocalModelName: String?,
+        isLocalModelReady: Boolean = false,
         onInferenceModeChange: (InferenceMode) -> Unit,
         onOpenSessions: () -> Unit
 ) {
@@ -684,12 +708,14 @@ private fun ChatTopBar(
                         InferenceMode.REMOTE -> cleanModel
                 }
 
+        val readyGreen = Color(0xFF4CAF50)
         val statusDotColor =
                 when (selectedMode) {
                         InferenceMode.AICORE -> MaterialTheme.colorScheme.secondary
-                        InferenceMode.DOWNLOADED -> MaterialTheme.colorScheme.tertiary
+                        InferenceMode.DOWNLOADED -> if (isLocalModelReady) readyGreen else MaterialTheme.colorScheme.tertiary
                         InferenceMode.REMOTE -> MaterialTheme.colorScheme.primary
                 }
+
 
         val chevronRotation by
                 animateFloatAsState(
@@ -1243,8 +1269,8 @@ private fun MessageRow(
                                 Column(
                                         modifier =
                                                 interactionModifier.padding(
-                                                        horizontal = 4.dp,
-                                                        vertical = 2.dp
+                                                        horizontal = 8.dp,
+                                                        vertical = 4.dp
                                                 ),
                                         verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
