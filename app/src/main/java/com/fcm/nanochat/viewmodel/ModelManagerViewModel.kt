@@ -534,7 +534,7 @@ internal fun ModelCardUi.primaryActionLabel(): String {
         is LocalModelHealthState.Paused -> "Resume"
         is LocalModelHealthState.DownloadFailed -> "Retry"
         LocalModelHealthState.InstalledNeedsValidation -> "Continue setup"
-        LocalModelHealthState.InstalledReady -> if (isActive) "Selected" else "Use model"
+        LocalModelHealthState.InstalledReady -> "Use model"
         is LocalModelHealthState.InstalledStartupFailed -> "Continue setup"
         LocalModelHealthState.RequiresToken -> "Add token"
         LocalModelHealthState.RequiresLicenseApproval -> "Continue setup"

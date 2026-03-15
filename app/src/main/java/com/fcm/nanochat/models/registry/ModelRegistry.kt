@@ -124,7 +124,6 @@ class ModelRegistry(
                     val issueMessage = when (compatibility) {
                         is LocalModelCompatibilityState.RuntimeUnavailable -> compatibility.reason
                         is LocalModelCompatibilityState.DownloadedButNotActivatable -> compatibility.reason
-                        else -> ""
                     }
                     val persistedMessage = sanitizeCompatibilityReason(issueMessage)
                     if (entity.errorMessage != persistedMessage) {
@@ -201,7 +200,7 @@ class ModelRegistry(
         }
     }
 
-    private suspend fun buildAllowlistedRecord(
+    private fun buildAllowlistedRecord(
         model: AllowlistedModel,
         installed: InstalledModelEntity?,
         tokenPresent: Boolean,

@@ -100,27 +100,11 @@ class AppPreferences(context: Context) {
         appContext.dataStore.edit { it[Keys.inferenceMode] = mode.name }
     }
 
-    suspend fun updateBaseUrl(value: String) {
-        appContext.dataStore.edit { it[Keys.baseUrl] = normalizeBaseUrl(value) }
-    }
-
     suspend fun updateActiveLocalModelId(value: String?) {
         appContext.dataStore.edit { preferences ->
             val normalized = value?.trim().orEmpty()
             preferences[Keys.activeLocalModelId] = normalized
         }
-    }
-
-    suspend fun updateModelName(value: String) {
-        appContext.dataStore.edit { it[Keys.modelName] = value.trim() }
-    }
-
-    fun updateApiKey(value: String) {
-        writeSecretValue(SecretKeys.apiKey, value.trim())
-    }
-
-    fun updateHuggingFaceToken(value: String) {
-        writeSecretValue(SecretKeys.huggingFaceToken, value.trim())
     }
 
     fun updateSecrets(apiKey: String, huggingFaceToken: String) {
@@ -155,19 +139,6 @@ class AppPreferences(context: Context) {
             preferences[Keys.topP] = topP.coerceIn(0.0, 1.0)
             preferences[Keys.contextLength] = contextLength.coerceIn(512, 32768)
         }
-    }
-
-    suspend fun updateTemperature(value: Double) {
-        appContext.dataStore.edit { it[Keys.temperature] = value }
-    }
-
-    suspend fun updateTopP(value: Double) {
-        appContext.dataStore.edit { it[Keys.topP] = value }
-    }
-
-    suspend fun updateContextLength(value: Int) {
-        val clamped = value.coerceIn(512, 32768)
-        appContext.dataStore.edit { it[Keys.contextLength] = clamped }
     }
 
     suspend fun updateHuggingFaceAccount(json: String) {

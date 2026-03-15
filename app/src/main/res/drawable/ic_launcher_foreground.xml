@@ -1,16 +1,16 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24"
+    android:viewportWidth="960"
+    android:viewportHeight="960"
     android:tint="#E48A64">
   <group
       android:scaleX="0.58"
       android:scaleY="0.58"
-      android:translateX="5.04"
-      android:translateY="5.04">
+      android:translateX="201.6"
+      android:translateY="201.6">
     <path
         android:fillColor="@android:color/white"
-        android:pathData="M12,2L4,5v6.09c0,5.05 3.41,9.76 8,10.91c4.59,-1.15 8,-5.86 8,-10.91V5L12,2zM15.97,14.41c-1.84,2.17 -5.21,2.1 -6.96,-0.07c-2.19,-2.72 -0.65,-6.72 2.69,-7.33c0.34,-0.06 0.63,0.27 0.51,0.6c-0.46,1.23 -0.39,2.64 0.32,3.86c0.71,1.22 1.89,1.99 3.18,2.2C16.05,13.72 16.2,14.14 15.97,14.41z" />
+        android:pathData="M440,880L440,714L310,842L254,786L440,600L440,520L360,520L174,706L118,650L246,520L80,520L80,440L246,440L118,310L174,254L360,440L440,440L440,360L254,174L310,118L440,246L440,80L520,80L520,246L650,118L706,174L520,360L520,440L600,440L786,254L842,310L714,440L880,440L880,520L714,520L842,650L786,706L600,520L520,520L520,600L706,786L650,842L520,714L520,880L440,880Z" />
   </group>
 </vector>

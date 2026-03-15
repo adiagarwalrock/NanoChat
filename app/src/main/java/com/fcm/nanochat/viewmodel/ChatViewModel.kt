@@ -22,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -35,7 +36,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
-import kotlin.coroutines.coroutineContext
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -269,10 +269,6 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         }
     }
 
-    fun clearNotice() {
-        notice.value = null
-    }
-
     fun retryLastMessage() {
         val prompt = lastUserPrompt ?: return
         draft.value = prompt
@@ -312,19 +308,18 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
             if (!checkAvailability(mode, snapshot)) return
 
             val history = withContext(Dispatchers.IO) { repository.recentTurnsFor(mode, sessionId) }
-            assistantMessageId =
+            val assistantId =
                 withContext(Dispatchers.IO) {
                     repository.saveUserMessage(sessionId, prompt, snapshot)
                     repository.insertAssistantPlaceholder(sessionId, snapshot)
                 }
 
-            val assistantId = assistantMessageId ?: return
-
-            activeAssistantMessageId = assistantMessageId
+            assistantMessageId = assistantId
+            activeAssistantMessageId = assistantId
             activeAssistantPreview = ""
             draft.value = ""
 
-            val parentJob = coroutineContext[Job]
+            val parentJob = currentCoroutineContext()[Job] as? Job
             watchdogJob =
                 viewModelScope.launch {
                     delay(firstTokenWatchdogMs(mode))
@@ -579,7 +574,6 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         const val CANCELLATION_MESSAGE = "Generation cancelled."
         const val WATCHDOG_TIMEOUT_MESSAGE =
                 "No response arrived in time. Retry last, or reselect the local model."
-        val THINKING_BLOCK_REGEX = Regex("(?is)<think>.*?</think>")
     }
 }
 

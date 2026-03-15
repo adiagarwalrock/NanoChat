@@ -9,6 +9,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
+@Suppress("unused")
 class AppVisibilityTracker @Inject constructor() : DefaultLifecycleObserver {
     private val _isForeground = MutableStateFlow(false)
     val isForegroundFlow: StateFlow<Boolean> = _isForeground
