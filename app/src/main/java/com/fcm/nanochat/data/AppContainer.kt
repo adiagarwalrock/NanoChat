@@ -103,9 +103,8 @@ class AppContainer(context: Context) {
     }
 
     companion object {
-        private const val BUNDLED_ALLOWLIST_ASSET = "model_allowlist_1_0_10.json"
-        private const val BUNDLED_ALLOWLIST_VERSION = "1_0_10"
-        private const val REMOTE_ALLOWLIST_URL =
-            "https://raw.githubusercontent.com/google-ai-edge/gallery/main/model_allowlists/1_0_10.json"
+        private const val BUNDLED_ALLOWLIST_ASSET = "model_allowlist_2_0_0.json"
+        private const val BUNDLED_ALLOWLIST_VERSION = "2_0_0"
+        private const val REMOTE_ALLOWLIST_URL = ""
     }
 }

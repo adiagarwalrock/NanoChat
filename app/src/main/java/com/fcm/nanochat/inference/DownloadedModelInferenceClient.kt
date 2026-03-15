@@ -2,6 +2,8 @@ package com.fcm.nanochat.inference
 
 import android.util.Log
 import com.fcm.nanochat.data.SettingsSnapshot
+import com.fcm.nanochat.data.AcceleratorPreference
+import com.fcm.nanochat.data.ThinkingEffort
 import com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig
 import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
 import com.fcm.nanochat.models.registry.InstalledModelRecord
@@ -181,9 +183,9 @@ class DownloadedModelInferenceClient(
 
         val resolvedModelId = record.modelId
         val model = record.allowlistedModel
-        val runtimeConfig = tunedRuntimeConfig(
-            modelId = resolvedModelId,
-            config = model?.defaultConfig ?: request.settings.toFallbackDownloadedConfig()
+        val baseRuntimeConfig = applyAcceleratorPreference(
+            config = model?.defaultConfig ?: request.settings.toFallbackDownloadedConfig(),
+            preference = request.settings.acceleratorPreference
         )
         val localPath = record.localPath?.trim().orEmpty()
         if (localPath.isBlank()) {
@@ -197,47 +199,13 @@ class DownloadedModelInferenceClient(
             "Starting local generation modelId=$resolvedModelId selectedModelId=$activeModelId path=$localPath installState=${record.installState} historyTurns=${request.history.size}"
         )
 
-        val runtimeHandle = runCatching {
-            runtimeManager.acquire(
-                modelId = resolvedModelId,
-                modelPath = localPath,
-                defaultConfig = runtimeConfig,
-                expectedFileName = model?.modelFile,
-                expectedFileType = model?.fileType,
-                expectedSizeBytes = model?.sizeInBytes ?: 0L
-            )
-        }.getOrElse { error ->
-            Log.e(TAG, "Failed to initialize downloaded runtime", error)
-            throw InferenceException.BackendUnavailable(toFriendlyRuntimeError(error.message))
-        }
-
-        if (runtimeConfig.acceleratorHints.isNotEmpty()) {
-            Log.d(
-                TAG,
-                "local_runtime_config modelId=$resolvedModelId accelerators=${
-                    runtimeConfig.acceleratorHints.joinToString(
-                        ","
-                    )
-                }" +
-                        " topK=${runtimeConfig.topK} topP=${runtimeConfig.topP} temperature=${runtimeConfig.temperature} maxTokens=${runtimeConfig.maxTokens}"
-            )
-        }
-
-        val loadedModelId = runtimeManager.loadState.value.modelId
-            ?.trim()
-            ?.lowercase()
-            .orEmpty()
-        if (loadedModelId.isNotBlank() && loadedModelId != resolvedModelId.trim().lowercase()) {
-            throw InferenceException.BackendUnavailable(
-                "Selected local model is not the active runtime. Tap Use model and retry."
-            )
-        }
-
         val formattedPrompt = PromptFormatter.formatDownloadedPrompt(
             history = request.history,
             prompt = request.prompt,
             maxTurns = 20,
-            modelId = resolvedModelId
+            promptFamily = model?.promptFamily ?: resolvedModelId,
+            thinkingEffort = request.settings.thinkingEffort,
+            supportsThinking = model?.supportsThinking ?: false
         )
         logFormattedPrompt(
             modelId = resolvedModelId,
@@ -246,300 +214,364 @@ class DownloadedModelInferenceClient(
             userMessage = formattedPrompt.userMessage
         )
 
-        val generationStart = System.currentTimeMillis()
-        val noTokenWatchdogMs = configuredNoTokenWatchdogMs()
-        val visibleStallWatchdogMs = configuredVisibleStallWatchdogMs()
-        val parentJob = currentCoroutineContext()[Job]
-        var firstRawCallbackAt = 0L
-        var firstVisibleTokenAt = 0L
-        var lastVisibleProgressAt = 0L
-        var rawCallbackCount = 0
-        var nonVisibleChunkCount = 0
-        var visibleChunkCount = 0
-        var emittedVisibleChars = 0
-        var rawOutput = ""
-        var visibleOutput = ""
-        var completionReason = "completed"
-
-        Log.d(
-            TAG,
-            "local_generation_started modelId=$resolvedModelId family=${formattedPrompt.family.name} watchdogMs=$noTokenWatchdogMs stallMs=$visibleStallWatchdogMs"
-        )
-
-        try {
-            coroutineScope {
-                val noVisibleWatchdogJob = launch {
-                    delay(noTokenWatchdogMs)
-                    val now = System.currentTimeMillis()
-                    if (shouldTriggerNoVisibleWatchdog(
-                            firstVisibleTokenAtMs = firstVisibleTokenAt,
-                            startedAtMs = generationStart,
-                            nowMs = now,
-                            thresholdMs = noTokenWatchdogMs
-                        )
-                    ) {
-                        completionReason =
-                            when (visibilityState(firstRawCallbackAt, firstVisibleTokenAt)) {
-                                LocalGenerationVisibilityState.NO_CALLBACK -> "no_callback_watchdog"
-                                LocalGenerationVisibilityState.CALLBACK_NO_VISIBLE -> "callbacks_without_visible_watchdog"
-                                LocalGenerationVisibilityState.VISIBLE_STARTED -> "visible_watchdog_skipped"
-                            }
-                        Log.w(
-                            TAG,
-                            "local_generation_watchdog_triggered modelId=$resolvedModelId waitedMs=$noTokenWatchdogMs state=${
-                                visibilityState(
-                                    firstRawCallbackAt,
-                                    firstVisibleTokenAt
-                                ).name
-                            } rawCallbacks=$rawCallbackCount"
-                        )
-                        runtimeHandle.runtime.cancelActiveGeneration("no_visible_watchdog")
-                        parentJob?.cancel(NoTokenWatchdogTimeout(NO_TOKEN_WATCHDOG_MESSAGE))
-                    }
-                }
-
-                val visibleStallWatchdogJob = launch {
-                    while (true) {
-                        delay(300L)
-                        if (firstVisibleTokenAt == 0L) {
-                            continue
-                        }
-                        val lastProgressAt = lastVisibleProgressAt
-                            .takeIf { it > 0L }
-                            ?: firstVisibleTokenAt
-                        val now = System.currentTimeMillis()
-                        if (shouldTriggerVisibleStallWatchdog(
-                                firstVisibleTokenAtMs = firstVisibleTokenAt,
-                                lastVisibleProgressAtMs = lastProgressAt,
-                                nowMs = now,
-                                thresholdMs = visibleStallWatchdogMs
-                            )
-                        ) {
-                            completionReason = "visible_stall_watchdog"
-                            Log.w(
-                                TAG,
-                                "local_generation_visible_stall modelId=$resolvedModelId stallMs=$visibleStallWatchdogMs rawCallbacks=$rawCallbackCount visibleChunks=$visibleChunkCount visibleChars=$emittedVisibleChars"
-                            )
-                            runtimeHandle.runtime.cancelActiveGeneration("visible_stall_watchdog")
-                            parentJob?.cancel(
-                                VisibleOutputStalledTimeout(
-                                    VISIBLE_STALL_WATCHDOG_MESSAGE
-                                )
-                            )
-                            return@launch
-                        }
-                    }
-                }
-
-                try {
-                    runtimeHandle.runtime.stream(
-                        prompt = formattedPrompt.userMessage,
-                        systemInstruction = formattedPrompt.systemInstruction
-                    ).collect { runtimeChunk ->
-                        currentCoroutineContext().ensureActive()
-                        rawCallbackCount += 1
-                        if (firstRawCallbackAt == 0L) {
-                            firstRawCallbackAt = System.currentTimeMillis()
-                            Log.d(
-                                TAG,
-                                "local_generation_first_callback modelId=$resolvedModelId callbackMs=${firstRawCallbackAt - generationStart} rawChunk='${
-                                    chunkPreview(
-                                        runtimeChunk
-                                    )
-                                }'"
-                            )
-                        }
-
-                        if (runtimeChunk.isBlank() || runtimeChunk.equals(
-                                "null",
-                                ignoreCase = true
-                            )
-                        ) {
-                            nonVisibleChunkCount += 1
-                            if (shouldLogChunk(rawCallbackCount)) {
-                                Log.d(
-                                    TAG,
-                                    "local_generation_chunk_non_visible modelId=$resolvedModelId index=$rawCallbackCount reason=blank_or_null raw='${
-                                        chunkPreview(
-                                            runtimeChunk
-                                        )
-                                    }'"
-                                )
-                            }
-                            return@collect
-                        }
-
-                        rawOutput = mergeRuntimeChunk(rawOutput, runtimeChunk)
-                        val sanitizedSnapshot = GeneratedTextSanitizer.sanitize(rawOutput)
-                        val visibleDelta = incrementalVisibleDelta(visibleOutput, sanitizedSnapshot)
-                        visibleOutput = sanitizedSnapshot
-
-                        if (visibleDelta.isBlank()) {
-                            nonVisibleChunkCount += 1
-                            if (shouldLogChunk(rawCallbackCount)) {
-                                Log.d(
-                                    TAG,
-                                    "local_generation_chunk_non_visible modelId=$resolvedModelId index=$rawCallbackCount reason=sanitized_empty raw='${
-                                        chunkPreview(
-                                            runtimeChunk
-                                        )
-                                    }' sanitizedLen=${sanitizedSnapshot.length}"
-                                )
-                            }
-                            return@collect
-                        }
-
-                        if (isLikelyDegenerateOutput(visibleOutput)) {
-                            completionReason = "degenerate_output"
-                            Log.w(
-                                TAG,
-                                "local_generation_degenerate_output modelId=$resolvedModelId sample='${
-                                    chunkPreview(
-                                        visibleOutput
-                                    )
-                                }' visibleLen=${visibleOutput.length}"
-                            )
-                            runtimeHandle.runtime.cancelActiveGeneration("degenerate_output")
-                            throw DegenerateOutputException()
-                        }
-
-                        if (firstVisibleTokenAt == 0L) {
-                            firstVisibleTokenAt = System.currentTimeMillis()
-                            Log.d(
-                                TAG,
-                                "local_generation_first_token modelId=$resolvedModelId firstTokenMs=${firstVisibleTokenAt - generationStart} rawCallbacks=$rawCallbackCount"
-                            )
-                        }
-                        lastVisibleProgressAt = System.currentTimeMillis()
-
-                        visibleChunkCount += 1
-                        emittedVisibleChars += visibleDelta.length
-                        if (shouldLogChunk(rawCallbackCount)) {
-                            Log.d(
-                                TAG,
-                                "local_generation_chunk_visible modelId=$resolvedModelId index=$rawCallbackCount deltaLen=${visibleDelta.length} visibleLen=${visibleOutput.length} delta='${
-                                    chunkPreview(
-                                        visibleDelta
-                                    )
-                                }'"
-                            )
-                        }
-                        emit(visibleDelta)
-                    }
-                } finally {
-                    noVisibleWatchdogJob.cancel()
-                    visibleStallWatchdogJob.cancel()
-                    Log.d(
-                        TAG,
-                        "local_generation_watchdog_stopped modelId=$resolvedModelId firstRawCallbackMs=${if (firstRawCallbackAt == 0L) -1 else firstRawCallbackAt - generationStart} firstVisibleMs=${if (firstVisibleTokenAt == 0L) -1 else firstVisibleTokenAt - generationStart}"
-                    )
-                }
+        suspend fun kotlinx.coroutines.flow.FlowCollector<String>.emitGenerationAttempt(
+            runtimeConfig: AllowlistDefaultConfig
+        ) {
+            val runtimeHandle = runCatching {
+                runtimeManager.acquire(
+                    modelId = resolvedModelId,
+                    modelPath = localPath,
+                    defaultConfig = runtimeConfig,
+                    expectedFileName = model?.modelFile,
+                    expectedFileType = model?.fileType,
+                    expectedSizeBytes = model?.sizeInBytes ?: 0L
+                )
+            }.getOrElse { error ->
+                Log.e(TAG, "Failed to initialize downloaded runtime", error)
+                throw InferenceException.BackendUnavailable(toFriendlyRuntimeError(error.message))
             }
 
-            val finalizedVisibleOutput = GeneratedTextSanitizer.sanitize(rawOutput)
-            val trailingDelta = incrementalVisibleDelta(visibleOutput, finalizedVisibleOutput)
-            if (trailingDelta.isNotBlank()) {
+            if (runtimeConfig.acceleratorHints.isNotEmpty()) {
+                Log.d(
+                    TAG,
+                    "local_runtime_config modelId=$resolvedModelId accelerators=${runtimeConfig.acceleratorHints.joinToString(",")}" +
+                        " strict=${runtimeConfig.strictAccelerator}" +
+                        " topK=${runtimeConfig.topK} topP=${runtimeConfig.topP} temperature=${runtimeConfig.temperature} maxTokens=${runtimeConfig.maxTokens}"
+                )
+            }
+
+            val loadedModelId = runtimeManager.loadState.value.modelId
+                ?.trim()
+                ?.lowercase()
+                .orEmpty()
+            if (loadedModelId.isNotBlank() && loadedModelId != resolvedModelId.trim().lowercase()) {
+                throw InferenceException.BackendUnavailable(
+                    "Selected local model is not the active runtime. Tap Use model and retry."
+                )
+            }
+
+            val generationStart = System.currentTimeMillis()
+            val noTokenWatchdogMs = configuredNoTokenWatchdogMs()
+            val visibleStallWatchdogMs = configuredVisibleStallWatchdogMs()
+            val parentJob = currentCoroutineContext()[Job]
+            var firstRawCallbackAt = 0L
+            var firstVisibleTokenAt = 0L
+            var lastVisibleProgressAt = 0L
+            var rawCallbackCount = 0
+            var nonVisibleChunkCount = 0
+            var visibleChunkCount = 0
+            var emittedVisibleChars = 0
+            var rawOutput = ""
+            var visibleOutput = ""
+            var emittedOutput = ""
+            var emissionUnlocked = false
+            var completionReason = "completed"
+
+            Log.d(
+                TAG,
+                "local_generation_started modelId=$resolvedModelId family=${formattedPrompt.family.name} watchdogMs=$noTokenWatchdogMs stallMs=$visibleStallWatchdogMs"
+            )
+
+            suspend fun emitStableDelta(currentSnapshot: String, chunkIndex: Int) {
+                val emittedDelta = incrementalVisibleDelta(emittedOutput, currentSnapshot)
+                if (emittedDelta.isBlank()) {
+                    return
+                }
+
                 if (firstVisibleTokenAt == 0L) {
                     firstVisibleTokenAt = System.currentTimeMillis()
-                    lastVisibleProgressAt = firstVisibleTokenAt
-                } else {
-                    lastVisibleProgressAt = System.currentTimeMillis()
+                    Log.d(
+                        TAG,
+                        "local_generation_first_token modelId=$resolvedModelId firstTokenMs=${firstVisibleTokenAt - generationStart} rawCallbacks=$rawCallbackCount"
+                    )
                 }
+                lastVisibleProgressAt = System.currentTimeMillis()
                 visibleChunkCount += 1
-                emittedVisibleChars += trailingDelta.length
-                visibleOutput = finalizedVisibleOutput
-                emit(trailingDelta)
+                emittedVisibleChars += emittedDelta.length
+                emittedOutput = currentSnapshot
+                if (shouldLogChunk(chunkIndex)) {
+                    Log.d(
+                        TAG,
+                        "local_generation_chunk_visible modelId=$resolvedModelId index=$chunkIndex deltaLen=${emittedDelta.length} visibleLen=${currentSnapshot.length} delta='${chunkPreview(emittedDelta)}'"
+                    )
+                }
+                this@emitGenerationAttempt.emit(emittedDelta)
             }
 
-            if (finalizedVisibleOutput.isBlank()) {
-                completionReason = "blank_after_sanitize"
-                throw InferenceException.BackendUnavailable(
-                    "Local model produced no visible text. Retry, or reselect this model."
-                )
-            }
-
-            val finishedAt = System.currentTimeMillis()
-            val generationDurationMs = (finishedAt - generationStart).coerceAtLeast(1L)
-            val tokensPerSecond = visibleChunkCount * 1000.0 / generationDurationMs.toDouble()
-
-            telemetry.onMetrics(
-                LocalRuntimeMetrics(
-                    modelId = resolvedModelId,
-                    initDurationMs = runtimeHandle.initDurationMs,
-                    timeToFirstTokenMs = if (firstVisibleTokenAt == 0L) {
-                        finishedAt - generationStart
-                    } else {
-                        firstVisibleTokenAt - generationStart
-                    },
-                    generationDurationMs = generationDurationMs,
-                    tokensPerSecond = tokensPerSecond,
-                    backend = "litert-lm"
-                )
-            )
-
-            Log.d(
-                TAG,
-                "local_generation_completed modelId=$resolvedModelId completionReason=$completionReason rawCallbacks=$rawCallbackCount nonVisibleChunks=$nonVisibleChunkCount visibleChunks=$visibleChunkCount visibleChars=$emittedVisibleChars durationMs=$generationDurationMs"
-            )
-        } catch (cancellation: CancellationException) {
-            runtimeHandle.runtime.cancelActiveGeneration("cancelled")
-            if (cancellation is NoTokenWatchdogTimeout) {
-                Log.w(
-                    TAG,
-                    "local_generation_no_visible modelId=$resolvedModelId waitedMs=$noTokenWatchdogMs state=${
-                        visibilityState(
-                            firstRawCallbackAt,
-                            firstVisibleTokenAt
-                        ).name
-                    } rawCallbacks=$rawCallbackCount"
-                )
-                throw InferenceException.BackendUnavailable(
-                    cancellation.message ?: NO_TOKEN_WATCHDOG_MESSAGE
-                )
-            }
-            if (cancellation is VisibleOutputStalledTimeout) {
-                completionReason = "visible_stall_watchdog"
-                val finalizedVisibleOutput = GeneratedTextSanitizer.sanitize(rawOutput)
-                if (finalizedVisibleOutput.isNotBlank()) {
-                    val trailingDelta =
-                        incrementalVisibleDelta(visibleOutput, finalizedVisibleOutput)
-                    if (trailingDelta.isNotBlank()) {
-                        visibleChunkCount += 1
-                        emittedVisibleChars += trailingDelta.length
-                        visibleOutput = finalizedVisibleOutput
-                        emit(trailingDelta)
+            try {
+                coroutineScope {
+                    val noVisibleWatchdogJob = launch {
+                        delay(noTokenWatchdogMs)
+                        val now = System.currentTimeMillis()
+                        if (shouldTriggerNoVisibleWatchdog(
+                                firstVisibleTokenAtMs = firstVisibleTokenAt,
+                                startedAtMs = generationStart,
+                                nowMs = now,
+                                thresholdMs = noTokenWatchdogMs
+                            )
+                        ) {
+                            completionReason =
+                                when (visibilityState(firstRawCallbackAt, firstVisibleTokenAt)) {
+                                    LocalGenerationVisibilityState.NO_CALLBACK -> "no_callback_watchdog"
+                                    LocalGenerationVisibilityState.CALLBACK_NO_VISIBLE -> "callbacks_without_visible_watchdog"
+                                    LocalGenerationVisibilityState.VISIBLE_STARTED -> "visible_watchdog_skipped"
+                                }
+                            Log.w(
+                                TAG,
+                                "local_generation_watchdog_triggered modelId=$resolvedModelId waitedMs=$noTokenWatchdogMs state=${visibilityState(firstRawCallbackAt, firstVisibleTokenAt).name} rawCallbacks=$rawCallbackCount"
+                            )
+                            runtimeHandle.runtime.cancelActiveGeneration("no_visible_watchdog")
+                            parentJob?.cancel(NoTokenWatchdogTimeout(NO_TOKEN_WATCHDOG_MESSAGE))
+                        }
                     }
+
+                    val visibleStallWatchdogJob = launch {
+                        while (true) {
+                            delay(300L)
+                            if (firstVisibleTokenAt == 0L) {
+                                continue
+                            }
+                            val lastProgressAt = lastVisibleProgressAt
+                                .takeIf { it > 0L }
+                                ?: firstVisibleTokenAt
+                            val now = System.currentTimeMillis()
+                            if (shouldTriggerVisibleStallWatchdog(
+                                    firstVisibleTokenAtMs = firstVisibleTokenAt,
+                                    lastVisibleProgressAtMs = lastProgressAt,
+                                    nowMs = now,
+                                    thresholdMs = visibleStallWatchdogMs
+                                )
+                            ) {
+                                completionReason = "visible_stall_watchdog"
+                                Log.w(
+                                    TAG,
+                                    "local_generation_visible_stall modelId=$resolvedModelId stallMs=$visibleStallWatchdogMs rawCallbacks=$rawCallbackCount visibleChunks=$visibleChunkCount visibleChars=$emittedVisibleChars"
+                                )
+                                runtimeHandle.runtime.cancelActiveGeneration("visible_stall_watchdog")
+                                parentJob?.cancel(
+                                    VisibleOutputStalledTimeout(
+                                        VISIBLE_STALL_WATCHDOG_MESSAGE
+                                    )
+                                )
+                                return@launch
+                            }
+                        }
+                    }
+
+                    try {
+                        runtimeHandle.runtime.stream(
+                            prompt = formattedPrompt.userMessage,
+                            systemInstruction = formattedPrompt.systemInstruction
+                        ).collect { runtimeChunk ->
+                            currentCoroutineContext().ensureActive()
+                            rawCallbackCount += 1
+                            if (firstRawCallbackAt == 0L) {
+                                firstRawCallbackAt = System.currentTimeMillis()
+                                Log.d(
+                                    TAG,
+                                    "local_generation_first_callback modelId=$resolvedModelId callbackMs=${firstRawCallbackAt - generationStart} rawChunk='${chunkPreview(runtimeChunk)}'"
+                                )
+                            }
+
+                            if (runtimeChunk.isBlank() || runtimeChunk.equals(
+                                    "null",
+                                    ignoreCase = true
+                                )
+                            ) {
+                                nonVisibleChunkCount += 1
+                                if (shouldLogChunk(rawCallbackCount)) {
+                                    Log.d(
+                                        TAG,
+                                        "local_generation_chunk_non_visible modelId=$resolvedModelId index=$rawCallbackCount reason=blank_or_null raw='${chunkPreview(runtimeChunk)}'"
+                                    )
+                                }
+                                return@collect
+                            }
+
+                            rawOutput = mergeRuntimeChunk(rawOutput, runtimeChunk)
+                            val sanitizedSnapshot = GeneratedTextSanitizer.sanitize(rawOutput)
+                            val snapshotDelta = incrementalVisibleDelta(visibleOutput, sanitizedSnapshot)
+                            visibleOutput = sanitizedSnapshot
+
+                            if (snapshotDelta.isBlank()) {
+                                nonVisibleChunkCount += 1
+                                if (shouldLogChunk(rawCallbackCount)) {
+                                    Log.d(
+                                        TAG,
+                                        "local_generation_chunk_non_visible modelId=$resolvedModelId index=$rawCallbackCount reason=sanitized_empty raw='${chunkPreview(runtimeChunk)}' sanitizedLen=${sanitizedSnapshot.length}"
+                                    )
+                                }
+                                return@collect
+                            }
+
+                            if (isLikelyDegenerateOutput(visibleOutput)) {
+                                completionReason = "degenerate_output"
+                                Log.w(
+                                    TAG,
+                                    "local_generation_degenerate_output modelId=$resolvedModelId sample='${chunkPreview(visibleOutput)}' visibleLen=${visibleOutput.length}"
+                                )
+                                runtimeHandle.runtime.cancelActiveGeneration("degenerate_output")
+                                throw DegenerateOutputException()
+                            }
+
+                            if (!emissionUnlocked) {
+                                if (!shouldUnlockVisibleEmission(visibleOutput)) {
+                                    nonVisibleChunkCount += 1
+                                    if (shouldLogChunk(rawCallbackCount)) {
+                                        Log.d(
+                                            TAG,
+                                            "local_generation_chunk_non_visible modelId=$resolvedModelId index=$rawCallbackCount reason=buffering_pre_unlock raw='${chunkPreview(runtimeChunk)}' visibleLen=${visibleOutput.length}"
+                                        )
+                                    }
+                                    return@collect
+                                }
+                                emissionUnlocked = true
+                            }
+
+                            emitStableDelta(
+                                currentSnapshot = visibleOutput,
+                                chunkIndex = rawCallbackCount
+                            )
+                        }
+                    } finally {
+                        noVisibleWatchdogJob.cancel()
+                        visibleStallWatchdogJob.cancel()
+                        Log.d(
+                            TAG,
+                            "local_generation_watchdog_stopped modelId=$resolvedModelId firstRawCallbackMs=${if (firstRawCallbackAt == 0L) -1 else firstRawCallbackAt - generationStart} firstVisibleMs=${if (firstVisibleTokenAt == 0L) -1 else firstVisibleTokenAt - generationStart}"
+                        )
+                    }
+                }
+
+                val finalizedVisibleOutput = GeneratedTextSanitizer.sanitize(rawOutput)
+                if (isLikelyDegenerateOutput(finalizedVisibleOutput)) {
+                    completionReason = "degenerate_output"
+                    throw DegenerateOutputException()
+                }
+                if (!emissionUnlocked && finalizedVisibleOutput.isNotBlank()) {
+                    emissionUnlocked = true
+                }
+                if (emissionUnlocked) {
+                    emitStableDelta(
+                        currentSnapshot = finalizedVisibleOutput,
+                        chunkIndex = rawCallbackCount
+                    )
+                }
+
+                if (finalizedVisibleOutput.isBlank()) {
+                    completionReason = "blank_after_sanitize"
+                    throw InferenceException.BackendUnavailable(
+                        "Local model produced no visible text. Retry, or reselect this model."
+                    )
+                }
+
+                val finishedAt = System.currentTimeMillis()
+                val generationDurationMs = (finishedAt - generationStart).coerceAtLeast(1L)
+                val tokensPerSecond = visibleChunkCount * 1000.0 / generationDurationMs.toDouble()
+
+                telemetry.onMetrics(
+                    LocalRuntimeMetrics(
+                        modelId = resolvedModelId,
+                        initDurationMs = runtimeHandle.initDurationMs,
+                        timeToFirstTokenMs = if (firstVisibleTokenAt == 0L) {
+                            finishedAt - generationStart
+                        } else {
+                            firstVisibleTokenAt - generationStart
+                        },
+                        generationDurationMs = generationDurationMs,
+                        tokensPerSecond = tokensPerSecond,
+                        backend = "litert-lm"
+                    )
+                )
+
+                Log.d(
+                    TAG,
+                    "local_generation_completed modelId=$resolvedModelId completionReason=$completionReason rawCallbacks=$rawCallbackCount nonVisibleChunks=$nonVisibleChunkCount visibleChunks=$visibleChunkCount visibleChars=$emittedVisibleChars durationMs=$generationDurationMs"
+                )
+            } catch (cancellation: CancellationException) {
+                runtimeHandle.runtime.cancelActiveGeneration("cancelled")
+                if (cancellation is NoTokenWatchdogTimeout) {
                     Log.w(
                         TAG,
-                        "local_generation_stalled_after_visible modelId=$resolvedModelId rawCallbacks=$rawCallbackCount nonVisibleChunks=$nonVisibleChunkCount visibleChunks=$visibleChunkCount visibleChars=$emittedVisibleChars"
+                        "local_generation_no_visible modelId=$resolvedModelId waitedMs=$noTokenWatchdogMs state=${visibilityState(firstRawCallbackAt, firstVisibleTokenAt).name} rawCallbacks=$rawCallbackCount"
                     )
-                    return@flow
+                    throw InferenceException.BackendUnavailable(
+                        cancellation.message ?: NO_TOKEN_WATCHDOG_MESSAGE
+                    )
                 }
-                throw InferenceException.BackendUnavailable(
-                    cancellation.message ?: VISIBLE_STALL_WATCHDOG_MESSAGE
+                if (cancellation is VisibleOutputStalledTimeout) {
+                    completionReason = "visible_stall_watchdog"
+                    val finalizedVisibleOutput = GeneratedTextSanitizer.sanitize(rawOutput)
+                    if (finalizedVisibleOutput.isNotBlank()) {
+                        if (!emissionUnlocked) {
+                            emissionUnlocked = true
+                        }
+                        emitStableDelta(
+                            currentSnapshot = finalizedVisibleOutput,
+                            chunkIndex = rawCallbackCount
+                        )
+                        Log.w(
+                            TAG,
+                            "local_generation_stalled_after_visible modelId=$resolvedModelId rawCallbacks=$rawCallbackCount nonVisibleChunks=$nonVisibleChunkCount visibleChunks=$visibleChunkCount visibleChars=$emittedVisibleChars"
+                        )
+                        return
+                    }
+                    throw InferenceException.BackendUnavailable(
+                        cancellation.message ?: VISIBLE_STALL_WATCHDOG_MESSAGE
+                    )
+                }
+                Log.d(
+                    TAG,
+                    "local_generation_cancelled modelId=$resolvedModelId reason=${cancellation.message.orEmpty()} rawCallbacks=$rawCallbackCount visibleChars=$emittedVisibleChars"
                 )
+                throw cancellation
+            } catch (backendUnavailable: InferenceException.BackendUnavailable) {
+                Log.w(
+                    TAG,
+                    "local_generation_failed modelId=$resolvedModelId completionReason=$completionReason message=${backendUnavailable.message.orEmpty()}"
+                )
+                throw backendUnavailable
+            } catch (degenerate: DegenerateOutputException) {
+                throw degenerate
+            } catch (error: Throwable) {
+                completionReason = "error"
+                runtimeHandle.runtime.cancelActiveGeneration("error")
+                Log.e(TAG, "Downloaded runtime generation failed modelId=$resolvedModelId", error)
+                throw InferenceException.BackendUnavailable(toFriendlyRuntimeError(error.message))
             }
-            Log.d(
-                TAG,
-                "local_generation_cancelled modelId=$resolvedModelId reason=${cancellation.message.orEmpty()} rawCallbacks=$rawCallbackCount visibleChars=$emittedVisibleChars"
-            )
-            throw cancellation
-        } catch (backendUnavailable: InferenceException.BackendUnavailable) {
-            Log.w(
-                TAG,
-                "local_generation_failed modelId=$resolvedModelId completionReason=$completionReason message=${backendUnavailable.message.orEmpty()}"
-            )
-            throw backendUnavailable
-        } catch (degenerate: DegenerateOutputException) {
-            throw InferenceException.BackendUnavailable(
-                "Local model produced unstable repetitive output. Retry, or switch to a different backend/model."
-            )
-        } catch (error: Throwable) {
-            completionReason = "error"
-            runtimeHandle.runtime.cancelActiveGeneration("error")
-            Log.e(TAG, "Downloaded runtime generation failed modelId=$resolvedModelId", error)
-            throw InferenceException.BackendUnavailable(toFriendlyRuntimeError(error.message))
         }
+
+        val attemptConfigs = generationAttemptConfigs(
+            config = baseRuntimeConfig
+        )
+
+        for ((attemptIndex, runtimeConfig) in attemptConfigs.withIndex()) {
+            try {
+                emitGenerationAttempt(runtimeConfig)
+                return@flow
+            } catch (degenerate: DegenerateOutputException) {
+                val shouldRetry = shouldRetryOnCpuFallback(
+                    attemptIndex = attemptIndex,
+                    attemptCount = attemptConfigs.size
+                )
+                if (!shouldRetry) {
+                    throw unstableOutputException(request.settings.acceleratorPreference)
+                }
+
+                val nextConfig = attemptConfigs[attemptIndex + 1]
+                Log.w(
+                    TAG,
+                    "local_generation_retrying modelId=$resolvedModelId from=${runtimeConfig.accelerators} to=${nextConfig.accelerators} reason=degenerate_output"
+                )
+                try {
+                    runtimeManager.release()
+                } catch (_: Throwable) {
+                    // Ignore release failures and continue with the CPU retry.
+                }
+            }
+        }
+
+        throw unstableOutputException(request.settings.acceleratorPreference)
     }
 
     override fun release() {
@@ -601,15 +633,25 @@ class DownloadedModelInferenceClient(
 
     private fun isLikelyDegenerateOutput(output: String): Boolean {
         val compact = output.filterNot(Char::isWhitespace)
-        if (compact.length < 80) return false
+        if (compact.length < 48) return false
 
         val first = compact.first()
         if (first in '0'..'9' || first in 'a'..'z' || first in 'A'..'Z') return false
-        val punctuationCandidates = setOf('\'', '$', '-', '_', '=', '|', '`', '.')
+        val punctuationCandidates = setOf('#', '\'', '$', '-', '_', '=', '|', '`', '.', '*', '+')
         if (first !in punctuationCandidates) return false
 
         val sameRatio = compact.count { it == first }.toDouble() / compact.length.toDouble()
         return sameRatio >= 0.95
+    }
+
+    private fun shouldUnlockVisibleEmission(output: String): Boolean {
+        if (output.isBlank()) return false
+
+        val normalized = output
+            .replace("<think>", "", ignoreCase = true)
+            .replace("</think>", "", ignoreCase = true)
+            .replace(Regex("(?i)<[^>]*$"), "")
+        return normalized.any(Char::isLetterOrDigit)
     }
 
     private fun configuredNoTokenWatchdogMs(): Long {
@@ -654,35 +696,59 @@ class DownloadedModelInferenceClient(
             topP = topP,
             temperature = temperature,
             maxTokens = contextLength,
-            accelerators = "cpu"
+            accelerators = "cpu",
+            strictAccelerator = false
         )
     }
 
-    private fun tunedRuntimeConfig(
-        modelId: String,
-        config: AllowlistDefaultConfig
+    private fun applyAcceleratorPreference(
+        config: AllowlistDefaultConfig,
+        preference: AcceleratorPreference
     ): AllowlistDefaultConfig {
-        val normalizedModelId = modelId.trim().lowercase()
-        val shouldPreferCpu = normalizedModelId.contains("qwen") ||
-                normalizedModelId.contains("deepseek")
-        if (!shouldPreferCpu) {
-            return config
+        if (preference == AcceleratorPreference.AUTO) {
+            return config.copy(strictAccelerator = false)
         }
 
-        val reorderedHints = buildList {
-            add("cpu")
-            config.acceleratorHints
-                .map { it.trim().lowercase() }
-                .filter { it.isNotBlank() && it != "cpu" }
-                .forEach { add(it) }
-        }.distinct()
-
-        if (reorderedHints == config.acceleratorHints.map { it.trim().lowercase() }
-                .filter { it.isNotBlank() }) {
-            return config
+        val normalized = when (preference) {
+            AcceleratorPreference.AUTO -> config.accelerators
+            AcceleratorPreference.CPU -> "cpu"
+            AcceleratorPreference.GPU -> "gpu"
+            AcceleratorPreference.NNAPI -> "npu"
         }
+        return config.copy(accelerators = normalized, strictAccelerator = true)
+    }
 
-        return config.copy(accelerators = reorderedHints.joinToString(","))
+    private fun generationAttemptConfigs(
+        config: AllowlistDefaultConfig
+    ): List<AllowlistDefaultConfig> {
+        val attempts = mutableListOf(config)
+        val firstAccelerator = config.acceleratorHints.firstOrNull()?.lowercase().orEmpty()
+        val alreadyCpuOnly = config.acceleratorHints.size == 1 && firstAccelerator == "cpu"
+        if (!alreadyCpuOnly && firstAccelerator != "cpu") {
+            attempts += config.copy(accelerators = "cpu", strictAccelerator = true)
+        }
+        return attempts.distinctBy { attempt -> "${attempt.accelerators}|${attempt.strictAccelerator}" }
+    }
+
+    private fun shouldRetryOnCpuFallback(
+        attemptIndex: Int,
+        attemptCount: Int
+    ): Boolean {
+        return attemptIndex + 1 < attemptCount
+    }
+
+    private fun unstableOutputException(
+        preference: AcceleratorPreference
+    ): InferenceException.BackendUnavailable {
+        val message = when (preference) {
+            AcceleratorPreference.CPU -> {
+                "Local model produced unstable repetitive output on CPU. Retry, or switch to a different model."
+            }
+            else -> {
+                "Local model produced unstable repetitive output on all available accelerators. Retry, or switch to a different model."
+            }
+        }
+        return InferenceException.BackendUnavailable(message)
     }
 
     private fun toFriendlyRuntimeError(raw: String?): String {
@@ -781,3 +847,9 @@ private class NoTokenWatchdogTimeout(message: String) : CancellationException(me
 private class VisibleOutputStalledTimeout(message: String) : CancellationException(message)
 
 private class DegenerateOutputException : RuntimeException("Degenerate local output")
+
+
+
+
+
+

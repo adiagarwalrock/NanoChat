@@ -40,6 +40,7 @@ data class ChatScreenState(
     val activeLocalModelName: String? = null,
     val isLocalModelReady: Boolean = false,
     val localModelStatusMessage: String? = null,
+    val localModelSupportsThinking: Boolean = false,
     val isSending: Boolean = false,
     val notice: String? = null
 )
@@ -52,6 +53,8 @@ data class SettingsScreenState(
     val temperature: Double = com.fcm.nanochat.data.AppPreferences.DEFAULT_TEMPERATURE,
     val topP: Double = com.fcm.nanochat.data.AppPreferences.DEFAULT_TOP_P,
     val contextLength: Int = com.fcm.nanochat.data.AppPreferences.DEFAULT_CONTEXT_LENGTH,
+    val thinkingEffort: com.fcm.nanochat.data.ThinkingEffort = com.fcm.nanochat.data.ThinkingEffort.MEDIUM,
+    val acceleratorPreference: com.fcm.nanochat.data.AcceleratorPreference = com.fcm.nanochat.data.AcceleratorPreference.AUTO,
     val stats: UsageStats = UsageStats(),
     val saveNotice: String? = null,
     val clearNotice: String? = null,

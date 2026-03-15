@@ -114,7 +114,9 @@ class ActiveModelResolverTest {
             acceleratorHints = listOf("cpu"),
             downloadUrl = "https://example.com/model-a.litertlm",
             fileType = "litertlm",
-            supportedAbis = emptyList()
+            supportedAbis = emptyList(),
+            promptFamily = null,
+            supportsThinking = false
         )
     }
 }

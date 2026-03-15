@@ -1,11 +1,13 @@
 package com.fcm.nanochat.inference
 
+import com.fcm.nanochat.data.ThinkingEffort
 import com.fcm.nanochat.model.ChatRole
 
 enum class DownloadedPromptFamily {
     QWEN,
     DEEPSEEK,
     GEMMA,
+    PHI,
     GENERIC
 }
 
@@ -17,11 +19,7 @@ data class DownloadedPrompt(
 
 object PromptFormatter {
     private const val DEFAULT_SYSTEM_PROMPT =
-        "You are NanoChat, a concise and helpful local assistant."
-    private const val DEEPSEEK_SYSTEM_PROMPT =
-        "You are NanoChat. Be concise, and show reasoning only when needed."
-    private const val GEMMA_SYSTEM_PROMPT =
-        "You are NanoChat running locally on Gemma. Keep answers clear and actionable."
+        "You are NanoChat, a helpful local assistant. Reply in clean Markdown and keep numbered or bulleted lists on separate lines."
 
     fun historyWindow(history: List<ChatTurn>, maxTurns: Int): List<ChatTurn> {
         if (history.size <= maxTurns) return history
@@ -51,13 +49,17 @@ object PromptFormatter {
         history: List<ChatTurn>,
         prompt: String,
         maxTurns: Int = 20,
-        modelId: String? = null
+        promptFamily: String? = null,
+        thinkingEffort: ThinkingEffort = ThinkingEffort.MEDIUM,
+        supportsThinking: Boolean = false
     ): String {
         return formatDownloadedPrompt(
             history = history,
             prompt = prompt,
             maxTurns = maxTurns,
-            modelId = modelId
+            promptFamily = promptFamily,
+            thinkingEffort = thinkingEffort,
+            supportsThinking = supportsThinking
         ).userMessage
     }
 
@@ -65,27 +67,20 @@ object PromptFormatter {
         history: List<ChatTurn>,
         prompt: String,
         maxTurns: Int = 20,
-        modelId: String? = null
+        promptFamily: String? = null,
+        thinkingEffort: ThinkingEffort = ThinkingEffort.MEDIUM,
+        supportsThinking: Boolean = false
     ): DownloadedPrompt {
-        val family = detectDownloadedPromptFamily(modelId)
-        val systemPrompt = when (family) {
-            DownloadedPromptFamily.DEEPSEEK -> DEEPSEEK_SYSTEM_PROMPT
-            DownloadedPromptFamily.GEMMA -> GEMMA_SYSTEM_PROMPT
-            DownloadedPromptFamily.QWEN,
-            DownloadedPromptFamily.GENERIC -> DEFAULT_SYSTEM_PROMPT
-        }
+        val family = promptFamily.toPromptFamily()
+        val systemPrompt = applyThinkingInstruction(
+            systemPrompt = DEFAULT_SYSTEM_PROMPT,
+            effort = thinkingEffort,
+            supportsThinking = supportsThinking
+        )
 
-        val userMessage = when (family) {
-            DownloadedPromptFamily.QWEN, DownloadedPromptFamily.DEEPSEEK ->
-                buildQwenUserMessage(prompt)
-
-            DownloadedPromptFamily.GEMMA, DownloadedPromptFamily.GENERIC ->
-                buildSpeakerContextMessage(
-                    history = history,
-                    prompt = prompt,
-                    maxTurns = maxTurns
-                )
-        }
+        // LiteRT-LM applies the model's native chat template automatically.
+        // NanoChat only supplies a normalized user payload and optional system instruction.
+        val userMessage = buildTranscriptMessage(history, prompt, maxTurns)
 
         return DownloadedPrompt(
             family = family,
@@ -94,37 +89,24 @@ object PromptFormatter {
         )
     }
 
-    fun detectDownloadedPromptFamily(modelId: String?): DownloadedPromptFamily {
-        val normalizedModelId = modelId?.trim()?.lowercase().orEmpty()
-        if (normalizedModelId.isBlank()) {
-            return DownloadedPromptFamily.GENERIC
-        }
-
-        return when {
-            "deepseek" in normalizedModelId -> DownloadedPromptFamily.DEEPSEEK
-            "qwen" in normalizedModelId -> DownloadedPromptFamily.QWEN
-            "gemma" in normalizedModelId -> DownloadedPromptFamily.GEMMA
-            else -> DownloadedPromptFamily.GENERIC
-        }
-    }
-
-    private fun buildQwenUserMessage(prompt: String): String {
-        return prompt.trim()
-    }
-
-    private fun buildSpeakerContextMessage(
+    private fun buildTranscriptMessage(
         history: List<ChatTurn>,
         prompt: String,
         maxTurns: Int
     ): String {
         val recentTurns = historyWindow(history, maxTurns)
+        if (recentTurns.isEmpty()) {
+            return prompt.trim()
+        }
+
         return buildString {
+            append("Conversation so far:\n")
             recentTurns.forEach { turn ->
                 append(if (turn.role == ChatRole.USER) "User: " else "Assistant: ")
                 append(normalizedTurnContent(turn))
-                append('\n')
+                append("\n")
             }
-            append("User: ")
+            append("\nLatest user message:\n")
             append(prompt.trim())
         }.trim()
     }
@@ -135,7 +117,46 @@ object PromptFormatter {
             return raw
         }
 
-        val sanitized = GeneratedTextSanitizer.sanitize(raw)
+        val sanitized = GeneratedTextSanitizer.sanitize(raw, preserveThinkingBlocks = false)
         return sanitized.ifBlank { raw }
+    }
+
+    private fun String?.toPromptFamily(): DownloadedPromptFamily {
+        val normalized = this?.trim()?.lowercase().orEmpty()
+        return when {
+            normalized.contains("deepseek") -> DownloadedPromptFamily.DEEPSEEK
+            normalized.contains("qwen") -> DownloadedPromptFamily.QWEN
+            normalized.contains("gemma") -> DownloadedPromptFamily.GEMMA
+            normalized.contains("phi") -> DownloadedPromptFamily.PHI
+            normalized.isBlank() -> DownloadedPromptFamily.GENERIC
+            else -> DownloadedPromptFamily.GENERIC
+        }
+    }
+
+    private fun applyThinkingInstruction(
+        systemPrompt: String,
+        effort: ThinkingEffort,
+        supportsThinking: Boolean
+    ): String {
+        if (!supportsThinking) return systemPrompt
+
+        val suffix = when (effort) {
+            ThinkingEffort.NONE -> {
+                " Do not include a <think> block or hidden reasoning in the response."
+            }
+
+            ThinkingEffort.LOW -> {
+                " If reasoning helps, keep it brief and place it inside a short <think>...</think> block before the final answer."
+            }
+
+            ThinkingEffort.MEDIUM -> {
+                " When reasoning helps, place it inside a <think>...</think> block before the final answer."
+            }
+
+            ThinkingEffort.HIGH -> {
+                " When reasoning helps, place a detailed <think>...</think> block before the final answer."
+            }
+        }
+        return (systemPrompt + suffix).trim()
     }
 }

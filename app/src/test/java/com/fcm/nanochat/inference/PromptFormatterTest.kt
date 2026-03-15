@@ -1,5 +1,6 @@
 package com.fcm.nanochat.inference
 
+import com.fcm.nanochat.data.ThinkingEffort
 import com.fcm.nanochat.model.ChatRole
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -37,72 +38,61 @@ class PromptFormatterTest {
     }
 
     @Test
-    fun `formatDownloadedPrompt uses qwen family template without marker mixing`() {
+    fun `formatDownloadedPrompt keeps payload free of chat template markers`() {
+        val formatted = PromptFormatter.formatDownloadedPrompt(
+            history = emptyList(),
+            prompt = "How are you?",
+            promptFamily = "litert-community/Qwen2.5-1.5B-Instruct"
+        )
+
+        assertEquals(DownloadedPromptFamily.QWEN, formatted.family)
+        assertTrue(formatted.systemInstruction.contains("Reply in clean Markdown"))
+        assertEquals("How are you?", formatted.userMessage)
+        assertTrue("<|user|>" !in formatted.userMessage)
+        assertTrue("<|assistant|>" !in formatted.userMessage)
+        assertTrue("<|im_start|>" !in formatted.userMessage)
+        assertTrue("<|im_end|>" !in formatted.userMessage)
+        assertTrue("System:" !in formatted.userMessage)
+    }
+
+    @Test
+    fun `formatDownloadedPrompt uses generic transcript for history`() {
         val formatted = PromptFormatter.formatDownloadedPrompt(
             history = listOf(
                 ChatTurn(ChatRole.USER, "Hello"),
                 ChatTurn(ChatRole.ASSISTANT, "Hi there")
             ),
             prompt = "How are you?",
-            modelId = "litert-community/Qwen2.5-1.5B-Instruct"
+            promptFamily = "google/gemma-3n-E2B-it-litert-lm"
         )
 
-        assertEquals(DownloadedPromptFamily.QWEN, formatted.family)
-        assertEquals(
-            "You are NanoChat, a concise and helpful local assistant.",
-            formatted.systemInstruction
-        )
-        assertEquals(
-            "How are you?",
-            formatted.userMessage
-        )
-        assertTrue("<|user|>" !in formatted.userMessage)
-        assertTrue("<|assistant|>" !in formatted.userMessage)
-        assertTrue("<|im_start|>" !in formatted.userMessage)
-        assertTrue("<|im_end|>" !in formatted.userMessage)
-        assertTrue("System:" !in formatted.userMessage)
-        assertTrue("User:" !in formatted.userMessage)
+        assertEquals(DownloadedPromptFamily.GEMMA, formatted.family)
+        assertTrue(formatted.userMessage.contains("Conversation so far:"))
+        assertTrue(formatted.userMessage.contains("Assistant: Hi there"))
+        assertTrue(formatted.userMessage.endsWith("Latest user message:\nHow are you?"))
     }
 
     @Test
-    fun `formatDownloadedPrompt uses family specific system prompt`() {
-        val gemma = PromptFormatter.formatDownloadedPrompt(
-            history = listOf(
-                ChatTurn(ChatRole.USER, "Hello"),
-                ChatTurn(ChatRole.ASSISTANT, "Hi there")
-            ),
-            prompt = "How are you?",
-            modelId = "google/gemma-3n-E2B-it-litert-lm"
-        )
-        val deepseek = PromptFormatter.formatDownloadedPrompt(
+    fun `formatDownloadedPrompt requests tagged reasoning when supported`() {
+        val formatted = PromptFormatter.formatDownloadedPrompt(
             history = emptyList(),
             prompt = "Explain this.",
-            modelId = "litert-community/DeepSeek-R1-Distill-Qwen-1.5B"
+            promptFamily = "litert-community/DeepSeek-R1-Distill-Qwen-1.5B",
+            thinkingEffort = ThinkingEffort.HIGH,
+            supportsThinking = true
         )
 
-        assertEquals(DownloadedPromptFamily.GEMMA, gemma.family)
-        assertEquals(
-            "You are NanoChat running locally on Gemma. Keep answers clear and actionable.",
-            gemma.systemInstruction
-        )
-        assertTrue(gemma.userMessage.endsWith("User: How are you?"))
-        assertEquals(DownloadedPromptFamily.DEEPSEEK, deepseek.family)
-        assertEquals(
-            "You are NanoChat. Be concise, and show reasoning only when needed.",
-            deepseek.systemInstruction
-        )
-        assertEquals("Explain this.", deepseek.userMessage)
+        assertEquals(DownloadedPromptFamily.DEEPSEEK, formatted.family)
+        assertTrue(formatted.systemInstruction.contains("<think>...</think>"))
+        assertEquals("Explain this.", formatted.userMessage)
     }
 
     @Test
-    fun `flattenForDownloadedModel for qwen keeps only user message payload`() {
+    fun `flattenForDownloadedModel uses user message payload only`() {
         val prompt = PromptFormatter.flattenForDownloadedModel(
-            history = listOf(
-                ChatTurn(ChatRole.USER, "Hello"),
-                ChatTurn(ChatRole.ASSISTANT, "<|assistant|>\nAssistant: Hi there")
-            ),
+            history = emptyList(),
             prompt = "How are you?",
-            modelId = "litert-community/Qwen2.5-1.5B-Instruct"
+            promptFamily = "litert-community/Qwen2.5-1.5B-Instruct"
         )
 
         assertEquals("How are you?", prompt)

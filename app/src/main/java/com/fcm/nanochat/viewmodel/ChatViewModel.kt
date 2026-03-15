@@ -5,9 +5,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.fcm.nanochat.data.SettingsSnapshot
+import com.fcm.nanochat.data.ThinkingEffort
 import com.fcm.nanochat.data.repository.ChatRepository
+import com.fcm.nanochat.data.repository.LocalModelCapabilities
 import com.fcm.nanochat.inference.BackendAvailability
 import com.fcm.nanochat.inference.InferenceException
+import com.fcm.nanochat.inference.GeneratedTextSanitizer
 import com.fcm.nanochat.inference.InferenceMode
 import com.fcm.nanochat.model.ChatMessage
 import com.fcm.nanochat.model.ChatRole
@@ -36,6 +39,11 @@ import kotlinx.coroutines.withContext
 class ChatViewModel(
     private val repository: ChatRepository
 ) : ViewModel() {
+    private val defaultLocalModelCapabilities = LocalModelCapabilities(
+        modelId = null,
+        supportsThinking = false,
+        promptFamily = null
+    )
     private val generationMutex = Mutex()
     private val selectedSessionId = MutableStateFlow<Long?>(null)
     private val draft = MutableStateFlow("")
@@ -67,6 +75,13 @@ class ChatViewModel(
                 ready = false,
                 message = "Choose a local model from Model Library."
             )
+        )
+
+    private val activeLocalModelCapabilities = repository.observeActiveLocalModelCapabilities()
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            defaultLocalModelCapabilities
         )
 
     private val activeSessionId = combine(selectedSessionId, sessions) { selected, sessionList ->
@@ -111,7 +126,7 @@ class ChatViewModel(
         )
     }
 
-    val uiState: StateFlow<ChatScreenState> = combine(
+    private val baseUiState: StateFlow<ChatScreenState> = combine(
         sessionState,
         draft,
         settings,
@@ -130,8 +145,17 @@ class ChatViewModel(
             isSending = isSendingValue,
             notice = null
         )
-    }.combine(notice) { baseState, noticeValue ->
-        baseState.copy(notice = noticeValue)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatScreenState())
+
+    val uiState: StateFlow<ChatScreenState> = combine(
+        baseUiState,
+        activeLocalModelCapabilities,
+        notice
+    ) { base, capabilities, noticeValue ->
+        base.copy(
+            localModelSupportsThinking = capabilities.supportsThinking,
+            notice = noticeValue
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatScreenState())
 
     init {
@@ -307,8 +331,9 @@ class ChatViewModel(
                     repository.streamResponse(mode, history, prompt, snapshot).collect { delta ->
                         ensureRequestActive(requestId)
                         val content = assembler.append(mode, delta)
-                        activeAssistantPreview = content
-                        if (content.isNotBlank()) {
+                        val filtered = filterThinking(content, snapshot.thinkingEffort)
+                        activeAssistantPreview = filtered
+                        if (filtered.isNotBlank()) {
                             if (!hasVisibleContent) {
                                 Log.d(
                                     TAG,
@@ -321,7 +346,7 @@ class ChatViewModel(
                         if (
                             mode != InferenceMode.AICORE &&
                             shouldPersistStreamSnapshot(
-                                content,
+                                filtered,
                                 lastPersistTimeMs,
                                 lastPersistedLength
                             )
@@ -329,18 +354,18 @@ class ChatViewModel(
                             withContext(Dispatchers.IO) {
                                 repository.updateAssistantMessage(
                                     createdAssistantMessageId,
-                                    content
+                                    filtered
                                 )
                             }
                             lastPersistTimeMs = System.currentTimeMillis()
-                            lastPersistedLength = content.length
-                            lastPersistedSnapshot = content
+                            lastPersistedLength = filtered.length
+                            lastPersistedSnapshot = filtered
                         }
                     }
 
                     ensureRequestActive(requestId)
 
-                    val finalContent = assembler.current()
+                    val finalContent = filterThinking(assembler.current(), snapshot.thinkingEffort)
                     if (finalContent.isBlank()) {
                         throw InferenceException.BackendUnavailable(
                             "Local model produced no visible text. Try again or reselect this model."
@@ -487,6 +512,17 @@ class ChatViewModel(
         return message.isNotBlank() && mode != InferenceMode.DOWNLOADED
     }
 
+    private fun filterThinking(content: String, effort: ThinkingEffort): String {
+        return if (effort == ThinkingEffort.NONE) {
+            GeneratedTextSanitizer.sanitize(
+                raw = content,
+                preserveThinkingBlocks = false
+            ).trim()
+        } else {
+            content
+        }
+    }
+
     private companion object {
         const val TAG = "ChatViewModel"
         const val STREAM_PERSIST_INTERVAL_MS = 180L
@@ -496,6 +532,7 @@ class ChatViewModel(
         const val CANCELLATION_MESSAGE = "Generation cancelled."
         const val WATCHDOG_TIMEOUT_MESSAGE =
             "No response arrived in time. Retry last, or reselect the local model."
+        val THINKING_BLOCK_REGEX = Regex("(?is)<think>.*?</think>")
     }
 }
 
@@ -518,3 +555,5 @@ class ChatViewModelFactory(
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }
 }
+
+

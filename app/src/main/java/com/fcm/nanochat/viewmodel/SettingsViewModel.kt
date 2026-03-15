@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.fcm.nanochat.data.AppPreferences
 import com.fcm.nanochat.data.network.HuggingFaceWhoAmIParser
 import com.fcm.nanochat.data.repository.ChatRepository
+import com.fcm.nanochat.data.AcceleratorPreference
+import com.fcm.nanochat.data.ThinkingEffort
 import com.fcm.nanochat.inference.GeminiNanoStatus
 import com.fcm.nanochat.model.GeminiNanoStatusUi
 import com.fcm.nanochat.model.HuggingFaceAccountUi
@@ -49,6 +51,8 @@ class SettingsViewModel(
                         temperature = snapshot.temperature,
                         topP = snapshot.topP,
                         contextLength = snapshot.contextLength,
+                        thinkingEffort = snapshot.thinkingEffort,
+                        acceleratorPreference = snapshot.acceleratorPreference,
                         geminiStatus = _uiState.value.geminiStatus.copy(
                             lastKnownModelSizeBytes = snapshot.geminiNanoModelSizeBytes
                         ),
@@ -123,6 +127,16 @@ class SettingsViewModel(
         _uiState.update { it.copy(contextLength = clamped, saveNotice = null) }
     }
 
+    fun updateThinkingEffort(value: ThinkingEffort) {
+        _uiState.update { it.copy(thinkingEffort = value, saveNotice = null) }
+        viewModelScope.launch { preferences.updateThinkingEffort(value) }
+    }
+
+    fun updateAcceleratorPreference(value: AcceleratorPreference) {
+        _uiState.update { it.copy(acceleratorPreference = value, saveNotice = null) }
+        viewModelScope.launch { preferences.updateAcceleratorPreference(value) }
+    }
+
     fun save() {
         viewModelScope.launch {
             val current = _uiState.value
@@ -137,6 +151,8 @@ class SettingsViewModel(
                 apiKey = current.apiKey,
                 huggingFaceToken = current.huggingFaceToken
             )
+            preferences.updateThinkingEffort(current.thinkingEffort)
+            preferences.updateAcceleratorPreference(current.acceleratorPreference)
             _uiState.update { it.copy(saveNotice = "Settings saved.", clearNotice = null) }
         }
     }
