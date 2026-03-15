@@ -83,6 +83,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
@@ -1682,6 +1683,7 @@ private fun Composer(
         val sendEnabled = canSend && draft.isNotBlank() && !isSending
         val sendInteractionSource = remember { MutableInteractionSource() }
         val sendPressed by sendInteractionSource.collectIsPressedAsState()
+        val haptics = LocalHapticFeedback.current
         val sendScale by
                 animateFloatAsState(
                         targetValue = if (sendPressed) 0.92f else 1f,
@@ -1796,7 +1798,17 @@ private fun Composer(
                                         tonalElevation = if (sendEnabled) 3.dp else 0.dp
                                 ) {
                                         IconButton(
-                                                onClick = { if (isSending) onStop() else onSend() },
+                                                onClick = {
+                                                        if (isSending) {
+                                                                onStop()
+                                                        } else {
+                                                                haptics.performHapticFeedback(
+                                                                        HapticFeedbackType
+                                                                                .TextHandleMove
+                                                                )
+                                                                onSend()
+                                                        }
+                                                },
                                                 enabled = isSending || sendEnabled,
                                                 interactionSource = sendInteractionSource,
                                                 modifier = Modifier.size(40.dp)

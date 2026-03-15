@@ -58,6 +58,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -191,6 +193,20 @@ internal fun ModelsTab(
     var selectedSort by rememberSaveable { mutableStateOf(ModelSort.Recommended) }
     var otherExpanded by rememberSaveable { mutableStateOf(false) }
     val pendingActions = remember { mutableStateMapOf<String, PendingModelAction>() }
+    val haptics = LocalHapticFeedback.current
+    var lastMemoryState by remember { mutableStateOf(state.activeSummary?.memoryState) }
+
+    LaunchedEffect(state.activeSummary?.memoryState) {
+        val current = state.activeSummary?.memoryState
+        if (current != null && current != lastMemoryState) {
+            if (current == LocalModelMemoryState.LoadedInMemory ||
+                current == LocalModelMemoryState.EjectedFromMemory
+            ) {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            }
+            lastMemoryState = current
+        }
+    }
 
     LaunchedEffect(state.models, state.phase) {
         val now = System.currentTimeMillis()
@@ -245,27 +261,28 @@ internal fun ModelsTab(
                 // Bottom fade so content dissolves under the header
                 Box(
                         modifier =
-                                Modifier.fillMaxWidth()
-                                        .height(6.dp)
-                                        .background(
-                                                brush =
-                                                        androidx.compose.ui.graphics.Brush
-                                                                .verticalGradient(
-                                                                        colors =
-                                                                                listOf(
-                                                                                        MaterialTheme
-                                                                                                .colorScheme
-                                                                                                .background,
-                                                                                        MaterialTheme
-                                                                                                .colorScheme
-                                                                                                .background
-                                                                                                .copy(
-                                                                                                        alpha =
-                                                                                                                0f
-                                                                                                )
-                                                                                )
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .background(
+                                        brush =
+                                            androidx.compose.ui.graphics.Brush
+                                                .verticalGradient(
+                                                    colors =
+                                                        listOf(
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .background,
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .background
+                                                                .copy(
+                                                                    alpha =
+                                                                        0f
                                                                 )
-                                        )
+                                                        )
+                                                )
+                                    )
                 )
             }
         }

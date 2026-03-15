@@ -60,6 +60,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -68,7 +69,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -422,8 +425,9 @@ internal fun ConnectionSettings(
 
                                 Row(
                                         modifier =
-                                                Modifier.fillMaxWidth()
-                                                        .horizontalScroll(rememberScrollState()),
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .horizontalScroll(rememberScrollState()),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                         StatusBadge(
@@ -658,8 +662,9 @@ internal fun ModelControlsSettings(
                         ) {
                                 Row(
                                         modifier =
-                                                Modifier.fillMaxWidth()
-                                                        .horizontalScroll(rememberScrollState()),
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .horizontalScroll(rememberScrollState()),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                         BehaviorPreset.entries.forEach { preset ->
@@ -774,6 +779,15 @@ internal fun HuggingFaceConnectionSettings(
                 mutableStateOf(state.huggingFaceToken.isBlank())
         }
         var tokenVisible by rememberSaveable { mutableStateOf(false) }
+    val haptics = LocalHapticFeedback.current
+    var lastTokenValid by rememberSaveable { mutableStateOf(state.huggingFaceAccount.isValid) }
+
+    LaunchedEffect(state.huggingFaceAccount.isValid) {
+        if (!lastTokenValid && state.huggingFaceAccount.isValid) {
+            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+        lastTokenValid = state.huggingFaceAccount.isValid
+    }
 
         LazyColumn(
                 modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
@@ -1214,19 +1228,21 @@ private fun SettingsNavigationRow(
         Surface(shape = SettingsRowShape, color = MaterialTheme.colorScheme.surfaceContainerLow) {
                 Row(
                         modifier =
-                                Modifier.fillMaxWidth()
-                                        .clickable(onClick = onClick)
-                                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable(onClick = onClick)
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                         Box(
                                 modifier =
-                                        Modifier.clip(IconContainerShape)
-                                                .background(
-                                                        MaterialTheme.colorScheme.surfaceContainer
-                                                )
-                                                .padding(8.dp),
+                                        Modifier
+                                            .clip(IconContainerShape)
+                                            .background(
+                                                MaterialTheme.colorScheme.surfaceContainer
+                                            )
+                                            .padding(8.dp),
                                 contentAlignment = Alignment.Center
                         ) { icon() }
                         Column(
@@ -1331,10 +1347,11 @@ private fun ExpandablePanel(
                 ) {
                         Row(
                                 modifier =
-                                        Modifier.fillMaxWidth()
-                                                .clip(InputShape)
-                                                .clickable(onClick = onToggle)
-                                                .padding(horizontal = 2.dp, vertical = 2.dp),
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clip(InputShape)
+                                            .clickable(onClick = onToggle)
+                                            .padding(horizontal = 2.dp, vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -1400,9 +1417,10 @@ private fun SummaryStatusRow(
         ) {
                 Box(
                         modifier =
-                                Modifier.clip(IconContainerShape)
-                                        .background(MaterialTheme.colorScheme.surfaceContainer)
-                                        .padding(8.dp),
+                                Modifier
+                                    .clip(IconContainerShape)
+                                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                                    .padding(8.dp),
                         contentAlignment = Alignment.Center
                 ) { icon() }
                 Column(
@@ -1508,17 +1526,19 @@ private fun UsageTile(
         ) {
                 Column(
                         modifier =
-                                Modifier.fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 14.dp),
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 14.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                         Box(
                                 modifier =
-                                        Modifier.size(28.dp)
-                                                .clip(IconContainerShape)
-                                                .background(
-                                                        MaterialTheme.colorScheme.surfaceContainer
-                                                ),
+                                        Modifier
+                                            .size(28.dp)
+                                            .clip(IconContainerShape)
+                                            .background(
+                                                MaterialTheme.colorScheme.surfaceContainer
+                                            ),
                                 contentAlignment = Alignment.Center
                         ) { icon() }
                         Text(
@@ -1569,7 +1589,9 @@ private fun AccountDetailsCard(account: HuggingFaceAccountUi, onRefresh: () -> U
 
         Surface(shape = SettingsRowShape, color = MaterialTheme.colorScheme.surface) {
                 Column(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                         Row(
@@ -1639,8 +1661,9 @@ private fun AccountDetailsCard(account: HuggingFaceAccountUi, onRefresh: () -> U
 
                         Row(
                                 modifier =
-                                        Modifier.fillMaxWidth()
-                                                .horizontalScroll(rememberScrollState()),
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(rememberScrollState()),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                                 StatusBadge(label = "Connected", tone = BadgeTone.Positive)
@@ -1683,9 +1706,10 @@ private fun Avatar(avatarUrl: String?, name: String) {
 
         Box(
                 modifier =
-                        Modifier.size(52.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceContainer),
+                        Modifier
+                            .size(52.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceContainer),
                 contentAlignment = Alignment.Center
         ) {
                 AsyncImage(
