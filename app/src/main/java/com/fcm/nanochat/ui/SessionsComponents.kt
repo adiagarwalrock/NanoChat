@@ -45,10 +45,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.fcm.nanochat.R
 import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.ChatSession
+import com.fcm.nanochat.ui.theme.NanoChatTheme
 
 @Composable
 internal fun SessionsDrawer(
@@ -318,6 +320,74 @@ internal fun SessionsRail(
                 text = stringResource(id = R.string.sessions_count, state.sessions.size),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 320)
+@Composable
+private fun SessionsDrawerPreview() {
+    NanoChatTheme {
+        SessionsDrawer(
+                state =
+                        ChatScreenState(
+                                sessions =
+                                        listOf(
+                                                ChatSession(
+                                                        id = 1,
+                                                        title = "Quantum Physics",
+                                                        updatedAt = System.currentTimeMillis(),
+                                                        isPinned = true
+                                                ),
+                                                ChatSession(
+                                                        id = 2,
+                                                        title = "Modern Art",
+                                                        updatedAt = System.currentTimeMillis(),
+                                                        isPinned = false
+                                                ),
+                                                ChatSession(
+                                                        id = 3,
+                                                        title = "Baking Tips",
+                                                        updatedAt = System.currentTimeMillis(),
+                                                        isPinned = false
+                                                )
+                                        ),
+                                selectedSessionId = 1
+                        ),
+                onCreateSession = {},
+                onSelectSession = {},
+                onPinSession = { _, _ -> },
+                onDeleteSession = { _ -> },
+                onRenameSession = { _, _ -> },
+                onOpenModels = {},
+                onOpenSettings = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 280)
+@Composable
+private fun SessionsRailPreview() {
+    NanoChatTheme {
+        SessionsRail(
+                state =
+                        ChatScreenState(
+                                sessions =
+                                        listOf(
+                                                ChatSession(
+                                                        id = 1,
+                                                        title = "Session 1",
+                                                        updatedAt = System.currentTimeMillis()
+                                                ),
+                                                ChatSession(
+                                                        id = 2,
+                                                        title = "Session 2",
+                                                        updatedAt = System.currentTimeMillis()
+                                                )
+                                        )
+                        ),
+                onCreateSession = {},
+                onSelectSession = {}
         )
     }
 }

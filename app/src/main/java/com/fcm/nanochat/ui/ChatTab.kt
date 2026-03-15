@@ -93,6 +93,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -105,6 +106,7 @@ import com.fcm.nanochat.model.ChatMessage
 import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.SettingsScreenState
+import com.fcm.nanochat.ui.theme.NanoChatTheme
 import io.noties.markwon.Markwon
 import io.noties.markwon.ext.latex.JLatexMathPlugin
 import io.noties.markwon.ext.latex.JLatexMathTheme
@@ -261,10 +263,10 @@ private fun ChatTabContent(
                         onRetry = onRetryLast,
                         modifier =
                                 Modifier.align(Alignment.BottomCenter)
+                                        .onSizeChanged { composerHeightPx = it.height }
                                         .navigationBarsPadding()
                                         .imePadding()
-                                        .onSizeChanged { composerHeightPx = it.height }
-                                        .padding(bottom = 10.dp)
+                                        .padding(bottom = 15.dp)
                 )
 
                 if (controlsVisible) {
@@ -1743,4 +1745,107 @@ private fun normalizeLists(raw: String): String {
         }
 
         return builder.toString().trimEnd('\n')
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ChatTabPreview() {
+        NanoChatTheme(darkTheme = false) {
+                ChatTab(
+                        state =
+                                ChatScreenState(
+                                        messages =
+                                                listOf(
+                                                        ChatMessage(
+                                                                1,
+                                                                1,
+                                                                ChatRole.USER,
+                                                                "Hello! How does on-device AI work?"
+                                                        ),
+                                                        ChatMessage(
+                                                                2,
+                                                                1,
+                                                                ChatRole.ASSISTANT,
+                                                                "On-device AI works by running the model directly on your phone's processor (CPU, GPU, or NPU) rather than sending data to a cloud server. This ensures privacy, reduces latency, and works offline!"
+                                                        )
+                                                )
+                                ),
+                        settingsState = SettingsScreenState(modelName = "Mistral 7B (Local)"),
+                        onOpenSessions = {},
+                        onSendMessage = {},
+                        onStopGeneration = {},
+                        onMessageDraftChange = {},
+                        onCreateSession = {},
+                        onRetryLast = {},
+                        onInferenceModeChange = {},
+                        onOpenModelGallery = {},
+                        onTemperatureChange = {},
+                        onTopPChange = {},
+                        onContextLengthChange = {},
+                        onThinkingEffortChange = {},
+                        onAcceleratorChange = {},
+                        onMessageInfo = {},
+                        onDeleteMessage = {}
+                )
+        }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF111A22)
+@Composable
+private fun ChatTabDarkPreview() {
+        NanoChatTheme(darkTheme = true) {
+                ChatTab(
+                        state =
+                                ChatScreenState(
+                                        messages =
+                                                listOf(
+                                                        ChatMessage(
+                                                                1,
+                                                                1,
+                                                                ChatRole.USER,
+                                                                "Explain quantum computing."
+                                                        ),
+                                                        ChatMessage(
+                                                                2,
+                                                                1,
+                                                                ChatRole.ASSISTANT,
+                                                                "Quantum computing uses quantum bits (qubits) which can exist in multiple states simultaneously, allowing for parallel processing of complex problems."
+                                                        )
+                                                )
+                                ),
+                        settingsState = SettingsScreenState(modelName = "Gemini Nano"),
+                        onOpenSessions = {},
+                        onSendMessage = {},
+                        onStopGeneration = {},
+                        onMessageDraftChange = {},
+                        onCreateSession = {},
+                        onRetryLast = {},
+                        onInferenceModeChange = {},
+                        onOpenModelGallery = {},
+                        onTemperatureChange = {},
+                        onTopPChange = {},
+                        onContextLengthChange = {},
+                        onThinkingEffortChange = {},
+                        onAcceleratorChange = {},
+                        onMessageInfo = {},
+                        onDeleteMessage = {}
+                )
+        }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ComposerPreview() {
+        NanoChatTheme {
+                Composer(
+                        draft = "Hello, I have a question about...",
+                        isSending = false,
+                        notice = null,
+                        onOpenControls = {},
+                        onDraftChange = {},
+                        onSend = {},
+                        onStop = {},
+                        onRetry = {}
+                )
+        }
 }

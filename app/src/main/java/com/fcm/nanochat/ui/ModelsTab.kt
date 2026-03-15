@@ -61,16 +61,19 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.fcm.nanochat.R
 import com.fcm.nanochat.model.LocalModelHealthState
 import com.fcm.nanochat.model.LocalModelMemoryState
 import com.fcm.nanochat.model.ModelCardUi
 import com.fcm.nanochat.model.ModelGalleryScreenState
+import com.fcm.nanochat.model.ModelLibraryPhase
 import com.fcm.nanochat.model.needsAttention
 import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
 import com.fcm.nanochat.models.registry.ModelInstallState
 import com.fcm.nanochat.models.registry.ModelStorageLocation
+import com.fcm.nanochat.ui.theme.NanoChatTheme
 import kotlin.math.ln
 import kotlin.math.pow
 
@@ -2087,3 +2090,105 @@ private val UrlRegex = Regex("https?://\\S+")
 private val WhitespaceRegex = Regex("\\s+")
 private const val PENDING_ACTION_TIMEOUT_MS = 8_000L
 private const val PENDING_DELETE_ACTION_TIMEOUT_MS = 30_000L
+
+@Preview(showBackground = true)
+@Composable
+private fun ModelsTabReadyPreview() {
+    val mockModel =
+            ModelCardUi(
+                    modelId = "gemini-nano",
+                    displayName = "Gemini Nano",
+                    description = "On-device language model by Google.",
+                    modelFile = "gemini_nano.bin",
+                    sourceRepo = "google/gemini-nano",
+                    sizeInBytes = 1_500_000_000L,
+                    minDeviceMemoryInGb = 6,
+                    taskTypes = listOf("Chat", "Summarization"),
+                    bestForTaskTypes = listOf("Chat"),
+                    llmSupportImage = false,
+                    llmSupportAudio = false,
+                    requiresHfToken = false,
+                    recommendedForChat = true,
+                    isExperimental = false,
+                    installState = ModelInstallState.INSTALLED,
+                    compatibility = LocalModelCompatibilityState.Ready,
+                    isActive = true,
+                    memoryState = LocalModelMemoryState.InUse,
+                    isLegacy = false,
+                    storageLocation = ModelStorageLocation.INTERNAL,
+                    downloadedBytes = 1_500_000_000L,
+                    sizeOnDiskBytes = 1_500_000_000L,
+                    localPath = "/data/user/0/com.fcm.nanochat/files/gemini_nano.bin",
+                    errorMessage = null
+            )
+
+    NanoChatTheme {
+        ModelsTab(
+                state =
+                        ModelGalleryScreenState(
+                                phase = ModelLibraryPhase.Ready,
+                                models =
+                                        listOf(
+                                                mockModel,
+                                                mockModel.copy(
+                                                        modelId = "mistral-7b",
+                                                        displayName = "Mistral 7B",
+                                                        recommendedForChat = false,
+                                                        installState =
+                                                                ModelInstallState.NOT_INSTALLED,
+                                                        isActive = false,
+                                                        memoryState =
+                                                                LocalModelMemoryState.NotSelected
+                                                )
+                                        )
+                        ),
+                onDownload = { _ -> },
+                onCancelDownload = { _ -> },
+                onRetryDownload = { _ -> },
+                onDeleteModel = { _ -> },
+                onUseModel = { _ -> },
+                onEjectModel = { _ -> },
+                onMoveStorage = { _, _ -> },
+                onRefresh = {},
+                onImportLocalModel = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ModelsTabLoadingPreview() {
+    NanoChatTheme {
+        ModelsTab(
+                state = ModelGalleryScreenState(phase = ModelLibraryPhase.Loading),
+                onDownload = { _ -> },
+                onCancelDownload = { _ -> },
+                onRetryDownload = { _ -> },
+                onDeleteModel = { _ -> },
+                onUseModel = { _ -> },
+                onEjectModel = { _ -> },
+                onMoveStorage = { _, _ -> },
+                onRefresh = {},
+                onImportLocalModel = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ModelsTabEmptyPreview() {
+    NanoChatTheme {
+        ModelsTab(
+                state = ModelGalleryScreenState(phase = ModelLibraryPhase.Empty),
+                onDownload = { _ -> },
+                onCancelDownload = { _ -> },
+                onRetryDownload = { _ -> },
+                onDeleteModel = { _ -> },
+                onUseModel = { _ -> },
+                onEjectModel = { _ -> },
+                onMoveStorage = { _, _ -> },
+                onRefresh = {},
+                onImportLocalModel = {}
+        )
+    }
+}

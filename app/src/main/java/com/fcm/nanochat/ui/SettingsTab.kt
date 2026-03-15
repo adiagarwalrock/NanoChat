@@ -74,6 +74,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -85,6 +86,7 @@ import com.fcm.nanochat.model.ModelGalleryScreenState
 import com.fcm.nanochat.model.SettingsScreenState
 import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
 import com.fcm.nanochat.models.registry.ModelInstallState
+import com.fcm.nanochat.ui.theme.NanoChatTheme
 import java.text.NumberFormat
 import java.util.Locale
 import kotlin.math.abs
@@ -299,14 +301,14 @@ internal fun AiConfigurationSettings(
                                         icon = {
                                                 Icon(Icons.Default.Tune, contentDescription = null)
                                         },
-                                        label = "Temperature",
+                                        label = stringResource(id = R.string.temperature_label),
                                         value = String.format(Locale.US, "%.2f", state.temperature)
                                 )
                                 SummaryStatusRow(
                                         icon = {
                                                 Icon(Icons.Default.Tune, contentDescription = null)
                                         },
-                                        label = "Context length",
+                                        label = stringResource(id = R.string.context_length_label),
                                         value = formatTokens(state.contextLength)
                                 )
                                 SummaryStatusRow(
@@ -698,34 +700,41 @@ internal fun ModelControlsSettings(
 
                 item {
                         ExpandablePanel(
-                                title = "Advanced model tuning",
-                                subtitle = "Temperature, top-p, and context length",
+                                title = stringResource(id = R.string.model_controls_title),
+                                subtitle = stringResource(id = R.string.model_controls_subtitle),
                                 expanded = advancedExpanded,
                                 onToggle = { advancedExpanded = !advancedExpanded }
                         ) {
                                 SliderSetting(
-                                        label = "Temperature",
+                                        label = stringResource(id = R.string.temperature_label),
                                         valueText =
                                                 String.format(Locale.US, "%.2f", state.temperature),
-                                        description = "Controls creativity of responses.",
+                                        description =
+                                                stringResource(
+                                                        id = R.string.temperature_description
+                                                ),
                                         value = state.temperature.toFloat(),
                                         valueRange = 0f..2f,
                                         onValueChange = { onTemperatureChange(it.toDouble()) }
                                 )
 
                                 SliderSetting(
-                                        label = "Top-P",
+                                        label = stringResource(id = R.string.top_p_label),
                                         valueText = String.format(Locale.US, "%.2f", state.topP),
-                                        description = "Limits token probability distribution.",
+                                        description =
+                                                stringResource(id = R.string.top_p_description),
                                         value = state.topP.toFloat(),
                                         valueRange = 0f..1f,
                                         onValueChange = { onTopPChange(it.toDouble()) }
                                 )
 
                                 SliderSetting(
-                                        label = "Context length",
+                                        label = stringResource(id = R.string.context_length_label),
                                         valueText = formatTokens(state.contextLength),
-                                        description = "Maximum tokens used as context.",
+                                        description =
+                                                stringResource(
+                                                        id = R.string.context_length_description
+                                                ),
                                         value = state.contextLength.toFloat(),
                                         valueRange = 512f..32768f,
                                         onValueChange = { onContextLengthChange(it.roundToInt()) }
@@ -1638,7 +1647,10 @@ private fun AccountDetailsCard(account: HuggingFaceAccountUi, onRefresh: () -> U
                                 account.tokenRole?.let {
                                         StatusBadge(
                                                 label =
-                                                        "Role: ${it.lowercase().replaceFirstChar { c -> c.titlecase() }}",
+                                                        "Role: ${
+                                                                it.lowercase()
+                                                                        .replaceFirstChar { c -> c.titlecase() }
+                                                        }",
                                                 tone = BadgeTone.Neutral
                                         )
                                 }
@@ -1761,4 +1773,53 @@ private fun humanReadableByteCount(bytes: Long): String {
         val prefix = "kMGTPE"[exp - 1]
         val value = bytes / unit.pow(exp.toDouble())
         return "%.1f %sB".format(value, prefix)
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SettingsHomePreview() {
+        NanoChatTheme {
+                SettingsHome(
+                        state = SettingsScreenState(modelName = "Gemini Nano"),
+                        modelState = ModelGalleryScreenState(),
+                        onNavigate = {},
+                        onOpenModelLibrary = {}
+                )
+        }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun AiConfigurationSettingsPreview() {
+        NanoChatTheme { AiConfigurationSettings(state = SettingsScreenState(), onNavigate = {}) }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ConnectionSettingsPreview() {
+        NanoChatTheme {
+                ConnectionSettings(
+                        state = SettingsScreenState(),
+                        onBaseUrlChange = {},
+                        onModelNameChange = {},
+                        onApiKeyChange = {},
+                        onRefreshGeminiStatus = {},
+                        onDownloadGeminiNano = {},
+                        onSaveSettings = {}
+                )
+        }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ModelControlsSettingsPreview() {
+        NanoChatTheme {
+                ModelControlsSettings(
+                        state = SettingsScreenState(),
+                        onTemperatureChange = {},
+                        onTopPChange = {},
+                        onContextLengthChange = {},
+                        onSaveSettings = {}
+                )
+        }
 }
