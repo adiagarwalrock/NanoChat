@@ -299,7 +299,7 @@ class SettingsViewModel @Inject constructor(
 
             try {
                 httpClient.newCall(request).execute().use { response ->
-                    val body = response.body?.string().orEmpty()
+                    val body = response.body.string()
                     if (!response.isSuccessful) {
                         val serverMessage = HuggingFaceWhoAmIParser.parseError(body)
                         val message = when {

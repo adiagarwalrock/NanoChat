@@ -137,7 +137,22 @@ class ModelRegistry(
                     }
                 }
 
-                else -> Unit
+                LocalModelCompatibilityState.Downloadable,
+                is LocalModelCompatibilityState.NeedsMoreRam,
+                is LocalModelCompatibilityState.NeedsMoreStorage,
+                LocalModelCompatibilityState.TokenRequired,
+                is LocalModelCompatibilityState.UnsupportedDevice,
+                LocalModelCompatibilityState.UnsupportedForChat -> {
+                    val persistedMessage = compatibilityMessage(compatibility)
+                    if (entity.errorMessage != persistedMessage) {
+                        installedModelDao.upsert(
+                            entity.copy(
+                                errorMessage = persistedMessage,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
             }
         }
     }

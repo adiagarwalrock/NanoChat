@@ -16,8 +16,7 @@ import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.ChatSession
 import com.fcm.nanochat.models.registry.ActiveModelStatus
-import com.fcm.nanochat.notifications.AppVisibilityTracker
-import com.fcm.nanochat.notifications.NotificationCoordinator
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -35,17 +34,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlin.coroutines.coroutineContext
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class ChatViewModel @Inject constructor(
-    private val repository: ChatRepository,
-    private val notificationCoordinator: NotificationCoordinator,
-    private val appVisibilityTracker: AppVisibilityTracker
-) : ViewModel() {
+class ChatViewModel @Inject constructor(private val repository: ChatRepository) : ViewModel() {
     private val defaultLocalModelCapabilities =
             LocalModelCapabilities(modelId = null, supportsThinking = false, promptFamily = null)
     private val generationMutex = Mutex()
@@ -324,6 +318,8 @@ class ChatViewModel @Inject constructor(
                     repository.insertAssistantPlaceholder(sessionId, snapshot)
                 }
 
+            val assistantId = assistantMessageId ?: return
+
             activeAssistantMessageId = assistantMessageId
             activeAssistantPreview = ""
             draft.value = ""
@@ -368,7 +364,7 @@ class ChatViewModel @Inject constructor(
                     )
                 ) {
                     withContext(Dispatchers.IO) {
-                        repository.updateAssistantMessage(assistantMessageId!!, filtered)
+                        repository.updateAssistantMessage(assistantId, filtered)
                     }
                     lastPersistTimeMs = System.currentTimeMillis()
                     lastPersistedLength = filtered.length
@@ -386,11 +382,9 @@ class ChatViewModel @Inject constructor(
 
             if (mode == InferenceMode.AICORE || finalContent != lastPersistedSnapshot) {
                 withContext(Dispatchers.IO) {
-                    repository.updateAssistantMessage(assistantMessageId!!, finalContent)
+                    repository.updateAssistantMessage(assistantId, finalContent)
                 }
             }
-
-            maybeNotifyChatResponse(sessionId, finalContent)
         } catch (cancellation: CancellationException) {
             handleGenerationCancellation(
                 requestId,
@@ -574,19 +568,6 @@ class ChatViewModel @Inject constructor(
         } else {
             content
         }
-    }
-
-    private fun maybeNotifyChatResponse(sessionId: Long, content: String) {
-        if (appVisibilityTracker.isForeground) return
-        val title = sessions.value.firstOrNull { it.id == sessionId }?.title ?: "Chat"
-        val preview = content.trim().lineSequence().firstOrNull().orEmpty()
-        if (preview.isBlank()) return
-
-        notificationCoordinator.notifyChatResponse(
-            sessionId = sessionId,
-            sessionTitle = title,
-            preview = preview
-        )
     }
 
     private companion object {

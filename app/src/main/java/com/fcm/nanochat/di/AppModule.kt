@@ -21,6 +21,7 @@ import com.fcm.nanochat.models.importing.StubLocalModelImportCoordinator
 import com.fcm.nanochat.models.registry.ModelRegistry
 import com.fcm.nanochat.models.runtime.InMemoryLocalRuntimeTelemetry
 import com.fcm.nanochat.models.runtime.ModelRuntimeManager
+import com.fcm.nanochat.notifications.NotificationCoordinator
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -135,7 +136,8 @@ object AppModule {
         preferences: AppPreferences,
         allowlistRepository: AllowlistRepository,
         installedModelDao: InstalledModelDao,
-        integrityValidator: DownloadIntegrityValidator
+        integrityValidator: DownloadIntegrityValidator,
+        notificationCoordinator: NotificationCoordinator
     ): ModelDownloadCoordinator {
         return ModelDownloadCoordinator(
             context = context,
@@ -143,7 +145,8 @@ object AppModule {
             preferences = preferences,
             allowlistRepository = allowlistRepository,
             installedModelDao = installedModelDao,
-            integrityValidator = integrityValidator
+            integrityValidator = integrityValidator,
+            notificationCoordinator = notificationCoordinator
         )
     }
 

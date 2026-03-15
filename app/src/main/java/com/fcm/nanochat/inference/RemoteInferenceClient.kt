@@ -77,12 +77,7 @@ class RemoteInferenceClient(
                         return
                     }
 
-                    val source = response.body?.source()
-                    if (source == null) {
-                        close(InferenceException.RemoteFailure("Remote API returned an empty response body."))
-                        return
-                    }
-
+                    val source = response.body.source()
                     streamEvents(source)
                 }
             }

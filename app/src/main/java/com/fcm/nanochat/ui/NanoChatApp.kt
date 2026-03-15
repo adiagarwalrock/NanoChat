@@ -64,6 +64,8 @@ fun NanoChatApp(
     chatState: ChatScreenState = ChatScreenState(),
     modelState: ModelGalleryScreenState = ModelGalleryScreenState(),
     settingsState: SettingsScreenState = SettingsScreenState(),
+    navigateToChatSessionId: Long? = null,
+    onConsumedNavigation: () -> Unit = {},
     onSendMessage: () -> Unit = {},
     onStopGeneration: () -> Unit = {},
     onMessageDraftChange: (String) -> Unit = {},
@@ -118,6 +120,13 @@ fun NanoChatApp(
         val currentNotice = modelState.notice ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(currentNotice)
         onDismissModelNotice()
+    }
+
+    LaunchedEffect(navigateToChatSessionId) {
+        val target = navigateToChatSessionId ?: return@LaunchedEffect
+        destination = AppDestination.Chat
+        onSelectSession(target)
+        onConsumedNavigation()
     }
 
     ModalNavigationDrawer(

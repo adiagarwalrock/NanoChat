@@ -235,6 +235,8 @@ private fun ChatTabContent(
         var composerHeightPx by remember { mutableIntStateOf(0) }
         val bottomPadding = with(LocalDensity.current) { composerHeightPx.toDp() }
         val listState = rememberLazyListState()
+        val showLocalModelCta =
+                state.inferenceMode == InferenceMode.DOWNLOADED && !state.isLocalModelReady
 
         Box(modifier = modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -246,22 +248,44 @@ private fun ChatTabContent(
                                 onOpenSessions = onOpenSessions
                         )
 
-                        MessageList(
-                                messages = state.messages,
-                                isSending = state.isSending,
-                                listState = listState,
-                                bottomPadding = bottomPadding,
-                                onMessageInfo = onMessageInfo,
-                                onRetryLast = onRetryLast,
-                                onDeleteMessage = onDeleteMessage,
-                                modifier = Modifier.weight(1f)
-                        )
+                        if (state.inferenceMode == InferenceMode.DOWNLOADED) {
+                                LocalModelStatusSurface(
+                                        modelName = state.activeLocalModelName,
+                                        isReady = state.isLocalModelReady,
+                                        message = state.localModelStatusMessage,
+                                        onOpenModelGallery = onOpenModelGallery,
+                                        modifier =
+                                                Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(vertical = 10.dp)
+                                )
+                        }
+
+                        if (showLocalModelCta && state.messages.isEmpty()) {
+                                LocalModelEmptyState(
+                                        statusMessage = state.localModelStatusMessage,
+                                        modifier = Modifier.weight(1f),
+                                        onOpenModelGallery = onOpenModelGallery
+                                )
+                        } else {
+                                MessageList(
+                                        messages = state.messages,
+                                        isSending = state.isSending,
+                                        listState = listState,
+                                        bottomPadding = bottomPadding,
+                                        onMessageInfo = onMessageInfo,
+                                        onRetryLast = onRetryLast,
+                                        onDeleteMessage = onDeleteMessage,
+                                        modifier = Modifier.weight(1f)
+                                )
+                        }
                 }
 
                 Composer(
                         draft = state.draft,
                         isSending = state.isSending,
                         notice = state.notice,
+                        canSend = !showLocalModelCta,
                         onOpenControls = { controlsVisible = true },
                         onDraftChange = onMessageDraftChange,
                         onSend = onSendMessage,
@@ -1005,7 +1029,9 @@ private fun LocalModelStatusSurface(
                                                 )
                                         }
                                 }
-                                TextButton(onClick = onOpenModelGallery) { Text("Model library") }
+                                TextButton(onClick = onOpenModelGallery) {
+                                        Text(text = stringResource(id = R.string.open_model_library))
+                                }
                         }
 
                         if (preparing) {
@@ -1021,13 +1047,42 @@ private fun LocalModelStatusSurface(
 }
 
 @Composable
-private fun LocalModelEmptyState(modifier: Modifier = Modifier, onOpenModelGallery: () -> Unit) {
+private fun LocalModelEmptyState(
+        statusMessage: String?,
+        modifier: Modifier = Modifier,
+        onOpenModelGallery: () -> Unit
+) {
+        val normalizedStatus = statusMessage?.trim().orEmpty()
+
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.padding(horizontal = 24.dp)
-                ) { Button(onClick = onOpenModelGallery) { Text("Open model library") } }
+                ) {
+                        Text(
+                                text =
+                                        stringResource(
+                                                id = R.string.local_model_empty_title
+                                        ),
+                                style = MaterialTheme.typography.titleMedium,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurface
+                        )
+
+                        if (normalizedStatus.isNotBlank()) {
+                                Text(
+                                        text = normalizedStatus,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        textAlign = TextAlign.Center,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                        }
+
+                        Button(onClick = onOpenModelGallery) {
+                                Text(text = stringResource(id = R.string.open_model_library))
+                        }
+                }
         }
 }
 
@@ -1616,6 +1671,7 @@ private fun Composer(
         draft: String,
         isSending: Boolean,
         notice: String?,
+        canSend: Boolean = true,
         onOpenControls: () -> Unit,
         onDraftChange: (String) -> Unit,
         onSend: () -> Unit,
@@ -1623,7 +1679,7 @@ private fun Composer(
         onRetry: () -> Unit,
         modifier: Modifier = Modifier
 ) {
-        val sendEnabled = draft.isNotBlank() && !isSending
+        val sendEnabled = canSend && draft.isNotBlank() && !isSending
         val sendInteractionSource = remember { MutableInteractionSource() }
         val sendPressed by sendInteractionSource.collectIsPressedAsState()
         val sendScale by

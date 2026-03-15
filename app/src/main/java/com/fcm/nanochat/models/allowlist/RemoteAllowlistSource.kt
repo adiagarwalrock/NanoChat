@@ -19,7 +19,7 @@ internal class RemoteAllowlistSource(
             if (!response.isSuccessful) {
                 error("Remote allowlist fetch failed (HTTP ${response.code}).")
             }
-            val json = response.body?.string().orEmpty()
+            val json = response.body.string()
             if (json.isBlank()) {
                 error("Remote allowlist response was empty.")
             }

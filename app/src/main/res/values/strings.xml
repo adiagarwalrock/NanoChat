@@ -32,6 +32,7 @@
     <string name="settings">Settings</string>
     <string name="local_models">Local models</string>
     <string name="manage_local_models">Manage local models</string>
+    <string name="local_model_empty_title">Select a local model to start on-device chat</string>
     <string name="active_local_model">Active local model</string>
     <string name="no_local_model_selected">No local model selected</string>
     <string name="local_model_ready_status">Ready for on-device chat</string>
@@ -166,4 +167,16 @@
     <string name="accelerator_gpu">GPU</string>
     <string name="accelerator_nnapi">NNAPI</string>
     <string name="thinking_section_title">Thought process</string>
+    <string name="channel_model_downloads_name">Model downloads</string>
+    <string name="channel_model_downloads_desc">Shows progress while downloading local models.</string>
+    <string name="channel_chat_responses_name">Chat updates</string>
+    <string name="channel_chat_responses_desc">Notifies you when a chat response finishes.</string>
+    <string name="notification_model_download_title">%1$s download</string>
+    <string name="notification_model_download_complete">%1$s downloaded</string>
+    <string name="notification_model_download_failed">Download failed. Try again.</string>
+    <string name="notification_model_download_progress">%1$s / %2$s</string>
+    <string name="notification_model_download_indeterminate">Downloading…</string>
+    <string name="notification_model_validating">Validating download…</string>
+    <string name="notification_chat_ready_title">%1$s ready</string>
+    <string name="notification_chat_ready_body">Response finished.</string>
 </resources>
