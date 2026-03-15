@@ -23,11 +23,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -86,10 +84,10 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -120,7 +118,6 @@ private val UserBubbleShape =
 private val ComposerShape = RoundedCornerShape(24.dp)
 private val ControlCardShape = RoundedCornerShape(18.dp)
 private val ModelSeparatorRegex = Regex("[-_]+")
-private val ThinkingBlockRegex = Regex("(?is)<think>(.*?)</think>")
 
 @Composable
 internal fun ChatTab(
@@ -143,9 +140,9 @@ internal fun ChatTab(
         onMessageInfo: (ChatMessage) -> Unit,
         onDeleteMessage: (ChatMessage) -> Unit
 ) {
-        val screenWidthDp = LocalConfiguration.current.screenWidthDp.dp
+        val windowInfo = LocalWindowInfo.current
+        val screenWidthDp = with(LocalDensity.current) { windowInfo.containerSize.width.toDp() }
         val compact = screenWidthDp < 700.dp
-        val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
         val horizontalPadding = if (compact) 16.dp else 24.dp
         val contentModifier = Modifier
                 .fillMaxSize()
@@ -158,7 +155,6 @@ internal fun ChatTab(
                         ChatTabContent(
                                 state = state,
                                 settingsState = settingsState,
-                                imeVisible = imeVisible,
                                 modifier = contentModifier,
                                 onOpenSessions = onOpenSessions,
                                 onSendMessage = onSendMessage,
@@ -188,7 +184,6 @@ internal fun ChatTab(
                                 ChatTabContent(
                                         state = state,
                                         settingsState = settingsState,
-                                        imeVisible = imeVisible,
                                         modifier = contentModifier,
                                         onOpenSessions = onOpenSessions,
                                         onSendMessage = onSendMessage,
@@ -215,7 +210,6 @@ internal fun ChatTab(
 private fun ChatTabContent(
         state: ChatScreenState,
         settingsState: SettingsScreenState,
-        imeVisible: Boolean,
         modifier: Modifier = Modifier,
         onOpenSessions: () -> Unit,
         onSendMessage: () -> Unit,
@@ -306,19 +300,13 @@ private fun ChatTabContent(
                                 state = state,
                                 settings = settingsState,
                                 onDismiss = { controlsVisible = false },
-                                onUpdateSettings = {
-                                        baseUrl,
-                                        modelName,
-                                        temperature,
-                                        topP,
-                                        contextLength ->
+                                onUpdateSettings = { _, _, temperature, topP, contextLength ->
                                         onTemperatureChange(temperature)
                                         onTopPChange(topP)
                                         onContextLengthChange(contextLength)
                                 },
                                 onUpdateThinkingEffort = onThinkingEffortChange,
-                                onUpdateAccelerator = onAcceleratorChange,
-                                onManageLocalModels = onOpenModelGallery
+                                onUpdateAccelerator = onAcceleratorChange
                         )
                 }
         }
@@ -338,8 +326,7 @@ private fun ModelControlsSheet(
                         topP: Double,
                         contextLength: Int) -> Unit,
         onUpdateThinkingEffort: (ThinkingEffort) -> Unit,
-        onUpdateAccelerator: (AcceleratorPreference) -> Unit,
-        onManageLocalModels: () -> Unit
+        onUpdateAccelerator: (AcceleratorPreference) -> Unit
 ) {
         ModalBottomSheet(
                 onDismissRequest = onDismiss,
@@ -922,39 +909,6 @@ private fun ChatTopBar(
                 HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
                 )
-        }
-}
-
-@Composable
-private fun EmptyConversation(modifier: Modifier = Modifier) {
-        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                        Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = null,
-                                tint =
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                alpha = 0.85f
-                                        )
-                        )
-                        Text(
-                                text = stringResource(id = R.string.empty_chat_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                textAlign = TextAlign.Center,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(horizontal = 24.dp)
-                        )
-                        Text(
-                                text = stringResource(id = R.string.empty_chat_subtitle),
-                                style = MaterialTheme.typography.bodySmall,
-                                textAlign = TextAlign.Center,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 24.dp)
-                        )
-                }
         }
 }
 
@@ -1672,13 +1626,13 @@ private fun Composer(
         draft: String,
         isSending: Boolean,
         notice: String?,
+        modifier: Modifier = Modifier,
         canSend: Boolean = true,
         onOpenControls: () -> Unit,
         onDraftChange: (String) -> Unit,
         onSend: () -> Unit,
         onStop: () -> Unit,
-        onRetry: () -> Unit,
-        modifier: Modifier = Modifier
+        onRetry: () -> Unit
 ) {
         val sendEnabled = canSend && draft.isNotBlank() && !isSending
         val sendInteractionSource = remember { MutableInteractionSource() }
@@ -1877,10 +1831,11 @@ private fun shareMessage(context: android.content.Context, content: String) {
 private fun normalizeLists(raw: String): String {
         if (raw.isBlank()) return raw
 
-        val orderedListMissingSpaceRegex = Regex("(?<=\\b\\d)\\.(?=[A-Z])")
-        val orderedListBoundaryRegex = Regex("(?<=[\\p{L}\\p{N}\\)\\]\\.!?:])(?=\\d+\\.\\s*[A-Z])")
+        val orderedListMissingSpaceRegex = Regex("""(?<=\b\d)\.(?=[A-Z])""")
+        val orderedListBoundaryRegex =
+                Regex("""(?<=[\p{L}\p{N})\].!?:])(?=\d+\.\s*[A-Z])""")
         val unorderedListBoundaryRegex =
-                Regex("(?<=[\\p{L}\\p{N}\\)\\]\\.!?:])(?=(?:[-*+]\\s+[A-Z]))")
+                Regex("""(?<=[\p{L}\p{N})\].!?:])(?=[-*+]\s+[A-Z])""")
         val lines = raw.replace("\r\n", "\n").replace('\r', '\n').lines()
         val builder = StringBuilder()
         var insideFence = false

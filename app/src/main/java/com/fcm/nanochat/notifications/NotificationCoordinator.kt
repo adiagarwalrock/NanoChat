@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import com.fcm.nanochat.MainActivity
 import com.fcm.nanochat.R
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,8 +25,6 @@ class NotificationCoordinator @Inject constructor(
     private val notificationManager = NotificationManagerCompat.from(appContext)
 
     fun ensureChannels() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-
         val downloadChannel = NotificationChannel(
             CHANNEL_MODEL_DOWNLOADS,
             appContext.getString(R.string.channel_model_downloads_name),
@@ -114,7 +113,7 @@ class NotificationCoordinator @Inject constructor(
             else -> builder.setProgress(0, 0, false)
         }
 
-        notificationManager.notify(modelDownloadNotificationId(modelId), builder.build())
+        notifySafe(modelDownloadNotificationId(modelId), builder)
     }
 
     fun cancelModelDownload(modelId: String) {
@@ -148,7 +147,7 @@ class NotificationCoordinator @Inject constructor(
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
 
-        notificationManager.notify(chatNotificationId(sessionId), builder.build())
+        notifySafe(chatNotificationId(sessionId), builder)
     }
 
     private fun canPostNotifications(): Boolean {
@@ -172,7 +171,21 @@ class NotificationCoordinator @Inject constructor(
         val unit = 1024.0
         val exp = (Math.log(bytes.toDouble()) / Math.log(unit)).toInt()
         val prefix = "KMGTPE"[exp - 1]
-        return String.format("%.1f %sB", bytes / Math.pow(unit, exp.toDouble()), prefix)
+        return String.format(
+            Locale.US,
+            "%.1f %sB",
+            bytes / Math.pow(unit, exp.toDouble()),
+            prefix
+        )
+    }
+
+    private fun notifySafe(id: Int, builder: NotificationCompat.Builder) {
+        if (!canPostNotifications()) return
+        try {
+            notificationManager.notify(id, builder.build())
+        } catch (security: SecurityException) {
+            // Permission may be revoked at runtime; ignore.
+        }
     }
 
     enum class DownloadStatus {

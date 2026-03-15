@@ -456,7 +456,7 @@ class ModelDownloadCoordinator(
                 totalBytes = finalFile.length(),
                 status = NotificationCoordinator.DownloadStatus.Completed
             )
-        } catch (cancelled: CancellationException) {
+        } catch (_: CancellationException) {
             val paused = installedModelDao.installedModel(modelId)
             if (paused != null) {
                 installedModelDao.upsert(
