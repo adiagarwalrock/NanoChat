@@ -1,54 +1,62 @@
 package com.fcm.nanochat
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.fcm.nanochat.notifications.NotificationCoordinator
 import com.fcm.nanochat.ui.NanoChatApp
 import com.fcm.nanochat.ui.theme.NanoChatTheme
 import com.fcm.nanochat.viewmodel.ChatViewModel
-import com.fcm.nanochat.viewmodel.ChatViewModelFactory
 import com.fcm.nanochat.viewmodel.ModelManagerViewModel
-import com.fcm.nanochat.viewmodel.ModelManagerViewModelFactory
 import com.fcm.nanochat.viewmodel.SettingsViewModel
-import com.fcm.nanochat.viewmodel.SettingsViewModelFactory
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.MutableStateFlow
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject
+    lateinit var notificationCoordinator: NotificationCoordinator
+
+    private val sessionNavigation = MutableStateFlow<Long?>(null)
+    private val requestNotificationsPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
-        val container = (application as NanoChatApplication).container
+        notificationCoordinator.ensureChannels()
+        handleNavigationIntent(intent)
+        maybeRequestNotificationPermission()
 
         setContent {
             NanoChatTheme {
-                val chatViewModel: ChatViewModel = viewModel(
-                    factory = ChatViewModelFactory(container.chatRepository)
-                )
-                val settingsViewModel: SettingsViewModel = viewModel(
-                    factory = SettingsViewModelFactory(
-                        container.preferences,
-                        container.chatRepository,
-                        container.httpClient
-                    )
-                )
-                val modelManagerViewModel: ModelManagerViewModel = viewModel(
-                    factory = ModelManagerViewModelFactory(container.localModelRepository)
-                )
+                val chatViewModel: ChatViewModel = viewModel()
+                val settingsViewModel: SettingsViewModel = viewModel()
+                val modelManagerViewModel: ModelManagerViewModel = viewModel()
 
                 val chatState by chatViewModel.uiState.collectAsStateWithLifecycle()
                 val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
                 val modelState by modelManagerViewModel.uiState.collectAsStateWithLifecycle()
+                val targetSessionId by sessionNavigation.collectAsStateWithLifecycle()
 
                 NanoChatApp(
                     chatState = chatState,
                     modelState = modelState,
                     settingsState = settingsState,
+                    navigateToChatSessionId = targetSessionId,
+                    onConsumedNavigation = { sessionNavigation.value = null },
                     onSendMessage = chatViewModel::sendMessage,
                     onStopGeneration = chatViewModel::stopGeneration,
                     onMessageDraftChange = chatViewModel::updateDraft,
@@ -88,6 +96,30 @@ class MainActivity : ComponentActivity() {
                     onDownloadGeminiNano = settingsViewModel::downloadGeminiNano
                 )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleNavigationIntent(intent)
+    }
+
+    private fun handleNavigationIntent(intent: Intent?) {
+        val sessionId = intent?.getLongExtra(NotificationCoordinator.EXTRA_SESSION_ID, -1L) ?: -1L
+        if (sessionId > 0) {
+            sessionNavigation.value = sessionId
+        }
+    }
+
+    private fun maybeRequestNotificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return
+        val granted =
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            requestNotificationsPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 }

@@ -1,18 +1,18 @@
 package com.fcm.nanochat.viewmodel
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.fcm.nanochat.data.AcceleratorPreference
 import com.fcm.nanochat.data.AppPreferences
+import com.fcm.nanochat.data.ThinkingEffort
 import com.fcm.nanochat.data.network.HuggingFaceWhoAmIParser
 import com.fcm.nanochat.data.repository.ChatRepository
-import com.fcm.nanochat.data.AcceleratorPreference
-import com.fcm.nanochat.data.ThinkingEffort
 import com.fcm.nanochat.inference.GeminiNanoStatus
 import com.fcm.nanochat.model.GeminiNanoStatusUi
 import com.fcm.nanochat.model.HuggingFaceAccountUi
 import com.fcm.nanochat.model.SettingsScreenState
 import com.fcm.nanochat.model.UsageStats
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,8 +25,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import javax.inject.Inject
 
-class SettingsViewModel(
+@HiltViewModel
+class SettingsViewModel @Inject constructor(
     private val preferences: AppPreferences,
     private val repository: ChatRepository,
     private val httpClient: OkHttpClient
@@ -297,7 +299,7 @@ class SettingsViewModel(
 
             try {
                 httpClient.newCall(request).execute().use { response ->
-                    val body = response.body?.string().orEmpty()
+                    val body = response.body.string()
                     if (!response.isSuccessful) {
                         val serverMessage = HuggingFaceWhoAmIParser.parseError(body)
                         val message = when {
@@ -363,20 +365,6 @@ class SettingsViewModel(
                 it.copy(clearNotice = clearNotice, saveNotice = null)
             }
         }
-    }
-}
-
-class SettingsViewModelFactory(
-    private val preferences: AppPreferences,
-    private val repository: ChatRepository,
-    private val httpClient: OkHttpClient
-) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(SettingsViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return SettingsViewModel(preferences, repository, httpClient) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }
 }
 

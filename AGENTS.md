@@ -3,7 +3,8 @@ For agentic coders in /mnt/d/NanoChat. Kotlin official style; Material You expre
 
 Quick Context (from Plans)
 - App: Android single-module app `app`, Compose-only UI, package `com.fcm.nanochat`.
-- Tooling: Java/Kotlin 17, Kotlin 2.1.10, KSP 2.1.10-1.0.29, AGP 9.1.0, Compose BOM 2024.12.01, minSdk 31, target/compile 35.
+- Tooling: Java/Kotlin 17, Kotlin 2.3.10, KSP 2.3.6, AGP 9.1.0, Compose BOM 2024.12.01, minSdk 31,
+  target/compile 36.
 - Navigation: chat-first shell. Chat is the primary surface; Models and Settings are secondary
   screens accessed via drawer/settings flows (no bottom nav).
 - Backends: `InferenceMode` supports `AICORE`, `DOWNLOADED` (LiteRT / MediaPipe runtime for local
@@ -20,7 +21,9 @@ Build & Run (best practices)
 - Running from elsewhere: add `-p /mnt/d/NanoChat`.
 - Keep Gradle JVM at 17; avoid version bumps without AGP/KSP/Compose validation.
 - Do not commit `local.properties`; holds SDK/NDK paths.
-- If Gradle sync fails on KSP/artifact resolution, ensure `gradlePluginPortal()` exists and `android.disablekotlinsourcesets=false` in `gradle.properties` (see PRD history).
+- Ensure `gradlePluginPortal()` remains in repositories for plugin resolution.
+- For AGP 9 + Hilt, use Hilt `2.59.2+` and keep default AGP DSL behavior (do not set
+  `android.newDsl=false`).
 - If enabling configuration cache, verify Compose + KSP compatibility per build; disable if diagnostics degrade.
 
 Device & Emulator
@@ -55,7 +58,9 @@ Lint & Formatting
 - Use `@Suppress` narrowly with justification; delete dead/commented code.
 
 Architecture Snapshot
-- DI: simple `AppContainer` in `NanoChatApplication`; ViewModel factories per screen.
+
+- DI: Hilt (`@HiltAndroidApp`, `@AndroidEntryPoint`, `@HiltViewModel`) with singleton modules under
+  `di/`.
 - Data: Room entities `ChatSessionEntity`, `ChatMessageEntity`, `InstalledModelEntity`; DAOs for
   session/message/model install; explicit
   migrations are in place (`1->2`, `2->3`, `3->4`).

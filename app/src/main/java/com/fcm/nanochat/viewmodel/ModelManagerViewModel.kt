@@ -1,7 +1,6 @@
 package com.fcm.nanochat.viewmodel
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.fcm.nanochat.data.repository.LocalModelRepository
 import com.fcm.nanochat.model.ActiveLocalModelSummaryUi
@@ -16,6 +15,7 @@ import com.fcm.nanochat.models.registry.ModelInstallState
 import com.fcm.nanochat.models.registry.ModelStorageLocation
 import com.fcm.nanochat.models.runtime.RuntimeLoadPhase
 import com.fcm.nanochat.models.runtime.RuntimeLoadState
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,8 +25,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class ModelManagerViewModel(
+@HiltViewModel
+class ModelManagerViewModel @Inject constructor(
     private val localModelRepository: LocalModelRepository
 ) : ViewModel() {
     private val notice = MutableStateFlow<String?>(null)
@@ -507,18 +509,6 @@ class ModelManagerViewModel(
         const val RECENT_USE_WINDOW_MS = 60_000L
         const val DEFAULT_INSTALLED_STARTUP_FAILURE_MESSAGE =
             "NanoChat could not start this model on your device."
-    }
-}
-
-class ModelManagerViewModelFactory(
-    private val localModelRepository: LocalModelRepository
-) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(ModelManagerViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return ModelManagerViewModel(localModelRepository) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }
 }
 

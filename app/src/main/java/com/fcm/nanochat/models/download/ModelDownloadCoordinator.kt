@@ -9,6 +9,7 @@ import com.fcm.nanochat.data.db.InstalledModelEntity
 import com.fcm.nanochat.models.allowlist.AllowlistRepository
 import com.fcm.nanochat.models.registry.ModelInstallState
 import com.fcm.nanochat.models.registry.ModelStorageLocation
+import com.fcm.nanochat.notifications.NotificationCoordinator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +37,8 @@ class ModelDownloadCoordinator(
     private val preferences: AppPreferences,
     private val allowlistRepository: AllowlistRepository,
     private val installedModelDao: InstalledModelDao,
-    private val integrityValidator: DownloadIntegrityValidator
+    private val integrityValidator: DownloadIntegrityValidator,
+    private val notificationCoordinator: NotificationCoordinator
 ) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -59,6 +61,7 @@ class ModelDownloadCoordinator(
     fun cancel(modelId: String) {
         val normalized = modelId.trim().lowercase()
         jobs.remove(normalized)?.cancel()
+        notificationCoordinator.cancelModelDownload(normalized)
         scope.launch {
             val existing = installedModelDao.installedModel(normalized) ?: return@launch
             installedModelDao.upsert(
@@ -75,6 +78,7 @@ class ModelDownloadCoordinator(
         val normalized = modelId.trim().lowercase()
         if (normalized.isBlank()) return
         jobs.remove(normalized)?.cancel()
+        notificationCoordinator.cancelModelDownload(normalized)
 
         scope.launch {
             val existing = installedModelDao.installedModel(normalized) ?: return@launch
@@ -280,6 +284,14 @@ class ModelDownloadCoordinator(
         )
         installedModelDao.upsert(queuedEntity)
 
+        notificationCoordinator.notifyModelDownload(
+            modelId = modelId,
+            displayName = model.displayName,
+            downloadedBytes = existing?.downloadedBytes ?: 0L,
+            totalBytes = model.sizeInBytes,
+            status = NotificationCoordinator.DownloadStatus.Queued
+        )
+
         val tempFile = tempFile(modelId)
         tempFile.parentFile?.mkdirs()
         val resumeBytes = if (tempFile.exists()) tempFile.length() else 0L
@@ -290,6 +302,14 @@ class ModelDownloadCoordinator(
                 downloadedBytes = resumeBytes,
                 updatedAt = System.currentTimeMillis()
             )
+        )
+
+        notificationCoordinator.notifyModelDownload(
+            modelId = modelId,
+            displayName = model.displayName,
+            downloadedBytes = resumeBytes,
+            totalBytes = model.sizeInBytes,
+            status = NotificationCoordinator.DownloadStatus.Downloading
         )
 
         val requestBuilder = Request.Builder()
@@ -305,6 +325,7 @@ class ModelDownloadCoordinator(
         }
 
         val request = requestBuilder.build()
+        var lastNotifyMs = 0L
 
         try {
             var resolvedDownloadUrl: String? = null
@@ -330,10 +351,7 @@ class ModelDownloadCoordinator(
                     return
                 }
 
-                val body = response.body ?: run {
-                    upsertFailure(modelId, "Download failed. Empty response body.")
-                    return
-                }
+                val body = response.body
 
                 val append = resumeBytes > 0L && response.code == 206
                 val startingBytes = if (append) resumeBytes else 0L
@@ -362,6 +380,17 @@ class ModelDownloadCoordinator(
                                 )
                                 lastReport = nowMs
                             }
+
+                            if (nowMs - lastNotifyMs >= 750L) {
+                                notificationCoordinator.notifyModelDownload(
+                                    modelId = modelId,
+                                    displayName = model.displayName,
+                                    downloadedBytes = bytesWritten,
+                                    totalBytes = model.sizeInBytes,
+                                    status = NotificationCoordinator.DownloadStatus.Downloading
+                                )
+                                lastNotifyMs = nowMs
+                            }
                         }
                     }
                 }
@@ -373,6 +402,14 @@ class ModelDownloadCoordinator(
                     downloadedBytes = tempFile.length(),
                     updatedAt = System.currentTimeMillis()
                 )
+            )
+
+            notificationCoordinator.notifyModelDownload(
+                modelId = modelId,
+                displayName = model.displayName,
+                downloadedBytes = tempFile.length(),
+                totalBytes = model.sizeInBytes,
+                status = NotificationCoordinator.DownloadStatus.Validating
             )
 
             when (val validation =
@@ -411,6 +448,14 @@ class ModelDownloadCoordinator(
                     updatedAt = System.currentTimeMillis()
                 )
             )
+
+            notificationCoordinator.notifyModelDownload(
+                modelId = modelId,
+                displayName = model.displayName,
+                downloadedBytes = finalFile.length(),
+                totalBytes = finalFile.length(),
+                status = NotificationCoordinator.DownloadStatus.Completed
+            )
         } catch (cancelled: CancellationException) {
             val paused = installedModelDao.installedModel(modelId)
             if (paused != null) {
@@ -423,8 +468,23 @@ class ModelDownloadCoordinator(
                     )
                 )
             }
+
+            notificationCoordinator.notifyModelDownload(
+                modelId = modelId,
+                displayName = model.displayName,
+                downloadedBytes = tempFile.length(),
+                totalBytes = model.sizeInBytes,
+                status = NotificationCoordinator.DownloadStatus.Paused
+            )
         } catch (error: Throwable) {
             upsertFailure(modelId, toFriendlyFailure(error.message ?: "Model download failed."))
+            notificationCoordinator.notifyModelDownload(
+                modelId = modelId,
+                displayName = model.displayName,
+                downloadedBytes = tempFile.length(),
+                totalBytes = model.sizeInBytes,
+                status = NotificationCoordinator.DownloadStatus.Failed
+            )
         }
     }
 
@@ -438,6 +498,13 @@ class ModelDownloadCoordinator(
                     errorMessage = message,
                     updatedAt = now
                 )
+            )
+            notificationCoordinator.notifyModelDownload(
+                modelId = modelId,
+                displayName = existing.displayName,
+                downloadedBytes = existing.downloadedBytes,
+                totalBytes = existing.sizeBytes,
+                status = NotificationCoordinator.DownloadStatus.Failed
             )
             return
         }
@@ -459,6 +526,14 @@ class ModelDownloadCoordinator(
                 createdAt = now,
                 updatedAt = now
             )
+        )
+
+        notificationCoordinator.notifyModelDownload(
+            modelId = model.id,
+            displayName = model.displayName,
+            downloadedBytes = 0L,
+            totalBytes = model.sizeInBytes,
+            status = NotificationCoordinator.DownloadStatus.Failed
         )
     }
 

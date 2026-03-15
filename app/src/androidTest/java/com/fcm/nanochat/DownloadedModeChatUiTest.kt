@@ -19,11 +19,13 @@ class DownloadedModeChatUiTest {
     fun showsModelGalleryCtaWhenNoLocalModelSelected() {
         composeRule.setContent {
             ChatTab(
-                state = ChatScreenState(
-                    inferenceMode = InferenceMode.DOWNLOADED,
-                    isLocalModelReady = false,
-                    localModelStatusMessage = "Choose a local model from the gallery."
-                ),
+                state =
+                    ChatScreenState(
+                        inferenceMode = InferenceMode.DOWNLOADED,
+                        isLocalModelReady = false,
+                        localModelStatusMessage =
+                            "Choose a local model from the gallery."
+                    ),
                 settingsState = SettingsScreenState(),
                 onOpenSessions = {},
                 onSendMessage = {},
@@ -36,12 +38,15 @@ class DownloadedModeChatUiTest {
                 onTemperatureChange = {},
                 onTopPChange = {},
                 onContextLengthChange = {},
+                onThinkingEffortChange = { _: com.fcm.nanochat.data.ThinkingEffort -> },
+                onAcceleratorChange = { _: com.fcm.nanochat.data.AcceleratorPreference -> },
                 onMessageInfo = {},
                 onDeleteMessage = {}
             )
         }
 
-        composeRule.onNodeWithText("Select a local model to start on-device chat")
+        composeRule
+            .onNodeWithText("Select a local model to start on-device chat")
             .assertIsDisplayed()
         composeRule.onNodeWithText("Open model library").assertIsDisplayed()
     }

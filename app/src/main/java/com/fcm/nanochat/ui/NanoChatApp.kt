@@ -35,8 +35,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import com.fcm.nanochat.R
 import com.fcm.nanochat.inference.InferenceMode
+import com.fcm.nanochat.model.ChatMessage
+import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.ModelGalleryScreenState
 import com.fcm.nanochat.model.SettingsScreenState
@@ -46,9 +49,14 @@ import com.fcm.nanochat.ui.SettingsSection.DataHistory
 import com.fcm.nanochat.ui.SettingsSection.Home
 import com.fcm.nanochat.ui.SettingsSection.HuggingFaceConnection
 import com.fcm.nanochat.ui.SettingsSection.ModelControls
+import com.fcm.nanochat.ui.theme.NanoChatTheme
 import kotlinx.coroutines.launch
 
-private enum class AppDestination { Chat, Models, Settings }
+private enum class AppDestination {
+    Chat,
+    Models,
+    Settings
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,6 +64,8 @@ fun NanoChatApp(
     chatState: ChatScreenState = ChatScreenState(),
     modelState: ModelGalleryScreenState = ModelGalleryScreenState(),
     settingsState: SettingsScreenState = SettingsScreenState(),
+    navigateToChatSessionId: Long? = null,
+    onConsumedNavigation: () -> Unit = {},
     onSendMessage: () -> Unit = {},
     onStopGeneration: () -> Unit = {},
     onMessageDraftChange: (String) -> Unit = {},
@@ -75,7 +85,10 @@ fun NanoChatApp(
     onUseModel: (String) -> Unit = {},
     onEjectModel: (String) -> Unit = {},
     onDeleteModel: (String) -> Unit = {},
-    onMoveModelStorage: (String, com.fcm.nanochat.models.registry.ModelStorageLocation) -> Unit = { _, _ -> },
+    onMoveModelStorage:
+        (String, com.fcm.nanochat.models.registry.ModelStorageLocation) -> Unit =
+        { _, _ ->
+        },
     onImportLocalModel: () -> Unit = {},
     onDismissModelNotice: () -> Unit = {},
     onBaseUrlChange: (String) -> Unit = {},
@@ -107,6 +120,13 @@ fun NanoChatApp(
         val currentNotice = modelState.notice ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(currentNotice)
         onDismissModelNotice()
+    }
+
+    LaunchedEffect(navigateToChatSessionId) {
+        val target = navigateToChatSessionId ?: return@LaunchedEffect
+        destination = AppDestination.Chat
+        onSelectSession(target)
+        onConsumedNavigation()
     }
 
     ModalNavigationDrawer(
@@ -173,14 +193,13 @@ fun NanoChatApp(
                         },
                         onTemperatureChange = onTemperatureChange,
                         onTopPChange = onTopPChange,
-                         onContextLengthChange = onContextLengthChange,
-                         onThinkingEffortChange = onThinkingEffortChange,
-                         onAcceleratorChange = onAcceleratorChange,
-                         onMessageInfo = {},
-                         onDeleteMessage = { message -> onDeleteMessage(message.id) }
-                     )
-                 }
-
+                        onContextLengthChange = onContextLengthChange,
+                        onThinkingEffortChange = onThinkingEffortChange,
+                        onAcceleratorChange = onAcceleratorChange,
+                        onMessageInfo = {},
+                        onDeleteMessage = { message -> onDeleteMessage(message.id) }
+                    )
+                }
                 AppDestination.Models -> {
                     ModelsPage(
                         state = modelState,
@@ -206,7 +225,6 @@ fun NanoChatApp(
                         onImportLocalModel = onImportLocalModel
                     )
                 }
-
                 AppDestination.Settings -> {
                     SettingsPage(
                         state = settingsState,
@@ -226,15 +244,15 @@ fun NanoChatApp(
                         onHuggingFaceTokenChange = onHuggingFaceTokenChange,
                         onValidateHuggingFaceToken = onValidateHuggingFaceToken,
                         onTemperatureChange = onTemperatureChange,
-                         onTopPChange = onTopPChange,
-                         onContextLengthChange = onContextLengthChange,
-                         onThinkingEffortChange = onThinkingEffortChange,
-                         onAcceleratorChange = onAcceleratorChange,
-                         onSaveSettings = onSaveSettings,
-                         onClearHistory = onClearHistory,
-                         onRefreshStats = onRefreshStats,
-                         onRefreshGeminiStatus = onRefreshGeminiStatus,
-                         onDownloadGeminiNano = onDownloadGeminiNano
+                        onTopPChange = onTopPChange,
+                        onContextLengthChange = onContextLengthChange,
+                        onThinkingEffortChange = onThinkingEffortChange,
+                        onAcceleratorChange = onAcceleratorChange,
+                        onSaveSettings = onSaveSettings,
+                        onClearHistory = onClearHistory,
+                        onRefreshStats = onRefreshStats,
+                        onRefreshGeminiStatus = onRefreshGeminiStatus,
+                        onDownloadGeminiNano = onDownloadGeminiNano
                     )
                 }
             }
@@ -283,7 +301,10 @@ private fun ModelsPage(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
                 }
             )
@@ -333,25 +354,27 @@ private fun SettingsPage(
     onDownloadGeminiNano: () -> Unit
 ) {
     var section by rememberSaveable(startSection) { mutableStateOf(startSection) }
-    val title = when (section) {
-        Home -> "Settings"
-        AiConfiguration -> "AI configuration"
-        Connection -> "Connection"
-        ModelControls -> "Model behavior"
-        HuggingFaceConnection -> "Hugging Face"
-        DataHistory -> "Usage and history"
-    }
+    val title =
+        when (section) {
+            Home -> "Settings"
+            AiConfiguration -> "Remote AI configuration"
+            Connection -> "Connection"
+            ModelControls -> "Model behavior"
+            HuggingFaceConnection -> "Hugging Face"
+            DataHistory -> "Usage and history"
+        }
 
     val navigateBack: () -> Unit = {
-        section = when (section) {
-            Home -> {
-                onBack()
-                Home
-            }
+        section =
+            when (section) {
+                Home -> {
+                    onBack()
+                    Home
+                }
 
-            AiConfiguration, HuggingFaceConnection, DataHistory -> Home
-            Connection, ModelControls -> AiConfiguration
-        }
+                AiConfiguration, HuggingFaceConnection, DataHistory -> Home
+                Connection, ModelControls -> AiConfiguration
+            }
     }
 
     BackHandler(onBack = navigateBack)
@@ -363,67 +386,75 @@ private fun SettingsPage(
                 title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = navigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
                 }
             )
         },
         contentWindowInsets = ScaffoldDefaults.contentWindowInsets
     ) { inner ->
-        val contentModifier = Modifier
-            .padding(inner)
+        val contentModifier = Modifier.padding(inner)
 
         when (section) {
-            Home -> SettingsHome(
-                state = state,
-                modelState = modelState,
-                modifier = contentModifier,
-                onNavigate = { section = it },
-                onOpenModelLibrary = onOpenModelLibrary
-            )
+            Home ->
+                SettingsHome(
+                    state = state,
+                    modelState = modelState,
+                    modifier = contentModifier,
+                    onNavigate = { section = it },
+                    onOpenModelLibrary = onOpenModelLibrary
+                )
 
-            AiConfiguration -> AiConfigurationSettings(
-                state = state,
-                modifier = contentModifier,
-                onNavigate = { section = it }
-            )
+            AiConfiguration ->
+                AiConfigurationSettings(
+                    state = state,
+                    modifier = contentModifier,
+                    onNavigate = { section = it }
+                )
 
-            Connection -> ConnectionSettings(
-                state = state,
-                modifier = contentModifier,
-                onBaseUrlChange = onBaseUrlChange,
-                onModelNameChange = onModelNameChange,
-                onApiKeyChange = onApiKeyChange,
-                onRefreshGeminiStatus = onRefreshGeminiStatus,
-                onDownloadGeminiNano = onDownloadGeminiNano,
-                onSaveSettings = onSaveSettings
-            )
+            Connection ->
+                ConnectionSettings(
+                    state = state,
+                    modifier = contentModifier,
+                    onBaseUrlChange = onBaseUrlChange,
+                    onModelNameChange = onModelNameChange,
+                    onApiKeyChange = onApiKeyChange,
+                    onRefreshGeminiStatus = onRefreshGeminiStatus,
+                    onDownloadGeminiNano = onDownloadGeminiNano,
+                    onSaveSettings = onSaveSettings
+                )
 
-            ModelControls -> ModelControlsSettings(
-                state = state,
-                modifier = contentModifier,
-                onTemperatureChange = onTemperatureChange,
-                onTopPChange = onTopPChange,
-                onContextLengthChange = onContextLengthChange,
-                onThinkingEffortChange = onThinkingEffortChange,
-                onAcceleratorChange = onAcceleratorChange,
-                onSaveSettings = onSaveSettings
-            )
+            ModelControls ->
+                ModelControlsSettings(
+                    state = state,
+                    modifier = contentModifier,
+                    onTemperatureChange = onTemperatureChange,
+                    onTopPChange = onTopPChange,
+                    onContextLengthChange = onContextLengthChange,
+                    onThinkingEffortChange = onThinkingEffortChange,
+                    onAcceleratorChange = onAcceleratorChange,
+                    onSaveSettings = onSaveSettings
+                )
 
-            HuggingFaceConnection -> HuggingFaceConnectionSettings(
-                state = state,
-                modifier = contentModifier,
-                onHuggingFaceTokenChange = onHuggingFaceTokenChange,
-                onValidateHuggingFaceToken = onValidateHuggingFaceToken,
-                onSaveSettings = onSaveSettings
-            )
+            HuggingFaceConnection ->
+                HuggingFaceConnectionSettings(
+                    state = state,
+                    modifier = contentModifier,
+                    onHuggingFaceTokenChange = onHuggingFaceTokenChange,
+                    onValidateHuggingFaceToken = onValidateHuggingFaceToken,
+                    onSaveSettings = onSaveSettings
+                )
 
-            DataHistory -> DataHistorySettings(
-                state = state,
-                modifier = contentModifier,
-                onRefreshStats = onRefreshStats,
-                onClearHistory = onClearHistory
-            )
+            DataHistory ->
+                DataHistorySettings(
+                    state = state,
+                    modifier = contentModifier,
+                    onRefreshStats = onRefreshStats,
+                    onClearHistory = onClearHistory
+                )
         }
     }
 }
@@ -444,15 +475,9 @@ private fun RenameSessionDialog(
             Button(
                 enabled = draft.trim().isNotEmpty(),
                 onClick = { onConfirm(currentSessionId, draft) }
-            ) {
-                Text("Rename")
-            }
+            ) { Text("Rename") }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
         title = { Text("Rename chat") },
         text = {
             OutlinedTextField(
@@ -464,4 +489,37 @@ private fun RenameSessionDialog(
             )
         }
     )
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun NanoChatAppChatPreview() {
+    NanoChatTheme {
+        NanoChatApp(
+            chatState =
+                ChatScreenState(
+                    messages =
+                        listOf(
+                            ChatMessage(
+                                1,
+                                1,
+                                ChatRole.USER,
+                                "Show me the app!"
+                            ),
+                            ChatMessage(
+                                2,
+                                1,
+                                ChatRole.ASSISTANT,
+                                "Here is a preview of the main chat interface."
+                            )
+                        )
+                )
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun NanoChatAppSettingsPreview() {
+    NanoChatTheme { NanoChatApp(settingsState = SettingsScreenState(modelName = "Gemini Nano")) }
 }
