@@ -13,9 +13,6 @@
         <include
             domain="database"
             path="nanochat.db-shm" />
-        <exclude
-            domain="sharedpref"
-            path="nanochat_secure_preferences.xml" />
     </cloud-backup>
     <device-transfer>
         <include
@@ -30,8 +27,5 @@
         <include
             domain="database"
             path="nanochat.db-shm" />
-        <exclude
-            domain="sharedpref"
-            path="nanochat_secure_preferences.xml" />
     </device-transfer>
 </data-extraction-rules>
