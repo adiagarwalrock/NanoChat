@@ -30,6 +30,7 @@ class MainActivity : ComponentActivity() {
     lateinit var notificationCoordinator: NotificationCoordinator
 
     private val sessionNavigation = MutableStateFlow<Long?>(null)
+    private val modelsNavigation = MutableStateFlow(false)
     private val requestNotificationsPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> }
 
@@ -50,13 +51,16 @@ class MainActivity : ComponentActivity() {
                 val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
                 val modelState by modelManagerViewModel.uiState.collectAsStateWithLifecycle()
                 val targetSessionId by sessionNavigation.collectAsStateWithLifecycle()
+                val navigateToModels by modelsNavigation.collectAsStateWithLifecycle()
 
                 NanoChatApp(
                     chatState = chatState,
                     modelState = modelState,
                     settingsState = settingsState,
                     navigateToChatSessionId = targetSessionId,
+                    navigateToModels = navigateToModels,
                     onConsumedNavigation = { sessionNavigation.value = null },
+                    onConsumedModelsNavigation = { modelsNavigation.value = false },
                     onSendMessage = chatViewModel::sendMessage,
                     onStopGeneration = chatViewModel::stopGeneration,
                     onMessageDraftChange = chatViewModel::updateDraft,
@@ -108,6 +112,10 @@ class MainActivity : ComponentActivity() {
         val sessionId = intent?.getLongExtra(NotificationCoordinator.EXTRA_SESSION_ID, -1L) ?: -1L
         if (sessionId > 0) {
             sessionNavigation.value = sessionId
+        }
+        val openModels = intent?.getBooleanExtra(NotificationCoordinator.EXTRA_OPEN_MODELS, false) ?: false
+        if (openModels) {
+            modelsNavigation.value = true
         }
     }
 

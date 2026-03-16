@@ -65,7 +65,9 @@ fun NanoChatApp(
     modelState: ModelGalleryScreenState = ModelGalleryScreenState(),
     settingsState: SettingsScreenState = SettingsScreenState(),
     navigateToChatSessionId: Long? = null,
+    navigateToModels: Boolean = false,
     onConsumedNavigation: () -> Unit = {},
+    onConsumedModelsNavigation: () -> Unit = {},
     onSendMessage: () -> Unit = {},
     onStopGeneration: () -> Unit = {},
     onMessageDraftChange: (String) -> Unit = {},
@@ -127,6 +129,13 @@ fun NanoChatApp(
         destination = AppDestination.Chat
         onSelectSession(target)
         onConsumedNavigation()
+    }
+
+    LaunchedEffect(navigateToModels) {
+        if (!navigateToModels) return@LaunchedEffect
+        modelsBackDestination = AppDestination.Chat
+        destination = AppDestination.Models
+        onConsumedModelsNavigation()
     }
 
     ModalNavigationDrawer(

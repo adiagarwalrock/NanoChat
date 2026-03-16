@@ -10,6 +10,7 @@ import com.fcm.nanochat.models.allowlist.AllowlistRepository
 import com.fcm.nanochat.models.registry.ModelInstallState
 import com.fcm.nanochat.models.registry.ModelStorageLocation
 import com.fcm.nanochat.notifications.NotificationCoordinator
+import com.fcm.nanochat.service.ModelDownloadService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -62,6 +63,7 @@ class ModelDownloadCoordinator(
         val normalized = modelId.trim().lowercase()
         jobs.remove(normalized)?.cancel()
         notificationCoordinator.cancelModelDownload(normalized)
+        stopForegroundServiceIfIdle()
         scope.launch {
             val existing = installedModelDao.installedModel(normalized) ?: return@launch
             installedModelDao.upsert(
@@ -284,13 +286,10 @@ class ModelDownloadCoordinator(
         )
         installedModelDao.upsert(queuedEntity)
 
-        notificationCoordinator.notifyModelDownload(
-            modelId = modelId,
-            displayName = model.displayName,
-            downloadedBytes = existing?.downloadedBytes ?: 0L,
-            totalBytes = model.sizeInBytes,
-            status = NotificationCoordinator.DownloadStatus.Queued
-        )
+        // Start foreground service to keep the download alive in background.
+        // The service handles the progress notification; NotificationCoordinator
+        // is only used for terminal states (completed / failed / paused).
+        ModelDownloadService.start(appContext, model.displayName)
 
         val tempFile = tempFile(modelId)
         tempFile.parentFile?.mkdirs()
@@ -302,14 +301,6 @@ class ModelDownloadCoordinator(
                 downloadedBytes = resumeBytes,
                 updatedAt = System.currentTimeMillis()
             )
-        )
-
-        notificationCoordinator.notifyModelDownload(
-            modelId = modelId,
-            displayName = model.displayName,
-            downloadedBytes = resumeBytes,
-            totalBytes = model.sizeInBytes,
-            status = NotificationCoordinator.DownloadStatus.Downloading
         )
 
         val requestBuilder = Request.Builder()
@@ -382,12 +373,11 @@ class ModelDownloadCoordinator(
                             }
 
                             if (nowMs - lastNotifyMs >= 750L) {
-                                notificationCoordinator.notifyModelDownload(
-                                    modelId = modelId,
-                                    displayName = model.displayName,
-                                    downloadedBytes = bytesWritten,
-                                    totalBytes = model.sizeInBytes,
-                                    status = NotificationCoordinator.DownloadStatus.Downloading
+                                ModelDownloadService.updateProgress(
+                                    appContext,
+                                    model.displayName,
+                                    bytesWritten,
+                                    model.sizeInBytes
                                 )
                                 lastNotifyMs = nowMs
                             }
@@ -404,12 +394,11 @@ class ModelDownloadCoordinator(
                 )
             )
 
-            notificationCoordinator.notifyModelDownload(
-                modelId = modelId,
-                displayName = model.displayName,
-                downloadedBytes = tempFile.length(),
-                totalBytes = model.sizeInBytes,
-                status = NotificationCoordinator.DownloadStatus.Validating
+            ModelDownloadService.updateProgress(
+                appContext,
+                model.displayName,
+                tempFile.length(),
+                model.sizeInBytes
             )
 
             when (val validation =
@@ -456,6 +445,8 @@ class ModelDownloadCoordinator(
                 totalBytes = finalFile.length(),
                 status = NotificationCoordinator.DownloadStatus.Completed
             )
+            ModelDownloadService.complete(appContext, model.displayName, success = true)
+            stopForegroundServiceIfIdle()
         } catch (_: CancellationException) {
             val paused = installedModelDao.installedModel(modelId)
             if (paused != null) {
@@ -476,6 +467,7 @@ class ModelDownloadCoordinator(
                 totalBytes = model.sizeInBytes,
                 status = NotificationCoordinator.DownloadStatus.Paused
             )
+            stopForegroundServiceIfIdle()
         } catch (error: Throwable) {
             upsertFailure(modelId, toFriendlyFailure(error.message ?: "Model download failed."))
             notificationCoordinator.notifyModelDownload(
@@ -485,6 +477,8 @@ class ModelDownloadCoordinator(
                 totalBytes = model.sizeInBytes,
                 status = NotificationCoordinator.DownloadStatus.Failed
             )
+            ModelDownloadService.complete(appContext, model.displayName, success = false)
+            stopForegroundServiceIfIdle()
         }
     }
 
@@ -831,6 +825,16 @@ class ModelDownloadCoordinator(
             }
 
             else -> message
+        }
+    }
+
+    /**
+     * Stops the foreground service if no active download jobs remain.
+     */
+    private fun stopForegroundServiceIfIdle() {
+        val hasActiveDownloads = jobs.values.any { it.isActive }
+        if (!hasActiveDownloads) {
+            ModelDownloadService.stop(appContext)
         }
     }
 
