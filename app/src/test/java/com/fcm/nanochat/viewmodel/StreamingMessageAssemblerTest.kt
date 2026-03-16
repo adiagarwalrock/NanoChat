@@ -17,6 +17,17 @@ class StreamingMessageAssemblerTest {
     }
 
     @Test
+    fun `downloaded mode appends deltas`() {
+        val assembler = StreamingMessageAssembler()
+
+        assembler.append(InferenceMode.DOWNLOADED, "Nan")
+        val result = assembler.append(InferenceMode.DOWNLOADED, "oChat")
+
+        assertEquals("NanoChat", result)
+        assertEquals("NanoChat", assembler.current())
+    }
+
+    @Test
     fun `aicore mode replaces with buffered final chunk`() {
         val assembler = StreamingMessageAssembler()
 
@@ -25,5 +36,29 @@ class StreamingMessageAssemblerTest {
 
         assertEquals("final answer", result)
         assertEquals("final answer", assembler.current())
+    }
+
+    @Test
+    fun `assembler removes assistant control tokens`() {
+        val assembler = StreamingMessageAssembler()
+
+        assembler.append(InferenceMode.DOWNLOADED, "<|assistant|>\n")
+        val result = assembler.append(InferenceMode.DOWNLOADED, "Assistant: Hello there")
+
+        assertEquals("Hello there", result)
+        assertEquals("Hello there", assembler.current())
+    }
+
+    @Test
+    fun `assembler preserves think blocks for later accordion rendering`() {
+        val assembler = StreamingMessageAssembler()
+
+        val result = assembler.append(
+            InferenceMode.DOWNLOADED,
+            "<think>Step by step</think>Final answer"
+        )
+
+        assertEquals("<think>Step by step</think>Final answer", result)
+        assertEquals("<think>Step by step</think>Final answer", assembler.current())
     }
 }

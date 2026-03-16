@@ -1,24 +1,16 @@
 package com.fcm.nanochat.viewmodel
 
+import com.fcm.nanochat.inference.GeneratedTextSanitizer
 import com.fcm.nanochat.inference.InferenceMode
 
 class StreamingMessageAssembler {
-    private val builder = StringBuilder()
+    private val rawBuilder = StringBuilder()
 
     fun append(mode: InferenceMode, chunk: String): String {
-        return when (mode) {
-            InferenceMode.REMOTE -> {
-                builder.append(chunk)
-                builder.toString()
-            }
-
-            InferenceMode.AICORE -> {
-                builder.clear()
-                builder.append(chunk)
-                builder.toString()
-            }
-        }
+        if (mode == InferenceMode.AICORE) rawBuilder.clear()
+        rawBuilder.append(chunk)
+        return GeneratedTextSanitizer.sanitize(rawBuilder.toString())
     }
 
-    fun current(): String = builder.toString()
+    fun current(): String = GeneratedTextSanitizer.sanitize(rawBuilder.toString())
 }

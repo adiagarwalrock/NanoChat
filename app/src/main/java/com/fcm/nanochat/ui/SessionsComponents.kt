@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -44,46 +45,45 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.fcm.nanochat.R
 import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.ChatSession
+import com.fcm.nanochat.ui.theme.NanoChatTheme
 
 @Composable
 internal fun SessionsDrawer(
-    state: ChatScreenState,
-    onCreateSession: () -> Unit,
-    onSelectSession: (Long) -> Unit,
-    onPinSession: (Long, Boolean) -> Unit,
-    onDeleteSession: (Long) -> Unit,
-    onRenameSession: (Long, String) -> Unit,
-    onOpenSettings: () -> Unit
+        state: ChatScreenState,
+        onCreateSession: () -> Unit,
+        onSelectSession: (Long) -> Unit,
+        onPinSession: (Long, Boolean) -> Unit,
+        onDeleteSession: (Long) -> Unit,
+        onRenameSession: (Long, String) -> Unit,
+        onOpenModels: () -> Unit,
+        onOpenSettings: () -> Unit
 ) {
     val pinned = state.sessions.filter { it.isPinned }
     val recents = state.sessions.filterNot { it.isPinned }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 14.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 14.dp)) {
         Text(
-            text = stringResource(id = R.string.app_name),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Medium
+                text = stringResource(id = R.string.app_name),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Medium
         )
         Text(
-            text = stringResource(id = R.string.drawer_conversations_label),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = stringResource(id = R.string.drawer_conversations_label),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         Spacer(modifier = Modifier.height(14.dp))
 
         FilledTonalButton(
-            onClick = onCreateSession,
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier.fillMaxWidth()
+                onClick = onCreateSession,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth()
         ) {
             Icon(Icons.Default.Add, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
@@ -94,20 +94,20 @@ internal fun SessionsDrawer(
 
         if (pinned.isNotEmpty()) {
             Text(
-                text = stringResource(id = R.string.pinned_section),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = stringResource(id = R.string.pinned_section),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(8.dp))
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 pinned.forEach { session ->
                     SessionRow(
-                        session = session,
-                        isSelected = state.selectedSessionId == session.id,
-                        onSelectSession = onSelectSession,
-                        onPinSession = onPinSession,
-                        onDeleteSession = onDeleteSession,
-                        onRenameSession = onRenameSession
+                            session = session,
+                            isSelected = state.selectedSessionId == session.id,
+                            onSelectSession = onSelectSession,
+                            onPinSession = onPinSession,
+                            onDeleteSession = onDeleteSession,
+                            onRenameSession = onRenameSession
                     )
                 }
             }
@@ -115,49 +115,59 @@ internal fun SessionsDrawer(
         }
 
         Text(
-            text = stringResource(id = R.string.recents_section),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = stringResource(id = R.string.recents_section),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(8.dp))
 
         if (recents.isEmpty()) {
             Text(
-                text = stringResource(id = R.string.no_recent_sessions),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp)
+                    text = stringResource(id = R.string.no_recent_sessions),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp)
             )
             Spacer(modifier = Modifier.weight(1f))
         } else {
             LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(recents, key = { it.id }) { session ->
                     SessionRow(
-                        session = session,
-                        isSelected = state.selectedSessionId == session.id,
-                        onSelectSession = onSelectSession,
-                        onPinSession = onPinSession,
-                        onDeleteSession = onDeleteSession,
-                        onRenameSession = onRenameSession
+                            session = session,
+                            isSelected = state.selectedSessionId == session.id,
+                            onSelectSession = onSelectSession,
+                            onPinSession = onPinSession,
+                            onDeleteSession = onDeleteSession,
+                            onRenameSession = onRenameSession
                     )
                 }
             }
         }
 
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surfaceContainer
-        ) {
-            TextButton(
-                onClick = onOpenSettings,
-                modifier = Modifier.fillMaxWidth()
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer
             ) {
-                Icon(Icons.Default.Settings, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = stringResource(id = R.string.settings))
+                TextButton(onClick = onOpenModels, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Storage, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = stringResource(id = R.string.manage_local_models))
+                }
+            }
+
+            Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer
+            ) {
+                TextButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Settings, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = stringResource(id = R.string.settings))
+                }
             }
         }
     }
@@ -165,102 +175,103 @@ internal fun SessionsDrawer(
 
 @Composable
 private fun SessionRow(
-    session: ChatSession,
-    isSelected: Boolean,
-    onSelectSession: (Long) -> Unit,
-    onPinSession: (Long, Boolean) -> Unit,
-    onDeleteSession: (Long) -> Unit,
-    onRenameSession: (Long, String) -> Unit
+        session: ChatSession,
+        isSelected: Boolean,
+        onSelectSession: (Long) -> Unit,
+        onPinSession: (Long, Boolean) -> Unit,
+        onDeleteSession: (Long) -> Unit,
+        onRenameSession: (Long, String) -> Unit
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                color = if (isSelected) {
-                    MaterialTheme.colorScheme.surfaceContainerHigh
-                } else {
-                    Color.Transparent
-                }
-            )
-            .clickable { onSelectSession(session.id) }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+            modifier =
+                    Modifier.fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(
+                                    color =
+                                            if (isSelected) {
+                                                MaterialTheme.colorScheme.surfaceContainerHigh
+                                            } else {
+                                                Color.Transparent
+                                            }
+                            )
+                            .clickable { onSelectSession(session.id) }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
-            text = session.title,
-            maxLines = 1,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f),
-            color = if (isSelected) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            }
+                text = session.title,
+                maxLines = 1,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+                color =
+                        if (isSelected) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
         )
 
         Box {
             var menuExpanded by remember { mutableStateOf(false) }
 
-            IconButton(
-                onClick = { menuExpanded = true },
-                modifier = Modifier.size(32.dp)
-            ) {
+            IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(32.dp)) {
                 Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = stringResource(id = R.string.session_actions)
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = stringResource(id = R.string.session_actions)
                 )
             }
 
             DropdownMenu(
-                expanded = menuExpanded,
-                onDismissRequest = { menuExpanded = false },
-                shape = RoundedCornerShape(14.dp),
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                    shape = RoundedCornerShape(14.dp),
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
             ) {
                 DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = if (session.isPinned) {
-                                stringResource(id = R.string.unpin_chat)
-                            } else {
-                                stringResource(id = R.string.pin_chat)
-                            }
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.PushPin,
-                            contentDescription = null,
-                            tint = if (session.isPinned) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            modifier = Modifier.alpha(if (session.isPinned) 1f else 0.75f)
-                        )
-                    },
-                    onClick = {
-                        menuExpanded = false
-                        onPinSession(session.id, !session.isPinned)
-                    }
+                        text = {
+                            Text(
+                                    text =
+                                            if (session.isPinned) {
+                                                stringResource(id = R.string.unpin_chat)
+                                            } else {
+                                                stringResource(id = R.string.pin_chat)
+                                            }
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                    imageVector = Icons.Default.PushPin,
+                                    contentDescription = null,
+                                    tint =
+                                            if (session.isPinned) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                    modifier = Modifier.alpha(if (session.isPinned) 1f else 0.75f)
+                            )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onPinSession(session.id, !session.isPinned)
+                        }
                 )
                 DropdownMenuItem(
-                    text = { Text(stringResource(id = R.string.rename_chat)) },
-                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                    onClick = {
-                        menuExpanded = false
-                        onRenameSession(session.id, session.title)
-                    }
+                        text = { Text(stringResource(id = R.string.rename_chat)) },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            onRenameSession(session.id, session.title)
+                        }
                 )
                 DropdownMenuItem(
-                    text = { Text(stringResource(id = R.string.delete_chat)) },
-                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
-                    onClick = {
-                        menuExpanded = false
-                        onDeleteSession(session.id)
-                    }
+                        text = { Text(stringResource(id = R.string.delete_chat)) },
+                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            onDeleteSession(session.id)
+                        }
                 )
             }
         }
@@ -269,29 +280,29 @@ private fun SessionRow(
 
 @Composable
 internal fun SessionsRail(
-    state: ChatScreenState,
-    modifier: Modifier = Modifier,
-    onCreateSession: () -> Unit,
-    onSelectSession: () -> Unit
+        state: ChatScreenState,
+        modifier: Modifier = Modifier,
+        onCreateSession: () -> Unit,
+        onSelectSession: () -> Unit
 ) {
     Column(
-        modifier = modifier
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(horizontal = 14.dp, vertical = 12.dp)
+            modifier =
+                    modifier.background(MaterialTheme.colorScheme.surfaceContainer)
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = stringResource(id = R.string.chats_label),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
+                    text = stringResource(id = R.string.chats_label),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
             )
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
             ) {
                 IconButton(onClick = onCreateSession, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Default.Add, contentDescription = null)
@@ -300,17 +311,83 @@ internal fun SessionsRail(
         }
         Spacer(modifier = Modifier.height(10.dp))
         FilledTonalButton(
-            onClick = onSelectSession,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Text(text = stringResource(id = R.string.open_sessions))
-        }
+                onClick = onSelectSession,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+        ) { Text(text = stringResource(id = R.string.open_sessions)) }
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = stringResource(id = R.string.sessions_count, state.sessions.size),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = stringResource(id = R.string.sessions_count, state.sessions.size),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 320)
+@Composable
+private fun SessionsDrawerPreview() {
+    NanoChatTheme {
+        SessionsDrawer(
+                state =
+                        ChatScreenState(
+                                sessions =
+                                        listOf(
+                                                ChatSession(
+                                                        id = 1,
+                                                        title = "Quantum Physics",
+                                                        updatedAt = System.currentTimeMillis(),
+                                                        isPinned = true
+                                                ),
+                                                ChatSession(
+                                                        id = 2,
+                                                        title = "Modern Art",
+                                                        updatedAt = System.currentTimeMillis(),
+                                                        isPinned = false
+                                                ),
+                                                ChatSession(
+                                                        id = 3,
+                                                        title = "Baking Tips",
+                                                        updatedAt = System.currentTimeMillis(),
+                                                        isPinned = false
+                                                )
+                                        ),
+                                selectedSessionId = 1
+                        ),
+                onCreateSession = {},
+                onSelectSession = {},
+                onPinSession = { _, _ -> },
+                onDeleteSession = { _ -> },
+                onRenameSession = { _, _ -> },
+                onOpenModels = {},
+                onOpenSettings = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 280)
+@Composable
+private fun SessionsRailPreview() {
+    NanoChatTheme {
+        SessionsRail(
+                state =
+                        ChatScreenState(
+                                sessions =
+                                        listOf(
+                                                ChatSession(
+                                                        id = 1,
+                                                        title = "Session 1",
+                                                        updatedAt = System.currentTimeMillis()
+                                                ),
+                                                ChatSession(
+                                                        id = 2,
+                                                        title = "Session 2",
+                                                        updatedAt = System.currentTimeMillis()
+                                                )
+                                        )
+                        ),
+                onCreateSession = {},
+                onSelectSession = {}
         )
     }
 }

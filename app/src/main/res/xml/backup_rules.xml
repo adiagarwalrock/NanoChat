@@ -12,7 +12,4 @@
     <include
         domain="database"
         path="nanochat.db-shm" />
-    <exclude
-        domain="sharedpref"
-        path="nanochat_secure_preferences.xml" />
 </full-backup-content>

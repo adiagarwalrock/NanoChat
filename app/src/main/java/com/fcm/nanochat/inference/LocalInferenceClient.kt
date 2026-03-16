@@ -213,28 +213,10 @@ class LocalInferenceClient : InferenceClient {
         }
 
         val message = error.message.orEmpty()
-        return when {
-            message.contains("BINDING_FAILURE", ignoreCase = true) -> {
-                InferenceException.BackendUnavailable(
-                    "AICore service failed to bind. Update AICore, then reinstall NanoChat."
-                )
-            }
-            message.contains("FEATURE_NOT_FOUND", ignoreCase = true) -> {
-                InferenceException.BackendUnavailable(
-                    "AICore setup is still initializing. Keep network on, restart device, and retry shortly."
-                )
-            }
-            message.contains("Unable to resolve host", ignoreCase = true) -> {
-                InferenceException.BackendUnavailable(
-                    "AICore setup needs network access. Connect to internet and retry."
-                )
-            }
-            else -> {
-                InferenceException.BackendUnavailable(
-                    "Gemini Nano failed: ${error.message ?: error.javaClass.simpleName}"
-                )
-            }
-        }
+        return messageMappedBackendUnavailable(message)
+            ?: InferenceException.BackendUnavailable(
+                "Gemini Nano failed: ${error.message ?: error.javaClass.simpleName}"
+            )
     }
 
     private fun mapGenAiException(error: Throwable): InferenceException {
@@ -276,27 +258,35 @@ class LocalInferenceClient : InferenceClient {
                 )
             }
             else -> {
-                when {
-                    fallbackMessage.contains("BINDING_FAILURE", ignoreCase = true) -> {
-                        InferenceException.BackendUnavailable(
-                            "AICore service failed to bind. Update AICore, then reinstall NanoChat."
-                        )
-                    }
-                    fallbackMessage.contains("FEATURE_NOT_FOUND", ignoreCase = true) -> {
-                        InferenceException.BackendUnavailable(
-                            "AICore setup is still initializing. Keep network on, restart device, and retry shortly."
-                        )
-                    }
-                    fallbackMessage.contains("Unable to resolve host", ignoreCase = true) -> {
-                        InferenceException.BackendUnavailable(
-                            "AICore setup needs network access. Connect to internet and retry."
-                        )
-                    }
-                    else -> {
-                        InferenceException.BackendUnavailable("Gemini Nano failed: $fallbackMessage")
-                    }
-                }
+                messageMappedBackendUnavailable(fallbackMessage)
+                    ?: InferenceException.BackendUnavailable("Gemini Nano failed: $fallbackMessage")
             }
+        }
+    }
+
+    private fun messageMappedBackendUnavailable(
+        message: String
+    ): InferenceException.BackendUnavailable? {
+        return when {
+            message.contains("BINDING_FAILURE", ignoreCase = true) -> {
+                InferenceException.BackendUnavailable(
+                    "AICore service failed to bind. Update AICore, then reinstall NanoChat."
+                )
+            }
+
+            message.contains("FEATURE_NOT_FOUND", ignoreCase = true) -> {
+                InferenceException.BackendUnavailable(
+                    "AICore setup is still initializing. Keep network on, restart device, and retry shortly."
+                )
+            }
+
+            message.contains("Unable to resolve host", ignoreCase = true) -> {
+                InferenceException.BackendUnavailable(
+                    "AICore setup needs network access. Connect to internet and retry."
+                )
+            }
+
+            else -> null
         }
     }
 

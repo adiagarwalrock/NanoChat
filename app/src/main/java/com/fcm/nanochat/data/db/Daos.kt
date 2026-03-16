@@ -27,6 +27,9 @@ interface ChatSessionDao {
 
     @Query("SELECT COUNT(*) FROM chat_sessions")
     suspend fun countSessions(): Long
+
+    @Query("DELETE FROM chat_sessions")
+    suspend fun deleteAll(): Int
 }
 
 @Dao
@@ -52,4 +55,25 @@ interface ChatMessageDao {
 
     @Query("DELETE FROM chat_messages WHERE id = :messageId")
     suspend fun deleteMessage(messageId: Long): Int
+
+    @Query("DELETE FROM chat_messages")
+    suspend fun deleteAll(): Int
+}
+
+@Dao
+interface InstalledModelDao {
+    @Query("SELECT * FROM installed_models ORDER BY updatedAt DESC")
+    fun observeInstalledModels(): Flow<List<InstalledModelEntity>>
+
+    @Query("SELECT * FROM installed_models ORDER BY updatedAt DESC")
+    suspend fun allInstalledModels(): List<InstalledModelEntity>
+
+    @Query("SELECT * FROM installed_models WHERE modelId = :modelId LIMIT 1")
+    suspend fun installedModel(modelId: String): InstalledModelEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(model: InstalledModelEntity)
+
+    @Query("DELETE FROM installed_models WHERE modelId = :modelId")
+    suspend fun deleteById(modelId: String): Int
 }

@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 
 enum class InferenceMode {
     AICORE,
+    DOWNLOADED,
     REMOTE
 }
 
@@ -17,7 +18,8 @@ data class ChatTurn(
 data class InferenceRequest(
     val history: List<ChatTurn>,
     val prompt: String,
-    val settings: SettingsSnapshot
+    val settings: SettingsSnapshot,
+    val activeDownloadedModelId: String? = null
 )
 
 sealed interface BackendAvailability {
@@ -36,4 +38,6 @@ sealed class InferenceException(message: String, cause: Throwable? = null) :
 interface InferenceClient {
     suspend fun availability(settings: SettingsSnapshot): BackendAvailability
     fun streamChat(request: InferenceRequest): Flow<String>
+
+    fun release() = Unit
 }

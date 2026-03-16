@@ -3,9 +3,12 @@ For agentic coders in /mnt/d/NanoChat. Kotlin official style; Material You expre
 
 Quick Context (from Plans)
 - App: Android single-module app `app`, Compose-only UI, package `com.fcm.nanochat`.
-- Tooling: Java/Kotlin 17, Kotlin 2.1.10, KSP 2.1.10-1.0.29, AGP 9.1.0, Compose BOM 2024.12.01, minSdk 31, target/compile 35.
-- Tabs: Chat, Models (stub for downloaded models), Settings; bottom nav in `NanoChatApp`.
-- Backends: `InferenceMode` supports `AICORE` (Gemini Nano via AICore reflection) and `REMOTE` (OpenAI-compatible SSE). Downloaded models planned; keep selectors extendable.
+- Tooling: Java/Kotlin 17, Kotlin 2.3.10, KSP 2.3.6, AGP 9.1.0, Compose BOM 2024.12.01, minSdk 31,
+  target/compile 36.
+- Navigation: chat-first shell. Chat is the primary surface; Models and Settings are secondary
+  screens accessed via drawer/settings flows (no bottom nav).
+- Backends: `InferenceMode` supports `AICORE`, `DOWNLOADED` (LiteRT / MediaPipe runtime for local
+  files), and `REMOTE` (OpenAI-compatible SSE).
 - Persistence: Room for sessions/messages; DataStore for non-secret settings; EncryptedSharedPreferences for secrets.
 - Key files: MainActivity, NanoChatApp, ChatViewModel, SettingsViewModel, ChatRepository, InferenceClient*, PromptFormatter, StreamingMessageAssembler, AppPreferences, ui/theme.
 
@@ -18,7 +21,9 @@ Build & Run (best practices)
 - Running from elsewhere: add `-p /mnt/d/NanoChat`.
 - Keep Gradle JVM at 17; avoid version bumps without AGP/KSP/Compose validation.
 - Do not commit `local.properties`; holds SDK/NDK paths.
-- If Gradle sync fails on KSP/artifact resolution, ensure `gradlePluginPortal()` exists and `android.disablekotlinsourcesets=false` in `gradle.properties` (see PRD history).
+- Ensure `gradlePluginPortal()` remains in repositories for plugin resolution.
+- For AGP 9 + Hilt, use Hilt `2.59.2+` and keep default AGP DSL behavior (do not set
+  `android.newDsl=false`).
 - If enabling configuration cache, verify Compose + KSP compatibility per build; disable if diagnostics degrade.
 
 Device & Emulator
@@ -53,15 +58,20 @@ Lint & Formatting
 - Use `@Suppress` narrowly with justification; delete dead/commented code.
 
 Architecture Snapshot
-- DI: simple `AppContainer` in `NanoChatApplication`; ViewModel factories per screen.
-- Data: Room entities `ChatSessionEntity`, `ChatMessageEntity`; DAOs for session/message; explicit
-  migrations are in place (`1->2`, `2->3`) with indexed message ordering.
+
+- DI: Hilt (`@HiltAndroidApp`, `@AndroidEntryPoint`, `@HiltViewModel`) with singleton modules under
+  `di/`.
+- Data: Room entities `ChatSessionEntity`, `ChatMessageEntity`, `InstalledModelEntity`; DAOs for
+  session/message/model install; explicit
+  migrations are in place (`1->2`, `2->3`, `3->4`).
 - Preferences: `AppPreferences` merges DataStore (non-secret) + EncryptedSharedPreferences (secrets) into `SettingsSnapshot` Flow.
 - Domain: `InferenceClient` interface with availability + streamChat; selector + formatter + assembler implement backend semantics.
 - UI: Compose Material 3 screens in `ui/`; state from `ChatScreenState` and `SettingsScreenState` flows.
 
 Data & Persistence Rules
-- History window defaults: 10 turns AICORE, 20 turns REMOTE (`ChatRepository.recentTurnsFor`).
+
+- History window defaults: 10 turns AICORE, 20 turns DOWNLOADED/REMOTE (
+  `ChatRepository.recentTurnsFor`).
 - Session titles trimmed to 32 chars with ellipsis; reuse helper.
 - DAO calls are suspend; never block main thread.
 - Time source: `System.currentTimeMillis()` consistently.
@@ -69,8 +79,11 @@ Data & Persistence Rules
 
 File Structure Snapshot (PRD)
 - `app/src/main/java/com/fcm/nanochat/` root.
-- Key packages: `data/` (AppPreferences, db entities/daos/database), `inference/` (InferenceClient + AICore/Remote), `models/` (catalog + download manager stubs), `viewmodel/`, `ui/screens/`.
-- Models tab is stub-only in milestone 1; downloaded-model management planned (MediaPipe tasks).
+- Key packages: `data/` (AppPreferences, db entities/daos/database, repositories), `inference/` (
+  AICore/Downloaded/Remote clients), `models/` (allowlist, compatibility, download, registry,
+  runtime), `viewmodel/`, `ui/`.
+- Models tab is production-oriented for allowlisted local model download, activation, and
+  diagnostics.
 
 Inference & Networking
 - Remote client: OkHttp SSE to `baseUrl/chat/completions`; headers `Authorization: Bearer <apiKey>`, `Accept: text/event-stream`; `stream=true`; build messages from history + prompt (ChatML style from PRD).
@@ -132,12 +145,16 @@ Performance & UX
 - Prefer snackbar retry over toasts for actionable errors; avoid noisy vibration/haptics.
 
 Model Downloads (future)
-- `Downloaded` inference mode and MediaPipe `tasks-genai` are planned; keep storage/backends extensible.
+
+- `Downloaded` inference mode uses LiteRT-LM packaged `.litertlm` artifacts; keep storage/backends
+  extensible.
 - Model catalog lives under `models/catalog`; manager stubs handle download/move/delete; no partial impls in milestone 1.
 - When enabling downloads, store HF token securely; copy rather than rename when moving across storage.
 
 Dependency Guidance
-- Versions pinned in `app/build.gradle.kts`; prefer Compose BOM. Revalidate AICore reflection + Mediapipe when upgrading.
+
+- Versions pinned in `app/build.gradle.kts`; prefer Compose BOM. Revalidate AICore reflection +
+  LiteRT-LM when upgrading.
 - OkHttp 4.12.0 present; if adding Retrofit/Ktor, ensure coexistence or intentionally replace; keep callbacks off main.
 
 Contribution & Hygiene

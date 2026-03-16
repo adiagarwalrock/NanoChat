@@ -1,6 +1,7 @@
 package com.fcm.nanochat.inference
 
 import com.fcm.nanochat.data.SettingsSnapshot
+import com.fcm.nanochat.data.ThinkingEffort
 import com.fcm.nanochat.model.ChatRole
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -76,12 +77,7 @@ class RemoteInferenceClient(
                         return
                     }
 
-                    val source = response.body?.source()
-                    if (source == null) {
-                        close(InferenceException.RemoteFailure("Remote API returned an empty response body."))
-                        return
-                    }
-
+                    val source = response.body.source()
                     streamEvents(source)
                 }
             }
@@ -132,7 +128,7 @@ class RemoteInferenceClient(
                 if (delta.isEmpty()) return true
 
                 val sendResult = outputChannel.trySend(delta)
-                if (sendResult.isSuccess || call.isCanceled() || outputChannel.isClosedForSend) {
+                if (sendResult.isSuccess || call.isCanceled()) {
                     return true
                 }
 
@@ -146,6 +142,19 @@ class RemoteInferenceClient(
 
     private fun buildRequestBody(request: InferenceRequest): JSONObject {
         val messages = JSONArray()
+
+        val supportsThinking = supportsReasoningParam(request.settings.modelName)
+        val systemContent = PromptFormatter.applyThinkingInstruction(
+            systemPrompt = "You are NanoChat, a helpful AI assistant. Reply in clean Markdown.",
+            effort = request.settings.thinkingEffort,
+            supportsThinking = supportsThinking
+        )
+
+        messages.put(
+            JSONObject()
+                .put("role", "system")
+                .put("content", systemContent)
+        )
 
         request.history.forEach { turn ->
             messages.put(
@@ -166,6 +175,15 @@ class RemoteInferenceClient(
             .put("stream", true)
             .put("messages", messages)
             .apply {
+                val effort = request.settings.thinkingEffort
+                if (effort != ThinkingEffort.NONE && supportsReasoningParam(request.settings.modelName)) {
+                    put("reasoning_effort", when (effort) {
+                        ThinkingEffort.LOW -> "low"
+                        ThinkingEffort.MEDIUM -> "medium"
+                        ThinkingEffort.HIGH -> "high"
+                        ThinkingEffort.NONE -> null
+                    })
+                }
                 if (request.settings.temperature > 0) {
                     put("temperature", request.settings.temperature)
                 }
@@ -184,13 +202,26 @@ class RemoteInferenceClient(
         if (choices.length() == 0) return ""
 
         val delta = choices.optJSONObject(0)?.optJSONObject("delta") ?: return ""
-        val content = delta.opt("content") ?: return ""
 
-        return when (content) {
-            is String -> content
+        val reasoningText = extractText(delta.opt("reasoning_content"))
+        val visibleText = extractText(delta.opt("content"))
+
+        return buildString {
+            if (reasoningText.isNotBlank()) {
+                append("<think>")
+                append(reasoningText)
+                append("</think>")
+            }
+            append(visibleText)
+        }
+    }
+
+    private fun extractText(jsonValue: Any?): String {
+        return when (jsonValue) {
+            is String -> jsonValue
             is JSONArray -> buildString {
-                for (index in 0 until content.length()) {
-                    val item = content.opt(index)
+                for (index in 0 until jsonValue.length()) {
+                    val item = jsonValue.opt(index)
                     if (item is JSONObject) {
                         append(item.optString("text"))
                     }
@@ -199,6 +230,12 @@ class RemoteInferenceClient(
 
             else -> ""
         }
+    }
+
+    private fun supportsReasoningParam(modelName: String): Boolean {
+        val normalized = modelName.trim().lowercase()
+        if (normalized.isBlank()) return false
+        return listOf("o1", "o3", "deepseek", "reason", "think").any { normalized.contains(it) }
     }
 
     private fun configurationMessage(field: RemoteConfigField): String {

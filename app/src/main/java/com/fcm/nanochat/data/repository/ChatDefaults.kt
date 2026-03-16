@@ -19,6 +19,7 @@ internal object ChatDefaults {
     fun historyWindowFor(mode: InferenceMode): Int {
         return when (mode) {
             InferenceMode.AICORE -> 10
+            InferenceMode.DOWNLOADED,
             InferenceMode.REMOTE -> 20
         }
     }
