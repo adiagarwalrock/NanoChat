@@ -319,7 +319,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
             activeAssistantPreview = ""
             draft.value = ""
 
-            val parentJob = currentCoroutineContext()[Job] as? Job
+            val parentJob = currentCoroutineContext()[Job]
             watchdogJob =
                 viewModelScope.launch {
                     delay(firstTokenWatchdogMs(mode))
