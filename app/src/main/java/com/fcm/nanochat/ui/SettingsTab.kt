@@ -426,8 +426,8 @@ internal fun ConnectionSettings(
                                 Row(
                                         modifier =
                                                 Modifier
-                                                    .fillMaxWidth()
-                                                    .horizontalScroll(rememberScrollState()),
+                                                        .fillMaxWidth()
+                                                        .horizontalScroll(rememberScrollState()),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                         StatusBadge(
@@ -663,8 +663,8 @@ internal fun ModelControlsSettings(
                                 Row(
                                         modifier =
                                                 Modifier
-                                                    .fillMaxWidth()
-                                                    .horizontalScroll(rememberScrollState()),
+                                                        .fillMaxWidth()
+                                                        .horizontalScroll(rememberScrollState()),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                         BehaviorPreset.entries.forEach { preset ->
@@ -1224,20 +1224,20 @@ private fun SettingsNavigationRow(
                 Row(
                         modifier =
                                 Modifier
-                                    .fillMaxWidth()
-                                    .clickable(onClick = onClick)
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                        .fillMaxWidth()
+                                        .clickable(onClick = onClick)
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                         Box(
                                 modifier =
                                         Modifier
-                                            .clip(IconContainerShape)
-                                            .background(
-                                                MaterialTheme.colorScheme.surfaceContainer
-                                            )
-                                            .padding(8.dp),
+                                                .clip(IconContainerShape)
+                                                .background(
+                                                        MaterialTheme.colorScheme.surfaceContainer
+                                                )
+                                                .padding(8.dp),
                                 contentAlignment = Alignment.Center
                         ) { icon() }
                         Column(
@@ -1343,10 +1343,10 @@ private fun ExpandablePanel(
                         Row(
                                 modifier =
                                         Modifier
-                                            .fillMaxWidth()
-                                            .clip(InputShape)
-                                            .clickable(onClick = onToggle)
-                                            .padding(horizontal = 2.dp, vertical = 2.dp),
+                                                .fillMaxWidth()
+                                                .clip(InputShape)
+                                                .clickable(onClick = onToggle)
+                                                .padding(horizontal = 2.dp, vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -1413,9 +1413,9 @@ private fun SummaryStatusRow(
                 Box(
                         modifier =
                                 Modifier
-                                    .clip(IconContainerShape)
-                                    .background(MaterialTheme.colorScheme.surfaceContainer)
-                                    .padding(8.dp),
+                                        .clip(IconContainerShape)
+                                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                                        .padding(8.dp),
                         contentAlignment = Alignment.Center
                 ) { icon() }
                 Column(
@@ -1522,18 +1522,18 @@ private fun UsageTile(
                 Column(
                         modifier =
                                 Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 14.dp),
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 14.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                         Box(
                                 modifier =
                                         Modifier
-                                            .size(28.dp)
-                                            .clip(IconContainerShape)
-                                            .background(
-                                                MaterialTheme.colorScheme.surfaceContainer
-                                            ),
+                                                .size(28.dp)
+                                                .clip(IconContainerShape)
+                                                .background(
+                                                        MaterialTheme.colorScheme.surfaceContainer
+                                                ),
                                 contentAlignment = Alignment.Center
                         ) { icon() }
                         Text(
@@ -1585,8 +1585,8 @@ private fun AccountDetailsCard(account: HuggingFaceAccountUi, onRefresh: () -> U
         Surface(shape = SettingsRowShape, color = MaterialTheme.colorScheme.surface) {
                 Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
+                                .fillMaxWidth()
+                                .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                         Row(
@@ -1657,8 +1657,8 @@ private fun AccountDetailsCard(account: HuggingFaceAccountUi, onRefresh: () -> U
                         Row(
                                 modifier =
                                         Modifier
-                                            .fillMaxWidth()
-                                            .horizontalScroll(rememberScrollState()),
+                                                .fillMaxWidth()
+                                                .horizontalScroll(rememberScrollState()),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                                 StatusBadge(label = "Connected", tone = BadgeTone.Positive)
@@ -1702,9 +1702,9 @@ private fun Avatar(avatarUrl: String?, name: String) {
         Box(
                 modifier =
                         Modifier
-                            .size(52.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceContainer),
+                                .size(52.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceContainer),
                 contentAlignment = Alignment.Center
         ) {
                 AsyncImage(

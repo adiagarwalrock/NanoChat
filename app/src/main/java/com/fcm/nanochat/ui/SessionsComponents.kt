@@ -67,7 +67,11 @@ internal fun SessionsDrawer(
     val pinned = state.sessions.filter { it.isPinned }
     val recents = state.sessions.filterNot { it.isPinned }
 
-    Column(modifier = modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 14.dp)) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
         Text(
                 text = stringResource(id = R.string.app_name),
                 style = MaterialTheme.typography.titleLarge,
@@ -185,18 +189,19 @@ private fun SessionRow(
 ) {
     Row(
             modifier =
-                    Modifier.fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(
-                                    color =
-                                            if (isSelected) {
-                                                MaterialTheme.colorScheme.surfaceContainerHigh
-                                            } else {
-                                                Color.Transparent
-                                            }
-                            )
-                            .clickable { onSelectSession(session.id) }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        color =
+                            if (isSelected) {
+                                MaterialTheme.colorScheme.surfaceContainerHigh
+                            } else {
+                                Color.Transparent
+                            }
+                    )
+                    .clickable { onSelectSession(session.id) }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
     ) {

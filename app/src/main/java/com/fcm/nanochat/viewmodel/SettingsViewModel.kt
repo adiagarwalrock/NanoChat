@@ -66,6 +66,7 @@ class SettingsViewModel @Inject constructor(
                                     isValid = true,
                                     message = "Connected"
                                 )
+
                                 else -> current.huggingFaceAccount
                             },
                             saveNotice = current.saveNotice,

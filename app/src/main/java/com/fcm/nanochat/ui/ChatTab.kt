@@ -7,7 +7,6 @@ import android.text.method.LinkMovementMethod
 import android.widget.TextView
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
-
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -32,7 +31,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -152,7 +150,8 @@ internal fun ChatTab(
 
         Box(modifier = modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)) {
+                .background(MaterialTheme.colorScheme.background)
+        ) {
             ChatTabContent(
                     state = state,
                     settingsState = settingsState,
@@ -259,8 +258,12 @@ private fun ChatTabContent(
                                                                 .background(
                                                                         Brush.verticalGradient(
                                                                                 colors = listOf(
-                                                                                        MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
-                                                                                        MaterialTheme.colorScheme.background.copy(alpha = 0f)
+                                                                                        MaterialTheme.colorScheme.background.copy(
+                                                                                                alpha = 0.85f
+                                                                                        ),
+                                                                                        MaterialTheme.colorScheme.background.copy(
+                                                                                                alpha = 0f
+                                                                                        )
                                                                                 )
                                                                         )
                                                                 )

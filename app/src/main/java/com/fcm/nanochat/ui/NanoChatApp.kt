@@ -18,9 +18,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PermanentDrawerSheet
 import androidx.compose.material3.PermanentNavigationDrawer
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.SnackbarHost
@@ -152,7 +152,9 @@ fun NanoChatApp(
     val drawerContentComposable: @Composable () -> Unit = {
         SessionsDrawer(
             state = chatState,
-            modifier = if (isExpanded) Modifier.width(300.dp).statusBarsPadding() else Modifier,
+            modifier = if (isExpanded) Modifier
+                .width(300.dp)
+                .statusBarsPadding() else Modifier,
             onCreateSession = {
                 onCreateSession()
                 if (!isExpanded) scope.launch { drawerState.close() }

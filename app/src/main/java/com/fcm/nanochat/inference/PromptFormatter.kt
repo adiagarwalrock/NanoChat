@@ -84,7 +84,8 @@ object PromptFormatter {
         // NanoChat only supplies a normalized user payload and optional system instruction.
         val baseUserMessage = buildTranscriptMessage(history, prompt, maxTurns)
 
-        val finalSystemInstruction = if (family == DownloadedPromptFamily.GEMMA) "" else systemPrompt
+        val finalSystemInstruction =
+            if (family == DownloadedPromptFamily.GEMMA) "" else systemPrompt
         val finalUserMessage = if (family == DownloadedPromptFamily.GEMMA) {
             "$systemPrompt\n\n$baseUserMessage"
         } else {
@@ -93,8 +94,8 @@ object PromptFormatter {
 
         return DownloadedPrompt(
                 family = family,
-                systemInstruction = finalSystemInstruction,
-                userMessage = finalUserMessage
+            systemInstruction = finalSystemInstruction,
+            userMessage = finalUserMessage
         )
     }
 
