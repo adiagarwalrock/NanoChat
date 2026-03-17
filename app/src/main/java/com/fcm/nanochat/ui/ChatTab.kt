@@ -153,57 +153,26 @@ internal fun ChatTab(
         Box(modifier = modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)) {
-                if (compact) {
-                        ChatTabContent(
-                                state = state,
-                                settingsState = settingsState,
-                                modifier = contentModifier,
-                                onOpenSessions = onOpenSessions,
-                                onSendMessage = onSendMessage,
-                                onStopGeneration = onStopGeneration,
-                                onMessageDraftChange = onMessageDraftChange,
-                                onRetryLast = onRetryLast,
-                                onInferenceModeChange = onInferenceModeChange,
-                                onOpenModelGallery = onOpenModelGallery,
-                                onTemperatureChange = onTemperatureChange,
-                                onTopPChange = onTopPChange,
-                                onContextLengthChange = onContextLengthChange,
-                                onThinkingEffortChange = onThinkingEffortChange,
-                                onAcceleratorChange = onAcceleratorChange,
-                                onMessageInfo = onMessageInfo,
-                                onDeleteMessage = onDeleteMessage
-                        )
-                } else {
-                        Row(modifier = Modifier.fillMaxSize()) {
-                                SessionsRail(
-                                        state = state,
-                                        modifier = Modifier
-                                                .width(280.dp)
-                                                .fillMaxSize(),
-                                        onCreateSession = onCreateSession,
-                                        onSelectSession = onOpenSessions
-                                )
-                                ChatTabContent(
-                                        state = state,
-                                        settingsState = settingsState,
-                                        modifier = contentModifier,
-                                        onOpenSessions = onOpenSessions,
-                                        onSendMessage = onSendMessage,
-                                        onStopGeneration = onStopGeneration,
-                                        onMessageDraftChange = onMessageDraftChange,
-                                        onRetryLast = onRetryLast,
-                                        onInferenceModeChange = onInferenceModeChange,
-                                        onOpenModelGallery = onOpenModelGallery,
-                                        onTemperatureChange = onTemperatureChange,
-                                        onTopPChange = onTopPChange,
-                                        onContextLengthChange = onContextLengthChange,
-                                        onThinkingEffortChange = onThinkingEffortChange,
-                                        onAcceleratorChange = onAcceleratorChange,
-                                        onMessageInfo = onMessageInfo,
-                                        onDeleteMessage = onDeleteMessage
-                                )
-                        }
-                }
+            ChatTabContent(
+                    state = state,
+                    settingsState = settingsState,
+                    modifier = contentModifier,
+                    showMenuIcon = compact,
+                    onOpenSessions = onOpenSessions,
+                    onSendMessage = onSendMessage,
+                    onStopGeneration = onStopGeneration,
+                    onMessageDraftChange = onMessageDraftChange,
+                    onRetryLast = onRetryLast,
+                    onInferenceModeChange = onInferenceModeChange,
+                    onOpenModelGallery = onOpenModelGallery,
+                    onTemperatureChange = onTemperatureChange,
+                    onTopPChange = onTopPChange,
+                    onContextLengthChange = onContextLengthChange,
+                    onThinkingEffortChange = onThinkingEffortChange,
+                    onAcceleratorChange = onAcceleratorChange,
+                    onMessageInfo = onMessageInfo,
+                    onDeleteMessage = onDeleteMessage
+            )
         }
 }
 
@@ -213,6 +182,7 @@ private fun ChatTabContent(
         state: ChatScreenState,
         settingsState: SettingsScreenState,
         modifier: Modifier = Modifier,
+        showMenuIcon: Boolean,
         onOpenSessions: () -> Unit,
         onSendMessage: () -> Unit,
         onStopGeneration: () -> Unit,
@@ -242,6 +212,7 @@ private fun ChatTabContent(
                                 modelName = settingsState.modelName,
                                 activeLocalModelName = state.activeLocalModelName,
                                 isLocalModelReady = state.isLocalModelReady,
+                                showMenuIcon = showMenuIcon,
                                 onInferenceModeChange = onInferenceModeChange,
                                 onOpenSessions = onOpenSessions
                         )
@@ -692,6 +663,7 @@ private fun ChatTopBar(
         modelName: String,
         activeLocalModelName: String?,
         isLocalModelReady: Boolean = false,
+        showMenuIcon: Boolean,
         onInferenceModeChange: (InferenceMode) -> Unit,
         onOpenSessions: () -> Unit
 ) {
@@ -733,22 +705,26 @@ private fun ChatTopBar(
                                         .padding(top = 6.dp, bottom = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                 ) {
-                        Surface(
-                                shape = HeaderIconShape,
-                                color = MaterialTheme.colorScheme.surfaceContainer,
-                                tonalElevation = 1.dp
-                        ) {
-                                IconButton(
-                                        onClick = onOpenSessions,
-                                        modifier = Modifier.size(42.dp)
+                        if (showMenuIcon) {
+                                Surface(
+                                        shape = HeaderIconShape,
+                                        color = MaterialTheme.colorScheme.surfaceContainer,
+                                        tonalElevation = 1.dp
                                 ) {
-                                        Icon(
-                                                imageVector = Icons.Default.Menu,
-                                                contentDescription =
-                                                        stringResource(id = R.string.open_sessions),
-                                                tint = MaterialTheme.colorScheme.onSurface
-                                        )
+                                        IconButton(
+                                                onClick = onOpenSessions,
+                                                modifier = Modifier.size(42.dp)
+                                        ) {
+                                                Icon(
+                                                        imageVector = Icons.Default.Menu,
+                                                        contentDescription =
+                                                                stringResource(id = R.string.open_sessions),
+                                                        tint = MaterialTheme.colorScheme.onSurface
+                                                )
+                                        }
                                 }
+                        } else {
+                                Spacer(modifier = Modifier.size(42.dp))
                         }
 
                         Box(

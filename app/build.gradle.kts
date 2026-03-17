@@ -3,12 +3,13 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.google.services)
+    alias(libs.plugins.firebase.crashlytics)
 }
 
 android {
     namespace = "com.fcm.nanochat"
     compileSdk = 36
-    buildToolsVersion = "36.1.0"
 
     defaultConfig {
         applicationId = "com.fcm.nanochat"
@@ -98,6 +99,10 @@ dependencies {
 
     // LiteRT-LM runtime — downloaded models
     implementation(libs.google.litertlm.android)
+
+    // Firebase
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.crashlytics)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

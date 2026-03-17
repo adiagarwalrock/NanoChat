@@ -40,41 +40,52 @@ class SettingsViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            var isFirstEmission = true
             preferences.settings.collect { snapshot ->
                 val token = snapshot.huggingFaceToken.trim()
                 val cachedAccount = snapshot.huggingFaceAccountJson.takeIf { it.isNotBlank() }
                     ?.let { runCatching { HuggingFaceWhoAmIParser.parseAccount(it) }.getOrNull() }
                 _uiState.update { current ->
-                    current.copy(
-                        baseUrl = snapshot.baseUrl,
-                        modelName = snapshot.modelName,
-                        apiKey = snapshot.apiKey,
-                        huggingFaceToken = snapshot.huggingFaceToken,
-                        temperature = snapshot.temperature,
-                        topP = snapshot.topP,
-                        contextLength = snapshot.contextLength,
-                        thinkingEffort = snapshot.thinkingEffort,
-                        acceleratorPreference = snapshot.acceleratorPreference,
-                        geminiStatus = _uiState.value.geminiStatus.copy(
-                            lastKnownModelSizeBytes = snapshot.geminiNanoModelSizeBytes
-                        ),
-                        huggingFaceAccount = when {
-                            token.isBlank() -> HuggingFaceAccountUi()
-                            cachedAccount != null -> cachedAccount.toUi(
-                                isValid = true,
-                                message = "Connected"
+                    if (isFirstEmission) {
+                        current.copy(
+                            baseUrl = snapshot.baseUrl,
+                            modelName = snapshot.modelName,
+                            apiKey = snapshot.apiKey,
+                            huggingFaceToken = snapshot.huggingFaceToken,
+                            temperature = snapshot.temperature,
+                            topP = snapshot.topP,
+                            contextLength = snapshot.contextLength,
+                            thinkingEffort = snapshot.thinkingEffort,
+                            acceleratorPreference = snapshot.acceleratorPreference,
+                            geminiStatus = current.geminiStatus.copy(
+                                lastKnownModelSizeBytes = snapshot.geminiNanoModelSizeBytes
+                            ),
+                            huggingFaceAccount = when {
+                                token.isBlank() -> HuggingFaceAccountUi()
+                                cachedAccount != null -> cachedAccount.toUi(
+                                    isValid = true,
+                                    message = "Connected"
+                                )
+                                else -> current.huggingFaceAccount
+                            },
+                            saveNotice = current.saveNotice,
+                            clearNotice = current.clearNotice
+                        )
+                    } else {
+                        current.copy(
+                            thinkingEffort = snapshot.thinkingEffort,
+                            acceleratorPreference = snapshot.acceleratorPreference,
+                            geminiStatus = current.geminiStatus.copy(
+                                lastKnownModelSizeBytes = snapshot.geminiNanoModelSizeBytes
                             )
-
-                            else -> current.huggingFaceAccount
-                        },
-                        saveNotice = current.saveNotice,
-                        clearNotice = current.clearNotice
-                    )
+                        )
+                    }
                 }
 
-                if (token.isNotBlank() && token != lastValidatedToken) {
+                if (isFirstEmission && token.isNotBlank() && token != lastValidatedToken) {
                     scheduleHuggingFaceValidation(token = token, withDelay = false)
                 }
+                isFirstEmission = false
             }
         }
 

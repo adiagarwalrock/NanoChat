@@ -189,12 +189,12 @@ internal fun SettingsHome(
                                         else "Not configured",
                                 behaviorMode = activePreset.title,
                                 providerStatus = connectionModeSummary(remoteConfigured),
-                                onDeviceStatus =
+                                onDeviceStatus = "Gemini Nano",
+                                onDeviceBadge =
                                         when {
-                                                onDeviceEnabled -> "Gemini Nano enabled"
-                                                state.geminiStatus.supported ->
-                                                        "Gemini Nano available"
-                                                else -> "Gemini Nano unavailable"
+                                                onDeviceEnabled -> "Enabled"
+                                                state.geminiStatus.supported -> "Available"
+                                                else -> "Unavailable"
                                         },
                                 onDeviceTone =
                                         when {
@@ -1167,6 +1167,7 @@ private fun SystemSummaryCard(
         behaviorMode: String,
         providerStatus: String,
         onDeviceStatus: String,
+        onDeviceBadge: String,
         onDeviceTone: BadgeTone
 ) {
         SettingsPanel(
@@ -1192,13 +1193,7 @@ private fun SystemSummaryCard(
                         icon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
                         label = "On-device AI",
                         value = onDeviceStatus,
-                        badge =
-                                BadgeData(
-                                        onDeviceStatus.substringAfterLast(' ').replaceFirstChar {
-                                                it.titlecase()
-                                        },
-                                        onDeviceTone
-                                )
+                        badge = BadgeData(onDeviceBadge, onDeviceTone)
                 )
         }
 }

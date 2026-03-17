@@ -82,12 +82,19 @@ object PromptFormatter {
 
         // LiteRT-LM applies the model's native chat template automatically.
         // NanoChat only supplies a normalized user payload and optional system instruction.
-        val userMessage = buildTranscriptMessage(history, prompt, maxTurns)
+        val baseUserMessage = buildTranscriptMessage(history, prompt, maxTurns)
+
+        val finalSystemInstruction = if (family == DownloadedPromptFamily.GEMMA) "" else systemPrompt
+        val finalUserMessage = if (family == DownloadedPromptFamily.GEMMA) {
+            "$systemPrompt\n\n$baseUserMessage"
+        } else {
+            baseUserMessage
+        }
 
         return DownloadedPrompt(
                 family = family,
-                systemInstruction = systemPrompt,
-                userMessage = userMessage
+                systemInstruction = finalSystemInstruction,
+                userMessage = finalUserMessage
         )
     }
 

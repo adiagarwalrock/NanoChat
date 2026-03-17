@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
@@ -16,6 +18,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.PermanentDrawerSheet
+import androidx.compose.material3.PermanentNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
@@ -33,9 +37,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import com.fcm.nanochat.R
 import com.fcm.nanochat.inference.InferenceMode
 import com.fcm.nanochat.model.ChatMessage
@@ -118,6 +125,10 @@ fun NanoChatApp(
     var renameTargetId by rememberSaveable { mutableStateOf<Long?>(null) }
     var renameDraft by rememberSaveable { mutableStateOf("") }
 
+    val windowInfo = LocalWindowInfo.current
+    val screenWidthDp = with(LocalDensity.current) { windowInfo.containerSize.width.toDp() }
+    val isExpanded = screenWidthDp >= 700.dp
+
     LaunchedEffect(modelState.notice) {
         val currentNotice = modelState.notice ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(currentNotice)
@@ -138,44 +149,39 @@ fun NanoChatApp(
         onConsumedModelsNavigation()
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet(
-                drawerContainerColor = MaterialTheme.colorScheme.surface,
-                drawerContentColor = MaterialTheme.colorScheme.onSurface
-            ) {
-                SessionsDrawer(
-                    state = chatState,
-                    onCreateSession = {
-                        onCreateSession()
-                        scope.launch { drawerState.close() }
-                    },
-                    onSelectSession = { id ->
-                        onSelectSession(id)
-                        scope.launch { drawerState.close() }
-                    },
-                    onPinSession = onPinSession,
-                    onDeleteSession = onDeleteSession,
-                    onRenameSession = { id, currentTitle ->
-                        renameTargetId = id
-                        renameDraft = currentTitle
-                    },
-                    onOpenModels = {
-                        modelsBackDestination = AppDestination.Chat
-                        destination = AppDestination.Models
-                        onOpenModelGallery()
-                        scope.launch { drawerState.close() }
-                    },
-                    onOpenSettings = {
-                        settingsStartSection = Home
-                        destination = AppDestination.Settings
-                        scope.launch { drawerState.close() }
-                    }
-                )
+    val drawerContentComposable: @Composable () -> Unit = {
+        SessionsDrawer(
+            state = chatState,
+            modifier = if (isExpanded) Modifier.width(300.dp).statusBarsPadding() else Modifier,
+            onCreateSession = {
+                onCreateSession()
+                if (!isExpanded) scope.launch { drawerState.close() }
+            },
+            onSelectSession = { id ->
+                onSelectSession(id)
+                if (!isExpanded) scope.launch { drawerState.close() }
+            },
+            onPinSession = onPinSession,
+            onDeleteSession = onDeleteSession,
+            onRenameSession = { id, currentTitle ->
+                renameTargetId = id
+                renameDraft = currentTitle
+            },
+            onOpenModels = {
+                modelsBackDestination = AppDestination.Chat
+                destination = AppDestination.Models
+                onOpenModelGallery()
+                if (!isExpanded) scope.launch { drawerState.close() }
+            },
+            onOpenSettings = {
+                settingsStartSection = Home
+                destination = AppDestination.Settings
+                if (!isExpanded) scope.launch { drawerState.close() }
             }
-        }
-    ) {
+        )
+    }
+
+    val appContent: @Composable () -> Unit = {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
@@ -265,6 +271,36 @@ fun NanoChatApp(
                     )
                 }
             }
+        }
+    }
+
+    if (isExpanded) {
+        PermanentNavigationDrawer(
+            drawerContent = {
+                PermanentDrawerSheet(
+                    drawerContainerColor = MaterialTheme.colorScheme.surface,
+                    drawerContentColor = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.width(300.dp)
+                ) {
+                    drawerContentComposable()
+                }
+            }
+        ) {
+            appContent()
+        }
+    } else {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ModalDrawerSheet(
+                    drawerContainerColor = MaterialTheme.colorScheme.surface,
+                    drawerContentColor = MaterialTheme.colorScheme.onSurface
+                ) {
+                    drawerContentComposable()
+                }
+            }
+        ) {
+            appContent()
         }
     }
 
