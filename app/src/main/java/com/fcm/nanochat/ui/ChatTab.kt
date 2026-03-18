@@ -1210,9 +1210,7 @@ private fun MessageRow(
                                                 onClick = { onMessageInfo(message) },
                                                 onLongClick = {
                                                         haptics.performHapticFeedback(
-                                                                androidx.compose.ui.hapticfeedback
-                                                                        .HapticFeedbackType
-                                                                        .LongPress
+                                                                HapticFeedbackType.LongPress
                                                         )
                                                         actionMenuExpanded = true
                                                 }

@@ -263,8 +263,6 @@ fun NanoChatApp(
                         onTemperatureChange = onTemperatureChange,
                         onTopPChange = onTopPChange,
                         onContextLengthChange = onContextLengthChange,
-                        onThinkingEffortChange = onThinkingEffortChange,
-                        onAcceleratorChange = onAcceleratorChange,
                         onSaveSettings = onSaveSettings,
                         onClearHistory = onClearHistory,
                         onRefreshStats = onRefreshStats,
@@ -392,8 +390,6 @@ private fun SettingsPage(
     onTemperatureChange: (Double) -> Unit,
     onTopPChange: (Double) -> Unit,
     onContextLengthChange: (Int) -> Unit,
-    onThinkingEffortChange: (com.fcm.nanochat.data.ThinkingEffort) -> Unit,
-    onAcceleratorChange: (com.fcm.nanochat.data.AcceleratorPreference) -> Unit,
     onSaveSettings: () -> Unit,
     onClearHistory: () -> Unit,
     onRefreshStats: () -> Unit,
@@ -412,16 +408,19 @@ private fun SettingsPage(
         }
 
     val navigateBack: () -> Unit = {
-        section =
-            when (section) {
-                Home -> {
-                    onBack()
-                    Home
-                }
-
-                AiConfiguration, HuggingFaceConnection, DataHistory -> Home
-                Connection, ModelControls -> AiConfiguration
+        when (section) {
+            Home -> {
+                onBack()
             }
+
+            AiConfiguration, HuggingFaceConnection, DataHistory -> {
+                section = Home
+            }
+
+            Connection, ModelControls -> {
+                section = AiConfiguration
+            }
+        }
     }
 
     BackHandler(onBack = navigateBack)
@@ -481,8 +480,6 @@ private fun SettingsPage(
                     onTemperatureChange = onTemperatureChange,
                     onTopPChange = onTopPChange,
                     onContextLengthChange = onContextLengthChange,
-                    onThinkingEffortChange = onThinkingEffortChange,
-                    onAcceleratorChange = onAcceleratorChange,
                     onSaveSettings = onSaveSettings
                 )
 

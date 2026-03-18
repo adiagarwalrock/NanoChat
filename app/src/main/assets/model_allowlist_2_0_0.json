@@ -40,7 +40,7 @@
       "description": "Higher quality Qwen model for deeper reasoning at modest speed.",
       "sizeInBytes": 2863001600,
       "minDeviceMemoryInGb": 8,
-      "commitHash": "main",
+      "commitHash": "8627038374d75f27e9976450689622d05775f0a3",
       "defaultConfig": {
         "topK": 32,
         "topP": 0.9,

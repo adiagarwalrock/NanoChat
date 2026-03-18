@@ -189,7 +189,6 @@ internal fun SettingsHome(
                                         else "Not configured",
                                 behaviorMode = activePreset.title,
                                 providerStatus = connectionModeSummary(remoteConfigured),
-                                onDeviceStatus = "Gemini Nano",
                                 onDeviceBadge =
                                         when {
                                                 onDeviceEnabled -> "Enabled"
@@ -643,8 +642,6 @@ internal fun ModelControlsSettings(
         onTemperatureChange: (Double) -> Unit,
         onTopPChange: (Double) -> Unit,
         onContextLengthChange: (Int) -> Unit,
-        onThinkingEffortChange: (com.fcm.nanochat.data.ThinkingEffort) -> Unit = {},
-        onAcceleratorChange: (com.fcm.nanochat.data.AcceleratorPreference) -> Unit = {},
         onSaveSettings: () -> Unit = {}
 ) {
         var advancedExpanded by rememberSaveable { mutableStateOf(false) }
@@ -1166,7 +1163,6 @@ private fun SystemSummaryCard(
         modelName: String,
         behaviorMode: String,
         providerStatus: String,
-        onDeviceStatus: String,
         onDeviceBadge: String,
         onDeviceTone: BadgeTone
 ) {
@@ -1192,7 +1188,7 @@ private fun SystemSummaryCard(
                 SummaryStatusRow(
                         icon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
                         label = "On-device AI",
-                        value = onDeviceStatus,
+                        value = "Gemini Nano",
                         badge = BadgeData(onDeviceBadge, onDeviceTone)
                 )
         }
@@ -1617,9 +1613,9 @@ private fun AccountDetailsCard(account: HuggingFaceAccountUi, onRefresh: () -> U
                                                                                                 .Medium
                                                                         )
                                                 )
-                                                account.username?.let { username ->
+                                                if (account.username != null) {
                                                         Text(
-                                                                text = "@$username",
+                                                                text = "@${account.username}",
                                                                 style =
                                                                         MaterialTheme.typography
                                                                                 .bodySmall.copy(
@@ -1630,9 +1626,9 @@ private fun AccountDetailsCard(account: HuggingFaceAccountUi, onRefresh: () -> U
                                                                                 .onSurfaceVariant
                                                         )
                                                 }
-                                                account.email?.let { email ->
+                                                if (account.email != null) {
                                                         Text(
-                                                                text = email,
+                                                                text = account.email,
                                                                 style =
                                                                         MaterialTheme.typography
                                                                                 .bodySmall.copy(
@@ -1662,17 +1658,17 @@ private fun AccountDetailsCard(account: HuggingFaceAccountUi, onRefresh: () -> U
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                                 StatusBadge(label = "Connected", tone = BadgeTone.Positive)
-                                account.tokenRole?.let {
+                                if (account.tokenRole != null) {
                                         StatusBadge(
                                                 label =
                                                         "Role: ${
-                                                                it.lowercase()
+                                                                account.tokenRole.lowercase()
                                                                         .replaceFirstChar { c -> c.titlecase() }
                                                         }",
                                                 tone = BadgeTone.Neutral
                                         )
                                 }
-                                account.tokenName?.let {
+                                if (account.tokenName != null) {
                                         StatusBadge(
                                                 label = "Token: Active",
                                                 tone = BadgeTone.Positive
@@ -1680,9 +1676,9 @@ private fun AccountDetailsCard(account: HuggingFaceAccountUi, onRefresh: () -> U
                                 }
                         }
 
-                        account.profileUrl?.let { profileUrl ->
+                        if (account.profileUrl != null) {
                                 TextButton(
-                                        onClick = { runCatching { uriHandler.openUri(profileUrl) } }
+                                        onClick = { runCatching { uriHandler.openUri(account.profileUrl) } }
                                 ) { Text("View profile") }
                         }
                 }
