@@ -214,7 +214,8 @@ class DownloadedModelInferenceClient(
         )
 
         suspend fun kotlinx.coroutines.flow.FlowCollector<String>.emitGenerationAttempt(
-            runtimeConfig: AllowlistDefaultConfig
+            runtimeConfig: AllowlistDefaultConfig,
+            isRetry: Boolean
         ) {
             val runtimeHandle = runCatching {
                 runtimeManager.acquire(
@@ -250,7 +251,7 @@ class DownloadedModelInferenceClient(
             }
 
             val generationStart = System.currentTimeMillis()
-            val noTokenWatchdogMs = configuredNoTokenWatchdogMs()
+            val noTokenWatchdogMs = configuredNoTokenWatchdogMs(isRetry)
             val visibleStallWatchdogMs = configuredVisibleStallWatchdogMs()
             val parentJob = currentCoroutineContext()[Job]
             var firstRawCallbackAt = 0L
@@ -268,7 +269,7 @@ class DownloadedModelInferenceClient(
 
             Log.d(
                 TAG,
-                "local_generation_started modelId=$resolvedModelId family=${formattedPrompt.family.name} watchdogMs=$noTokenWatchdogMs stallMs=$visibleStallWatchdogMs"
+                "local_generation_started modelId=$resolvedModelId family=${formattedPrompt.family.name} watchdogMs=$noTokenWatchdogMs stallMs=$visibleStallWatchdogMs isRetry=$isRetry"
             )
 
             suspend fun emitStableDelta(currentSnapshot: String, chunkIndex: Int) {
@@ -546,7 +547,7 @@ class DownloadedModelInferenceClient(
 
         for ((attemptIndex, runtimeConfig) in attemptConfigs.withIndex()) {
             try {
-                emitGenerationAttempt(runtimeConfig)
+                emitGenerationAttempt(runtimeConfig, isRetry = attemptIndex > 0)
                 return@flow
             } catch (degenerate: DegenerateOutputException) {
                 val shouldRetry = shouldRetryOnCpuFallback(
@@ -631,7 +632,7 @@ class DownloadedModelInferenceClient(
 
     private fun isLikelyDegenerateOutput(output: String): Boolean {
         val compact = output.filterNot(Char::isWhitespace)
-        if (compact.length < 48) return false
+        if (compact.length < 64) return false
 
         val first = compact.first()
         if (first.isLetterOrDigit()) return false
@@ -653,9 +654,15 @@ class DownloadedModelInferenceClient(
         return normalized.any(Char::isLetterOrDigit)
     }
 
-    private fun configuredNoTokenWatchdogMs(): Long {
+    private fun configuredNoTokenWatchdogMs(isRetry: Boolean): Long {
         val overrideMs = System.getProperty(DEBUG_NO_TOKEN_WATCHDOG_PROPERTY)?.toLongOrNull()
-        return overrideMs?.coerceAtLeast(1_000L) ?: LOCAL_NO_TOKEN_WATCHDOG_MS
+        if (overrideMs != null) return overrideMs.coerceAtLeast(1_000L)
+        
+        return if (isRetry) {
+            LOCAL_RETRY_NO_TOKEN_WATCHDOG_MS
+        } else {
+            LOCAL_NO_TOKEN_WATCHDOG_MS
+        }
     }
 
     private fun configuredVisibleStallWatchdogMs(): Long {
@@ -788,6 +795,7 @@ class DownloadedModelInferenceClient(
     private companion object {
         const val TAG = "DownloadedInference"
         const val LOCAL_NO_TOKEN_WATCHDOG_MS = 15_000L
+        const val LOCAL_RETRY_NO_TOKEN_WATCHDOG_MS = 45_000L
         const val LOCAL_VISIBLE_STALL_WATCHDOG_MS = 10_000L
         const val NO_TOKEN_WATCHDOG_MESSAGE =
             "Local generation started but produced no visible output. Retry, or reselect this model."
@@ -845,9 +853,3 @@ private class NoTokenWatchdogTimeout(message: String) : CancellationException(me
 private class VisibleOutputStalledTimeout(message: String) : CancellationException(message)
 
 private class DegenerateOutputException : RuntimeException("Degenerate local output")
-
-
-
-
-
-

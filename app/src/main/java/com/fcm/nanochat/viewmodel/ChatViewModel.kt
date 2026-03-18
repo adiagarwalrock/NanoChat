@@ -327,7 +327,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
                         watchdogTriggered = true
                         parentJob?.cancel(
                             GenerationWatchdogTimeout(
-                                "No response arrived in time. Retry or reselect this model."
+                                "No response arrived in time. Retry last, or reselect this model."
                             )
                         )
                     }
@@ -569,7 +569,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         const val TAG = "ChatViewModel"
         const val STREAM_PERSIST_INTERVAL_MS = 180L
         const val STREAM_PERSIST_MIN_LENGTH_DELTA = 24
-        const val LOCAL_FIRST_TOKEN_WATCHDOG_MS = 18_000L
+        const val LOCAL_FIRST_TOKEN_WATCHDOG_MS = 65_000L
         const val REMOTE_FIRST_TOKEN_WATCHDOG_MS = 25_000L
         const val CANCELLATION_MESSAGE = "Generation cancelled."
         const val WATCHDOG_TIMEOUT_MESSAGE =

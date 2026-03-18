@@ -12,7 +12,6 @@ import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.ExperimentalApi
-import com.google.ai.edge.litertlm.ExperimentalFlags
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
@@ -301,10 +300,7 @@ internal object LiteRtLmRuntimeFactory {
             config: AllowlistDefaultConfig,
             backendLabel: String
     ): LocalModelRuntime {
-        val backend = backendFromLabel(backendLabel)
-        if (backendLabel == "npu") {
-            ExperimentalFlags.npuLibrariesDir = context.applicationInfo.nativeLibraryDir
-        }
+        val backend = backendFromLabel(backendLabel, context.applicationInfo.nativeLibraryDir)
 
         val engineConfig =
                 EngineConfig(
@@ -335,10 +331,11 @@ internal object LiteRtLmRuntimeFactory {
         return LiteRtLmRuntime(engine = engine, samplerConfig = samplerConfig)
     }
 
-    private fun backendFromLabel(label: String): Backend {
+    @OptIn(ExperimentalApi::class)
+    private fun backendFromLabel(label: String, nativeLibraryDir: String): Backend {
         return when (label) {
             "gpu" -> Backend.GPU()
-            "npu" -> Backend.NPU()
+            "npu" -> Backend.NPU(nativeLibraryDir = nativeLibraryDir)
             else -> Backend.CPU()
         }
     }
