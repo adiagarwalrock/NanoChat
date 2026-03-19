@@ -19,7 +19,8 @@ data class InferenceRequest(
     val history: List<ChatTurn>,
     val prompt: String,
     val settings: SettingsSnapshot,
-    val activeDownloadedModelId: String? = null
+    val activeDownloadedModelId: String? = null,
+    val sessionId: Long? = null
 )
 
 sealed interface BackendAvailability {

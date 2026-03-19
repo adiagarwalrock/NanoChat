@@ -161,13 +161,12 @@ private fun hasPendingActionConverged(
 ): Boolean {
     return when (pendingAction.type) {
         PendingActionType.Download -> {
-            model != null && (
-                    model.installState == ModelInstallState.DOWNLOADING ||
+            model != null &&
+                    (model.installState == ModelInstallState.DOWNLOADING ||
                             model.installState == ModelInstallState.INSTALLED ||
                             model.installState == ModelInstallState.FAILED ||
                             model.installState == ModelInstallState.PAUSED ||
-                            model.installState == ModelInstallState.QUEUED
-                    )
+                            model.installState == ModelInstallState.QUEUED)
         }
         PendingActionType.Delete -> {
             model == null ||
@@ -513,11 +512,9 @@ internal fun ModelsTab(
 
 @Composable
 private fun LibraryHeader(allowlistVersion: String, isRefreshing: Boolean, onRefresh: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-    ) {
+    Column(modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 16.dp, vertical = 10.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1029,6 +1026,7 @@ private fun SimplifiedModelCard(
                 supporting = status.supporting,
                 tone = status.tone,
                 progress = status.progress,
+                isIndeterminate = status.isIndeterminate,
                 modifier = statusModifier
             )
 
@@ -1154,6 +1152,7 @@ private fun RedesignedDetailsSheet(
                     supporting = status.supporting,
                     tone = status.tone,
                     progress = status.progress,
+                    isIndeterminate = status.isIndeterminate,
                     modifier = statusModifier
                 )
             }
@@ -1459,7 +1458,8 @@ private data class StatusLine(
     val label: String,
     val supporting: String,
     val tone: ModelBadgeTone,
-    val progress: Float? = null
+    val progress: Float? = null,
+    val isIndeterminate: Boolean = false
 )
 
 @Composable
@@ -1468,6 +1468,7 @@ private fun StatusRow(
     supporting: String,
     tone: ModelBadgeTone,
     progress: Float?,
+    isIndeterminate: Boolean,
     modifier: Modifier = Modifier
 ) {
     val container =
@@ -1496,7 +1497,13 @@ private fun StatusRow(
         ) {
             Text(text = text, style = MaterialTheme.typography.labelLarge, color = content)
             Text(text = supporting, style = MaterialTheme.typography.bodySmall, color = content)
-            if (progress != null) {
+            if (isIndeterminate) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                )
+            } else if (progress != null) {
                 LinearProgressIndicator(
                     progress = { progress.coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxWidth(),
@@ -1580,17 +1587,19 @@ private fun ModelCardUi.statusLine(pendingAction: PendingModelAction? = null): S
                         label = "Starting download",
                         supporting = "Preparing local download...",
                         tone = ModelBadgeTone.Neutral,
-                        progress = 0.04f
+                        isIndeterminate = true
                     )
                 }
             }
             PendingActionType.Delete -> {
-                if (installState != ModelInstallState.DELETING && installState != ModelInstallState.NOT_INSTALLED) {
+                if (installState != ModelInstallState.DELETING &&
+                    installState != ModelInstallState.NOT_INSTALLED
+                ) {
                     return StatusLine(
                         label = "Deleting model",
                         supporting = "Removing local files from this device.",
                         tone = ModelBadgeTone.Warning,
-                        progress = 0.5f
+                        isIndeterminate = true
                     )
                 }
             }
@@ -1607,17 +1616,16 @@ private fun ModelCardUi.statusLine(pendingAction: PendingModelAction? = null): S
                         label = "Preparing local model",
                         supporting = "Selected. Loading this model into memory.",
                         tone = ModelBadgeTone.Neutral,
-                        progress = 0.38f
+                        isIndeterminate = true
                     )
                 }
             }
-
             PendingActionType.Cancel -> {
                 return StatusLine(
                     label = "Stopping download",
                     supporting = "Cancelling active download job...",
                     tone = ModelBadgeTone.Neutral,
-                    progress = 0.1f
+                    isIndeterminate = true
                 )
             }
         }
@@ -1637,7 +1645,7 @@ private fun ModelCardUi.statusLine(pendingAction: PendingModelAction? = null): S
                     label = "Loading into memory",
                     supporting = "Allocating runtime and preparing local session.",
                     tone = ModelBadgeTone.Neutral,
-                    progress = 0.45f
+                    isIndeterminate = true
                 )
             com.fcm.nanochat.model.LocalModelMemoryState.LoadedInMemory ->
                 StatusLine(
@@ -1714,7 +1722,8 @@ private fun ModelCardUi.fallbackStatusLine(progressValue: Float?): StatusLine {
             StatusLine(
                 label = "Finalizing setup",
                 supporting = "Validating and preparing this model for chat.",
-                tone = ModelBadgeTone.Neutral
+                tone = ModelBadgeTone.Neutral,
+                isIndeterminate = true
             )
         LocalModelHealthState.InstalledReady ->
             StatusLine(
@@ -1781,7 +1790,6 @@ private fun ModelCardUi.actionPlan(pendingAction: PendingModelAction? = null): A
                     primaryAction = ActionType.None,
                     primaryEnabled = false
                 )
-
             PendingActionType.Cancel ->
                 ActionPlan(
                     primaryLabel = "Stopping...",
@@ -2238,7 +2246,8 @@ private fun ModelsTabReadyPreview() {
                                 recommendedForChat = false,
                                 installState =
                                     ModelInstallState.NOT_INSTALLED,
-                                healthState = LocalModelHealthState.NotInstalled,
+                                healthState =
+                                    LocalModelHealthState.NotInstalled,
                                 isActive = false,
                                 memoryState =
                                     LocalModelMemoryState.NotSelected
@@ -2323,7 +2332,8 @@ private fun ModelsTabReadyInconsistentPreview() {
                                 recommendedForChat = false,
                                 installState =
                                     ModelInstallState.NOT_INSTALLED,
-                                healthState = LocalModelHealthState.NotInstalled,
+                                healthState =
+                                    LocalModelHealthState.NotInstalled,
                                 isActive = false,
                                 memoryState =
                                     LocalModelMemoryState.NotSelected
@@ -2331,7 +2341,8 @@ private fun ModelsTabReadyInconsistentPreview() {
                             mockModel.copy(
                                 modelId = "qwen",
                                 displayName = "Qwen",
-                                healthState = LocalModelHealthState.RequiresToken,
+                                healthState =
+                                    LocalModelHealthState.RequiresToken,
                                 requiresHfToken = true
                             )
                         )

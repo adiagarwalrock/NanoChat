@@ -89,4 +89,39 @@ class AllowlistParserTest {
 
         assertTrue(parsed.models.first().supportsThinking)
     }
+
+    @Test
+    fun `enabled models in bundled asset have valid download URLs`() {
+        val file = java.io.File("src/main/assets/model_allowlist_2_0_1.json")
+        assertTrue("Allowlist file must exist at ${file.absolutePath}", file.exists())
+
+        val json = file.readText()
+        val parsed = AllowlistParser.parse(
+            rawJson = json,
+            fallbackVersion = "2_0_1",
+            sourceType = AllowlistSourceType.BUNDLED
+        )
+
+        val enabledModels = parsed.models.filter { it.enabled }
+        assertTrue("There must be at least one enabled model", enabledModels.isNotEmpty())
+
+        for (model in enabledModels) {
+            val url = java.net.URL(model.downloadUrl)
+            val connection = url.openConnection() as java.net.HttpURLConnection
+            connection.requestMethod = "HEAD"
+            connection.connectTimeout = 15000
+            connection.readTimeout = 15000
+
+            try {
+                val responseCode = connection.responseCode
+                println("Checking ${model.name}: ${model.downloadUrl} -> $responseCode")
+                assertTrue(
+                    "Download URL for ${model.name} is invalid (HTTP $responseCode): ${model.downloadUrl}",
+                    responseCode == 200 || responseCode == 302
+                )
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
 }

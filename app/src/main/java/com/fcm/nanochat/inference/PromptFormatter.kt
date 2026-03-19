@@ -11,6 +11,17 @@ enum class DownloadedPromptFamily {
     GENERIC
 }
 
+internal fun String?.toPromptFamily(): DownloadedPromptFamily {
+    val normalized = this?.trim()?.lowercase().orEmpty()
+    return when {
+        "qwen" in normalized -> DownloadedPromptFamily.QWEN
+        "deepseek" in normalized -> DownloadedPromptFamily.DEEPSEEK
+        "gemma" in normalized -> DownloadedPromptFamily.GEMMA
+        "phi" in normalized -> DownloadedPromptFamily.PHI
+        else -> DownloadedPromptFamily.GENERIC
+    }
+}
+
 data class DownloadedPrompt(
         val family: DownloadedPromptFamily,
         val systemInstruction: String,
@@ -82,15 +93,16 @@ object PromptFormatter {
 
         // LiteRT-LM applies the model's native chat template automatically.
         // NanoChat only supplies a normalized user payload and optional system instruction.
-        val baseUserMessage = buildTranscriptMessage(history, prompt, maxTurns)
+        val baseUserMessage = buildTranscriptMessage(family, history, prompt, maxTurns)
 
         val finalSystemInstruction =
             if (family == DownloadedPromptFamily.GEMMA) "" else systemPrompt
-        val finalUserMessage = if (family == DownloadedPromptFamily.GEMMA) {
-            "$systemPrompt\n\n$baseUserMessage"
-        } else {
-            baseUserMessage
-        }
+        val finalUserMessage =
+            if (family == DownloadedPromptFamily.GEMMA) {
+                "$systemPrompt\n\n$baseUserMessage"
+            } else {
+                baseUserMessage
+            }
 
         return DownloadedPrompt(
                 family = family,
@@ -99,7 +111,18 @@ object PromptFormatter {
         )
     }
 
+    fun formatLatestTurn(
+        prompt: String,
+        thinkingEffort: ThinkingEffort = ThinkingEffort.MEDIUM,
+        supportsThinking: Boolean = false
+    ): String {
+        // When reusing a stateful conversation, we only send the latest user prompt.
+        // The system instruction is already set in the Conversation object.
+        return prompt.trim()
+    }
+
     private fun buildTranscriptMessage(
+        family: DownloadedPromptFamily,
             history: List<ChatTurn>,
             prompt: String,
             maxTurns: Int
@@ -107,6 +130,20 @@ object PromptFormatter {
         val recentTurns = historyWindow(history, maxTurns)
         if (recentTurns.isEmpty()) {
             return prompt.trim()
+        }
+
+        if (family == DownloadedPromptFamily.GEMMA) {
+            return buildString {
+                recentTurns.forEach { turn ->
+                    append(if (turn.role == ChatRole.USER) "user\n" else "model\n")
+                    append(normalizedTurnContent(turn))
+                    append("\n")
+                }
+                append("user\n")
+                append(prompt.trim())
+                append("\n")
+            }
+                .trim()
         }
 
         return buildString {
@@ -132,18 +169,7 @@ object PromptFormatter {
         return sanitized.ifBlank { raw }
     }
 
-    private fun String?.toPromptFamily(): DownloadedPromptFamily {
-        val normalized = this?.trim()?.lowercase().orEmpty()
-        return when {
-            "deepseek" in normalized -> DownloadedPromptFamily.DEEPSEEK
-            "qwen" in normalized -> DownloadedPromptFamily.QWEN
-            "gemma" in normalized -> DownloadedPromptFamily.GEMMA
-            "phi" in normalized -> DownloadedPromptFamily.PHI
-            else -> DownloadedPromptFamily.GENERIC
-        }
-    }
-
-    internal fun applyThinkingInstruction(
+    fun applyThinkingInstruction(
             systemPrompt: String,
             effort: ThinkingEffort,
             supportsThinking: Boolean
@@ -153,13 +179,10 @@ object PromptFormatter {
                 when (effort) {
                     ThinkingEffort.NONE ->
                         " Do not include a <think> block or hidden reasoning in the response."
-
                     ThinkingEffort.LOW ->
                         " If reasoning helps, keep it brief and place it inside a short <think>...</think> block before the final answer."
-
                     ThinkingEffort.MEDIUM ->
                         " When reasoning helps, place it inside a <think>...</think> block before the final answer."
-
                     ThinkingEffort.HIGH ->
                         " When reasoning helps, place a detailed <think>...</think> block before the final answer."
                 }

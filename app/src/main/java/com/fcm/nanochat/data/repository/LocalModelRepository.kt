@@ -1,5 +1,8 @@
 package com.fcm.nanochat.data.repository
 
+import com.fcm.nanochat.data.AcceleratorPreference
+import com.fcm.nanochat.data.SettingsSnapshot
+import com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig
 import com.fcm.nanochat.models.allowlist.AllowlistRepository
 import com.fcm.nanochat.models.allowlist.AllowlistSnapshot
 import com.fcm.nanochat.models.download.ModelDownloadCoordinator
@@ -89,7 +92,7 @@ class LocalModelRepository(
         return importCoordinator.validateImport(path)
     }
 
-    suspend fun prepareModelInMemory(modelId: String): String? {
+    suspend fun prepareModelInMemory(modelId: String, settings: SettingsSnapshot? = null): String? {
         return withContext(Dispatchers.IO) {
             val normalized = modelId.trim().lowercase()
             if (normalized.isBlank()) {
@@ -101,8 +104,9 @@ class LocalModelRepository(
                 return@withContext "Select this model before loading it into memory."
             }
 
-            val record = records.value.firstOrNull { it.modelId == normalized }
-                ?: return@withContext "Selected local model is unavailable."
+            val record =
+                records.value.firstOrNull { it.modelId == normalized }
+                    ?: return@withContext "Selected local model is unavailable."
 
             if (record.installState != ModelInstallState.INSTALLED) {
                 return@withContext "Selected local model is not installed."
@@ -118,13 +122,30 @@ class LocalModelRepository(
                 return@withContext "Selected local model file is missing. Re-download the model."
             }
 
+            val baseConfig =
+                model?.defaultConfig
+                    ?: settings?.toFallbackDownloadedConfig()
+                    ?: AllowlistDefaultConfig(
+                        topK = 40,
+                        topP = 0.9,
+                        temperature = 0.7,
+                        maxTokens = 1024,
+                        accelerators = "cpu"
+                    )
+
+            val finalConfig =
+                if (settings != null) {
+                    applyAcceleratorPreference(baseConfig, settings.acceleratorPreference)
+                } else {
+                    baseConfig
+                }
+
             val loadState = runtimeManager.loadState.value
             val runtimeModelId = loadState.modelId?.trim()?.lowercase().orEmpty()
             val sameModel = runtimeModelId == normalized
-            if (sameModel && (
-                        loadState.phase == RuntimeLoadPhase.LOADING ||
-                                loadState.phase == RuntimeLoadPhase.LOADED
-                        )
+            if (sameModel &&
+                (loadState.phase == RuntimeLoadPhase.LOADING ||
+                        loadState.phase == RuntimeLoadPhase.LOADED)
             ) {
                 return@withContext null
             }
@@ -133,20 +154,45 @@ class LocalModelRepository(
                 runtimeManager.acquire(
                     modelId = record.modelId,
                     modelPath = localPath,
-                    defaultConfig = model?.defaultConfig
-                        ?: com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig(
-                            topK = 40,
-                            topP = 0.9,
-                            temperature = 0.7,
-                            maxTokens = 1024,
-                            accelerators = "cpu"
-                        ),
+                    defaultConfig = finalConfig,
                     expectedFileName = model?.modelFile,
                     expectedFileType = model?.fileType,
                     expectedSizeBytes = model?.sizeInBytes ?: 0L
                 )
-            }.exceptionOrNull()?.message
+            }
+                .exceptionOrNull()
+                ?.message
         }
+    }
+
+    private fun SettingsSnapshot.toFallbackDownloadedConfig(): AllowlistDefaultConfig {
+        return AllowlistDefaultConfig(
+            topK = 40,
+            topP = topP,
+            temperature = temperature,
+            maxTokens = contextLength,
+            accelerators = "cpu",
+            strictAccelerator = false,
+            promptFamily = null
+        )
+    }
+
+    private fun applyAcceleratorPreference(
+        config: AllowlistDefaultConfig,
+        preference: AcceleratorPreference
+    ): AllowlistDefaultConfig {
+        if (preference == AcceleratorPreference.AUTO) {
+            return config.copy(strictAccelerator = false)
+        }
+
+        val normalized =
+            when (preference) {
+                AcceleratorPreference.AUTO -> config.accelerators
+                AcceleratorPreference.CPU -> "cpu"
+                AcceleratorPreference.GPU -> "gpu"
+                AcceleratorPreference.NNAPI -> "npu"
+            }
+        return config.copy(accelerators = normalized, strictAccelerator = true)
     }
 
     suspend fun ejectModelFromMemory(modelId: String): String? {

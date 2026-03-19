@@ -41,7 +41,7 @@ class ModelRuntimeManager(
         return withContext(Dispatchers.IO) {
             mutex.withLock {
                 val shouldReuse = activeRuntime != null &&
-                    activeModelId == modelId &&
+                        activeModelId?.trim()?.lowercase() == modelId.trim().lowercase() &&
                         activeModelPath == modelPath &&
                         activeConfigSignature == configSignature(defaultConfig)
                 if (shouldReuse) {
@@ -167,6 +167,10 @@ class ModelRuntimeManager(
                 )
             }
         }
+    }
+
+    fun getActiveSessionId(): Long? {
+        return activeRuntime?.getActiveSessionId()
     }
 
     private companion object {
