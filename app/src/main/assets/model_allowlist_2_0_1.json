@@ -368,6 +368,40 @@
         "vision"
       ],
       "memoryTier": "mid"
+    },
+    {
+      "name": "Phi-4-mini-instruct",
+      "modelId": "litert-community/Phi-4-mini-instruct",
+      "modelFile": "Phi-4-mini-instruct_multi-prefill-seq_q8_ekv4096.litertlm",
+      "description": "Compact yet powerful reasoning model from Microsoft.",
+      "enabled": true,
+      "sizeInBytes": 4096000000,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "8cd368be75fdb94d5a6f6f5b40f1ab22a6c2543e",
+      "defaultConfig": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.8,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ],
+      "llmSupportImage": false,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "reasoning"
+      ],
+      "memoryTier": "high"
     }
   ]
 }
