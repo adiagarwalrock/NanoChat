@@ -20,7 +20,8 @@ data class AllowlistDefaultConfig(
     val temperature: Double,
     val maxTokens: Int,
     val accelerators: String,
-    val strictAccelerator: Boolean = false
+    val strictAccelerator: Boolean = false,
+    val promptFamily: String? = null
 ) {
     val acceleratorHints: List<String>
         get() = accelerators
@@ -31,6 +32,7 @@ data class AllowlistDefaultConfig(
 
 data class AllowlistedModel(
     val id: String,
+    val enabled: Boolean,
     val displayName: String,
     val name: String,
     val modelId: String,
@@ -89,7 +91,9 @@ internal object AllowlistParser {
             for (index in 0 until modelsArray.length()) {
                 val modelJson = modelsArray.optJSONObject(index) ?: continue
                 val model = modelJson.toDomainModelOrNull() ?: continue
-                add(model)
+                if (model.enabled) {
+                    add(model)
+                }
             }
         }.sortedBy { it.displayName.lowercase() }
 
@@ -106,21 +110,26 @@ internal object AllowlistParser {
         val name = optString("name").trim()
         val modelId = optString("modelId").trim()
         val modelFile = optString("modelFile").trim()
+
         if (name.isBlank() || modelId.isBlank() || modelFile.isBlank()) {
             return null
         }
+
+        val enabled = optBoolean("enabled", true)
 
         val description = optString("description").trim()
         val sizeInBytes = optLong("sizeInBytes")
         val minDeviceMemoryInGb = optInt("minDeviceMemoryInGb")
         val commitHash = optString("commitHash").ifBlank { "main" }
         val configJson = optJSONObject("defaultConfig") ?: JSONObject()
+        val parsedPromptFamily = optString("promptFamily").ifBlank { null }
         val defaultConfig = AllowlistDefaultConfig(
             topK = configJson.optInt("topK", 40),
             topP = configJson.optDouble("topP", 0.9),
             temperature = configJson.optDouble("temperature", 0.7),
             maxTokens = configJson.optInt("maxTokens", 1024),
-            accelerators = configJson.optString("accelerators").ifBlank { "cpu" }
+            accelerators = configJson.optString("accelerators").ifBlank { "cpu" },
+            promptFamily = parsedPromptFamily
         )
 
         val taskTypes = optStringList("taskTypes").ifEmpty { listOf("llm_chat") }
@@ -158,7 +167,6 @@ internal object AllowlistParser {
         }
         val fileType = modelFile.substringAfterLast('.', missingDelimiterValue = "").lowercase()
         val supportedAbis = optStringList("supportedAbis")
-        val promptFamily = optString("promptFamily").ifBlank { null }
         val supportsThinking = if (has("supportsThinking")) {
             optBoolean("supportsThinking", false)
         } else {
@@ -171,6 +179,7 @@ internal object AllowlistParser {
 
         return AllowlistedModel(
             id = modelId.lowercase(),
+            enabled = enabled,
             displayName = name,
             name = name,
             modelId = modelId,
@@ -195,7 +204,7 @@ internal object AllowlistParser {
             downloadUrl = downloadUrl,
             fileType = fileType,
             supportedAbis = supportedAbis,
-            promptFamily = promptFamily,
+            promptFamily = parsedPromptFamily,
             supportsThinking = supportsThinking
         )
     }

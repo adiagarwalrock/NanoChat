@@ -10,11 +10,12 @@ import org.junit.Test
 class ActiveModelResolverTest {
     @Test
     fun `resolve marks ready installed model as valid`() {
-        val record = sampleRecord(
-            modelId = "model-a",
-            installState = ModelInstallState.INSTALLED,
-            compatibility = LocalModelCompatibilityState.Ready
-        )
+        val record =
+            sampleRecord(
+                modelId = "model-a",
+                installState = ModelInstallState.INSTALLED,
+                compatibility = LocalModelCompatibilityState.Ready
+            )
 
         val resolution = ActiveModelResolver.resolve("model-a", listOf(record))
 
@@ -32,11 +33,13 @@ class ActiveModelResolverTest {
 
     @Test
     fun `resolve clears non-ready model`() {
-        val record = sampleRecord(
-            modelId = "model-a",
-            installState = ModelInstallState.FAILED,
-            compatibility = LocalModelCompatibilityState.DownloadedButNotActivatable("broken")
-        )
+        val record =
+            sampleRecord(
+                modelId = "model-a",
+                installState = ModelInstallState.FAILED,
+                compatibility =
+                    LocalModelCompatibilityState.DownloadedButNotActivatable("broken")
+            )
 
         val resolution = ActiveModelResolver.resolve("model-a", listOf(record))
 
@@ -46,12 +49,13 @@ class ActiveModelResolverTest {
 
     @Test
     fun `resolve clears non-chat allowlisted model`() {
-        val record = sampleRecord(
-            modelId = "model-a",
-            installState = ModelInstallState.INSTALLED,
-            compatibility = LocalModelCompatibilityState.Ready,
-            allowlistedModel = sampleAllowlistedModel(recommendedForChat = false)
-        )
+        val record =
+            sampleRecord(
+                modelId = "model-a",
+                installState = ModelInstallState.INSTALLED,
+                compatibility = LocalModelCompatibilityState.Ready,
+                allowlistedModel = sampleAllowlistedModel(recommendedForChat = false)
+            )
 
         val resolution = ActiveModelResolver.resolve("model-a", listOf(record))
 
@@ -85,6 +89,7 @@ class ActiveModelResolverTest {
     private fun sampleAllowlistedModel(recommendedForChat: Boolean): AllowlistedModel {
         return AllowlistedModel(
             id = "model-a",
+            enabled = true,
             displayName = "Model A",
             name = "Model A",
             modelId = "org/model-a",
@@ -93,13 +98,14 @@ class ActiveModelResolverTest {
             sizeInBytes = 1_024,
             minDeviceMemoryInGb = 6,
             commitHash = "main",
-            defaultConfig = AllowlistDefaultConfig(
-                topK = 40,
-                topP = 0.9,
-                temperature = 0.7,
-                maxTokens = 1024,
-                accelerators = "cpu"
-            ),
+            defaultConfig =
+                AllowlistDefaultConfig(
+                    topK = 40,
+                    topP = 0.9,
+                    temperature = 0.7,
+                    maxTokens = 1024,
+                    accelerators = "cpu"
+                ),
             taskTypes = listOf("llm_prompt_lab"),
             bestForTaskTypes = listOf("llm_prompt_lab"),
             llmSupportImage = false,

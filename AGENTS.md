@@ -164,3 +164,6 @@ Contribution & Hygiene
 - Respect user changes; no destructive git commands. Only stage/commit when explicitly asked.
 - Use small, reviewable PRs with clear what/why, focusing on user-facing impact and backend behavior.
 - If adding migrations/version bumps, add tests and document here.
+- Fix (2025-03-18): LiteRtLmRuntime avoids blocking flow signals on native cleanup;
+  ModelLifecycleCoord ignores non-critical memory trim level 20 (UI_HIDDEN) to prevent aggressive
+  ejection on task switch.

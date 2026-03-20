@@ -63,7 +63,7 @@ class ModelManagerViewModel @Inject constructor(
                     runtimeMetrics = runtimeMetrics
                 )
                 val diagnosticsMessage = when (val compatibility = record.compatibility) {
-                    LocalModelCompatibilityState.Ready -> null
+                    LocalModelCompatibilityState.Ready -> record.errorMessage
                     is LocalModelCompatibilityState.RuntimeUnavailable -> compatibility.reason
                     is LocalModelCompatibilityState.DownloadedButNotActivatable -> compatibility.reason
                     else -> record.errorMessage
@@ -282,8 +282,9 @@ class ModelManagerViewModel @Inject constructor(
             }
 
             ModelInstallState.VALIDATING,
-            ModelInstallState.MOVING,
-            ModelInstallState.DELETING -> LocalModelHealthState.InstalledNeedsValidation
+            ModelInstallState.MOVING -> LocalModelHealthState.InstalledNeedsValidation
+
+            ModelInstallState.DELETING -> LocalModelHealthState.NotInstalled
 
             ModelInstallState.INSTALLED -> {
                 val compatibilityHealth = compatibilityHealthState(compatibility)
@@ -535,9 +536,9 @@ internal fun ModelCardUi.primaryActionLabel(): String {
         is LocalModelHealthState.DownloadFailed -> "Retry"
         LocalModelHealthState.InstalledNeedsValidation -> "Continue setup"
         LocalModelHealthState.InstalledReady -> "Use model"
-        is LocalModelHealthState.InstalledStartupFailed -> "Continue setup"
+        is LocalModelHealthState.InstalledStartupFailed -> "Troubleshoot"
         LocalModelHealthState.RequiresToken -> "Add token"
-        LocalModelHealthState.RequiresLicenseApproval -> "Continue setup"
+        LocalModelHealthState.RequiresLicenseApproval -> "View details"
         is LocalModelHealthState.NotCompatible -> "View details"
         LocalModelHealthState.UnsupportedForChat -> "View details"
     }

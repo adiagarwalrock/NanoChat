@@ -98,11 +98,8 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
 
     private val activeSessionId =
             combine(selectedSessionId, sessions) { selected, sessionList ->
-                        if (selected != null && sessionList.any { it.id == selected }) {
-                            selected
-                        } else {
-                            sessionList.firstOrNull()?.id
-                        }
+                selected?.takeIf { id -> sessionList.any { it.id == id } }
+                    ?: sessionList.firstOrNull()?.id
                     }
                     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
@@ -248,7 +245,9 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
 
             if (mode == InferenceMode.DOWNLOADED) {
                 val preparationError =
-                        withContext(Dispatchers.IO) { repository.prepareSelectedLocalModel() }
+                    withContext(Dispatchers.IO) {
+                        repository.prepareSelectedLocalModel(settings.value)
+                    }
                 if (!preparationError.isNullOrBlank() && shouldSurfaceNotice(mode, preparationError)
                 ) {
                     notice.value = preparationError
@@ -327,7 +326,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
                         watchdogTriggered = true
                         parentJob?.cancel(
                             GenerationWatchdogTimeout(
-                                "No response arrived in time. Retry or reselect this model."
+                                "No response arrived in time. Retry last, or reselect this model."
                             )
                         )
                     }
@@ -337,7 +336,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
             var lastPersistedLength = 0
             var lastPersistedSnapshot = ""
 
-            repository.streamResponse(mode, history, prompt, snapshot).collect { delta ->
+            repository.streamResponse(mode, history, prompt, snapshot, sessionId).collect { delta ->
                 ensureRequestActive(requestId)
                 val content = assembler.append(mode, delta)
                 val filtered = filterThinking(content, snapshot.thinkingEffort)
@@ -399,7 +398,10 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         snapshot: SettingsSnapshot
     ): Boolean {
         if (mode == InferenceMode.DOWNLOADED) {
-            val error = withContext(Dispatchers.IO) { repository.prepareSelectedLocalModel() }
+            val error =
+                withContext(Dispatchers.IO) {
+                    repository.prepareSelectedLocalModel(settings.value)
+                }
             if (!error.isNullOrBlank()) {
                 notice.value = error.takeIf { shouldSurfaceNotice(mode, it) }
                 return false
@@ -478,6 +480,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
             TAG,
             "chat_generation_finished requestId=$requestId isCurrent=${activeRequestId == requestId}"
         )
+        isSending.value = false
         watchdogJob?.cancel()
         if (activeAssistantMessageId == assistantMessageId) {
             activeAssistantMessageId = null
@@ -554,7 +557,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
     }
 
     private fun shouldSurfaceNotice(mode: InferenceMode, message: String): Boolean {
-        return message.isNotBlank() && mode != InferenceMode.DOWNLOADED
+        return message.isNotBlank()
     }
 
     private fun filterThinking(content: String, effort: ThinkingEffort): String {
@@ -569,7 +572,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         const val TAG = "ChatViewModel"
         const val STREAM_PERSIST_INTERVAL_MS = 180L
         const val STREAM_PERSIST_MIN_LENGTH_DELTA = 24
-        const val LOCAL_FIRST_TOKEN_WATCHDOG_MS = 18_000L
+        const val LOCAL_FIRST_TOKEN_WATCHDOG_MS = 65_000L
         const val REMOTE_FIRST_TOKEN_WATCHDOG_MS = 25_000L
         const val CANCELLATION_MESSAGE = "Generation cancelled."
         const val WATCHDOG_TIMEOUT_MESSAGE =

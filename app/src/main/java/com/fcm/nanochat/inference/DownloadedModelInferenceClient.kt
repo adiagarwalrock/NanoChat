@@ -8,7 +8,6 @@ import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
 import com.fcm.nanochat.models.registry.InstalledModelRecord
 import com.fcm.nanochat.models.registry.ModelInstallState
 import com.fcm.nanochat.models.registry.ModelRegistry
-import com.fcm.nanochat.models.runtime.LocalRuntimeMetrics
 import com.fcm.nanochat.models.runtime.LocalRuntimeTelemetry
 import com.fcm.nanochat.models.runtime.ModelRuntimeManager
 import kotlinx.coroutines.CancellationException
@@ -23,6 +22,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 class DownloadedModelInferenceClient(
     private val modelRegistry: ModelRegistry,
@@ -32,14 +32,16 @@ class DownloadedModelInferenceClient(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override suspend fun availability(settings: SettingsSnapshot): BackendAvailability {
-        val activeModelId = resolveActiveModelId(settings, settings.activeLocalModelId)
-            ?: return BackendAvailability.Unavailable(
-                "No local model selected. Open Model Library and choose one."
-            )
-        val record = resolveActiveModelRecord(activeModelId)
-            ?: return BackendAvailability.Unavailable(
-                "Selected local model is unavailable. Choose another model."
-            )
+        val activeModelId =
+            resolveActiveModelId(settings, settings.activeLocalModelId)
+                ?: return BackendAvailability.Unavailable(
+                    "No local model selected. Open Model Library and choose one."
+                )
+        val record =
+            resolveActiveModelRecord(activeModelId)
+                ?: return BackendAvailability.Unavailable(
+                    "Selected local model is unavailable. Choose another model."
+                )
 
         if (!record.isLegacy && record.allowlistedModel?.recommendedForChat == false) {
             return BackendAvailability.Unavailable(
@@ -67,43 +69,34 @@ class DownloadedModelInferenceClient(
 
         return when (val compatibility = record.compatibility) {
             LocalModelCompatibilityState.Ready -> availabilityForReadyModel(record)
-
             LocalModelCompatibilityState.Downloadable -> {
                 BackendAvailability.Unavailable("Download this local model before using it.")
             }
-
             LocalModelCompatibilityState.TokenRequired -> {
                 BackendAvailability.Unavailable("Hugging Face token is required for this model.")
             }
-
             is LocalModelCompatibilityState.NeedsMoreRam -> {
                 BackendAvailability.Unavailable(
                     "This model needs ${compatibility.requiredGb} GB RAM."
                 )
             }
-
             is LocalModelCompatibilityState.NeedsMoreStorage -> {
                 BackendAvailability.Unavailable("Not enough free storage for this model.")
             }
-
             is LocalModelCompatibilityState.UnsupportedDevice -> {
                 BackendAvailability.Unavailable(toFriendlyRuntimeError(compatibility.reason))
             }
-
             LocalModelCompatibilityState.UnsupportedForChat -> {
                 BackendAvailability.Unavailable("This model is not designed for chat in NanoChat.")
             }
-
             is LocalModelCompatibilityState.DownloadedButNotActivatable -> {
                 BackendAvailability.Unavailable(toFriendlyRuntimeError(compatibility.reason))
             }
-
             LocalModelCompatibilityState.CorruptedModel -> {
                 BackendAvailability.Unavailable(
                     "This install appears incomplete. Try re-downloading."
                 )
             }
-
             is LocalModelCompatibilityState.RuntimeUnavailable -> {
                 BackendAvailability.Unavailable(toFriendlyRuntimeError(compatibility.reason))
             }
@@ -126,7 +119,6 @@ class DownloadedModelInferenceClient(
                     notReadyYetAvailability()
                 }
             }
-
             com.fcm.nanochat.models.runtime.RuntimeLoadPhase.LOADED -> {
                 if (matchesSelectedModel) {
                     BackendAvailability.Available
@@ -134,12 +126,10 @@ class DownloadedModelInferenceClient(
                     notReadyYetAvailability()
                 }
             }
-
             com.fcm.nanochat.models.runtime.RuntimeLoadPhase.EJECTED,
             com.fcm.nanochat.models.runtime.RuntimeLoadPhase.IDLE -> {
                 notReadyYetAvailability()
             }
-
             com.fcm.nanochat.models.runtime.RuntimeLoadPhase.FAILED -> {
                 if (runtimeModelId.isBlank() || matchesSelectedModel) {
                     BackendAvailability.Unavailable(
@@ -160,10 +150,7 @@ class DownloadedModelInferenceClient(
 
     override fun streamChat(request: InferenceRequest): Flow<String> = flow {
         if (request.settings.inferenceMode != InferenceMode.DOWNLOADED) {
-            Log.w(
-                TAG,
-                "Downloaded client invoked with mode=${request.settings.inferenceMode.name}"
-            )
+            Log.w(TAG, "Downloaded client invoked with mode=${request.settings.inferenceMode.name}")
         }
 
         when (val availability = availability(request.settings)) {
@@ -173,19 +160,23 @@ class DownloadedModelInferenceClient(
             }
         }
 
-        val activeModelId = resolveActiveModelId(request.settings, request.activeDownloadedModelId)
-            ?: throw InferenceException.Configuration("No local model selected.")
-        val record = resolveActiveModelRecord(activeModelId)
-            ?: throw InferenceException.BackendUnavailable(
-                "Selected local model is unavailable. Choose another model."
-            )
+        val activeModelId =
+            resolveActiveModelId(request.settings, request.activeDownloadedModelId)
+                ?: throw InferenceException.Configuration("No local model selected.")
+        val record =
+            resolveActiveModelRecord(activeModelId)
+                ?: throw InferenceException.BackendUnavailable(
+                    "Selected local model is unavailable. Choose another model."
+                )
 
         val resolvedModelId = record.modelId
         val model = record.allowlistedModel
-        val baseRuntimeConfig = applyAcceleratorPreference(
-            config = model?.defaultConfig ?: request.settings.toFallbackDownloadedConfig(),
-            preference = request.settings.acceleratorPreference
-        )
+        val baseRuntimeConfig =
+            applyAcceleratorPreference(
+                config = model?.defaultConfig
+                    ?: request.settings.toFallbackDownloadedConfig(),
+                preference = request.settings.acceleratorPreference
+            )
         val localPath = record.localPath?.trim().orEmpty()
         if (localPath.isBlank()) {
             throw InferenceException.BackendUnavailable(
@@ -198,51 +189,101 @@ class DownloadedModelInferenceClient(
             "Starting local generation modelId=$resolvedModelId selectedModelId=$activeModelId path=$localPath installState=${record.installState} historyTurns=${request.history.size}"
         )
 
-        val formattedPrompt = PromptFormatter.formatDownloadedPrompt(
-            history = request.history,
-            prompt = request.prompt,
-            maxTurns = 20,
-            promptFamily = model?.promptFamily ?: resolvedModelId,
-            thinkingEffort = request.settings.thinkingEffort,
-            supportsThinking = model?.supportsThinking ?: false
-        )
+        val activeSessionId = request.sessionId
+        val isReusing =
+            activeSessionId != null &&
+                    runtimeManager.loadState.value.phase ==
+                    com.fcm.nanochat.models.runtime.RuntimeLoadPhase.LOADED &&
+                    runtimeManager.loadState.value.modelId?.trim()?.lowercase() ==
+                    resolvedModelId.trim().lowercase() &&
+                    runtimeManager.getActiveSessionId() == activeSessionId
+
+        val formattedPrompt =
+            if (isReusing) {
+                val systemPrompt =
+                    PromptFormatter.applyThinkingInstruction(
+                        systemPrompt =
+                            "You are NanoChat, a helpful local assistant. Reply in clean Markdown and keep numbered or bulleted lists on separate lines.",
+                        effort = request.settings.thinkingEffort,
+                        supportsThinking = model?.supportsThinking ?: false
+                    )
+                val finalSystemInstruction =
+                    if (model?.promptFamily?.trim()?.lowercase() == "gemma") ""
+                    else systemPrompt
+                val latestTurn =
+                    PromptFormatter.formatLatestTurn(
+                        prompt = request.prompt,
+                        thinkingEffort = request.settings.thinkingEffort,
+                        supportsThinking = model?.supportsThinking ?: false
+                    )
+                val finalUserMessage =
+                    if (model?.promptFamily?.trim()?.lowercase() == "gemma") {
+                        "$systemPrompt\n\n$latestTurn"
+                    } else {
+                        latestTurn
+                    }
+
+                com.fcm.nanochat.inference.DownloadedPrompt(
+                    family = model?.promptFamily.toPromptFamily(),
+                    systemInstruction = finalSystemInstruction,
+                    userMessage = finalUserMessage
+                )
+            } else {
+                PromptFormatter.formatDownloadedPrompt(
+                    history = request.history,
+                    prompt = request.prompt,
+                    maxTurns = 20,
+                    promptFamily = model?.promptFamily ?: resolvedModelId,
+                    thinkingEffort = request.settings.thinkingEffort,
+                    supportsThinking = model?.supportsThinking ?: false
+                )
+            }
+
         logFormattedPrompt(
             modelId = resolvedModelId,
             family = formattedPrompt.family,
             systemInstruction = formattedPrompt.systemInstruction,
-            userMessage = formattedPrompt.userMessage
+            userMessage = formattedPrompt.userMessage,
+            isReusing = isReusing
         )
 
         suspend fun kotlinx.coroutines.flow.FlowCollector<String>.emitGenerationAttempt(
-            runtimeConfig: AllowlistDefaultConfig
+            runtimeConfig: com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig,
+            isRetry: Boolean
         ) {
-            val runtimeHandle = runCatching {
-                runtimeManager.acquire(
-                    modelId = resolvedModelId,
-                    modelPath = localPath,
-                    defaultConfig = runtimeConfig,
-                    expectedFileName = model?.modelFile,
-                    expectedFileType = model?.fileType,
-                    expectedSizeBytes = model?.sizeInBytes ?: 0L
-                )
-            }.getOrElse { error ->
-                Log.e(TAG, "Failed to initialize downloaded runtime", error)
-                throw InferenceException.BackendUnavailable(toFriendlyRuntimeError(error.message))
-            }
+            val currentRuntimeHandle =
+                runCatching {
+                    runtimeManager.acquire(
+                        modelId = resolvedModelId,
+                        modelPath = localPath,
+                        defaultConfig = runtimeConfig,
+                        expectedFileName = model?.modelFile,
+                        expectedFileType = model?.fileType,
+                        expectedSizeBytes = model?.sizeInBytes ?: 0L
+                    )
+                }
+                    .getOrElse { error ->
+                        Log.e(TAG, "Failed to initialize downloaded runtime", error)
+                        throw InferenceException.BackendUnavailable(
+                            toFriendlyRuntimeError(error)
+                        )
+                    }
 
             if (runtimeConfig.acceleratorHints.isNotEmpty()) {
                 Log.d(
                     TAG,
-                    "local_runtime_config modelId=$resolvedModelId accelerators=${runtimeConfig.acceleratorHints.joinToString(",")}" +
-                        " strict=${runtimeConfig.strictAccelerator}" +
-                        " topK=${runtimeConfig.topK} topP=${runtimeConfig.topP} temperature=${runtimeConfig.temperature} maxTokens=${runtimeConfig.maxTokens}"
+                    "local_runtime_config modelId=$resolvedModelId accelerators=${
+                        runtimeConfig.acceleratorHints.joinToString(
+                            ","
+                        )
+                    }" +
+                            " strict=${runtimeConfig.strictAccelerator}" +
+                            " topK=${runtimeConfig.topK} topP=${runtimeConfig.topP} temperature=${runtimeConfig.temperature} maxTokens=${runtimeConfig.maxTokens}"
                 )
             }
 
-            val loadedModelId = runtimeManager.loadState.value.modelId
-                ?.trim()
-                ?.lowercase()
-                .orEmpty()
+            val loadedModelId =
+                runtimeManager.loadState.value.modelId?.trim()?.lowercase().orEmpty()
             if (loadedModelId.isNotBlank() && loadedModelId != resolvedModelId.trim().lowercase()) {
                 throw InferenceException.BackendUnavailable(
                     "Selected local model is not the active runtime. Tap Use model and retry."
@@ -250,7 +291,7 @@ class DownloadedModelInferenceClient(
             }
 
             val generationStart = System.currentTimeMillis()
-            val noTokenWatchdogMs = configuredNoTokenWatchdogMs()
+            val noTokenWatchdogMs = configuredNoTokenWatchdogMs(isRetry)
             val visibleStallWatchdogMs = configuredVisibleStallWatchdogMs()
             val parentJob = currentCoroutineContext()[Job]
             var firstRawCallbackAt = 0L
@@ -266,9 +307,13 @@ class DownloadedModelInferenceClient(
             var emissionUnlocked = false
             var completionReason = "completed"
 
+            val stopSequenceDetector = StopSequenceDetector(stopSequences = emptyList())
+            val repetitionDetector = RepetitionDetector
+            val stopSequenceFound = AtomicBoolean(false)
+
             Log.d(
                 TAG,
-                "local_generation_started modelId=$resolvedModelId family=${formattedPrompt.family.name} watchdogMs=$noTokenWatchdogMs stallMs=$visibleStallWatchdogMs"
+                "local_generation_started modelId=$resolvedModelId family=${formattedPrompt.family.name} watchdogMs=$noTokenWatchdogMs stallMs=$visibleStallWatchdogMs isRetry=$isRetry reusing=$isReusing"
             )
 
             suspend fun emitStableDelta(currentSnapshot: String, chunkIndex: Int) {
@@ -291,7 +336,11 @@ class DownloadedModelInferenceClient(
                 if (shouldLogChunk(chunkIndex)) {
                     Log.d(
                         TAG,
-                        "local_generation_chunk_visible modelId=$resolvedModelId index=$chunkIndex deltaLen=${emittedDelta.length} visibleLen=${currentSnapshot.length} delta='${chunkPreview(emittedDelta)}'"
+                        "local_generation_chunk_visible modelId=$resolvedModelId index=$chunkIndex deltaLen=${emittedDelta.length} visibleLen=${currentSnapshot.length} delta='${
+                            chunkPreview(
+                                emittedDelta
+                            )
+                        }'"
                     )
                 }
                 this@emitGenerationAttempt.emit(emittedDelta)
@@ -310,16 +359,29 @@ class DownloadedModelInferenceClient(
                             )
                         ) {
                             completionReason =
-                                when (visibilityState(firstRawCallbackAt, firstVisibleTokenAt)) {
-                                    LocalGenerationVisibilityState.NO_CALLBACK -> "no_callback_watchdog"
-                                    LocalGenerationVisibilityState.CALLBACK_NO_VISIBLE -> "callbacks_without_visible_watchdog"
-                                    LocalGenerationVisibilityState.VISIBLE_STARTED -> "visible_watchdog_skipped"
+                                when (visibilityState(firstRawCallbackAt, firstVisibleTokenAt)
+                                ) {
+                                    LocalGenerationVisibilityState.NO_CALLBACK ->
+                                        "no_callback_watchdog"
+
+                                    LocalGenerationVisibilityState.CALLBACK_NO_VISIBLE ->
+                                        "callbacks_without_visible_watchdog"
+
+                                    LocalGenerationVisibilityState.VISIBLE_STARTED ->
+                                        "visible_watchdog_skipped"
                                 }
                             Log.w(
                                 TAG,
-                                "local_generation_watchdog_triggered modelId=$resolvedModelId waitedMs=$noTokenWatchdogMs state=${visibilityState(firstRawCallbackAt, firstVisibleTokenAt).name} rawCallbacks=$rawCallbackCount"
+                                "local_generation_watchdog_triggered modelId=$resolvedModelId waitedMs=$noTokenWatchdogMs state=${
+                                    visibilityState(
+                                        firstRawCallbackAt,
+                                        firstVisibleTokenAt
+                                    ).name
+                                } rawCallbacks=$rawCallbackCount"
                             )
-                            runtimeHandle.runtime.cancelActiveGeneration("no_visible_watchdog")
+                            currentRuntimeHandle.runtime.cancelActiveGeneration(
+                                "no_visible_watchdog"
+                            )
                             parentJob?.cancel(NoTokenWatchdogTimeout(NO_TOKEN_WATCHDOG_MESSAGE))
                         }
                     }
@@ -330,9 +392,8 @@ class DownloadedModelInferenceClient(
                             if (firstVisibleTokenAt == 0L) {
                                 continue
                             }
-                            val lastProgressAt = lastVisibleProgressAt
-                                .takeIf { it > 0L }
-                                ?: firstVisibleTokenAt
+                            val lastProgressAt =
+                                lastVisibleProgressAt.takeIf { it > 0L } ?: firstVisibleTokenAt
                             val now = System.currentTimeMillis()
                             if (shouldTriggerVisibleStallWatchdog(
                                     firstVisibleTokenAtMs = firstVisibleTokenAt,
@@ -346,11 +407,11 @@ class DownloadedModelInferenceClient(
                                     TAG,
                                     "local_generation_visible_stall modelId=$resolvedModelId stallMs=$visibleStallWatchdogMs rawCallbacks=$rawCallbackCount visibleChunks=$visibleChunkCount visibleChars=$emittedVisibleChars"
                                 )
-                                runtimeHandle.runtime.cancelActiveGeneration("visible_stall_watchdog")
+                                currentRuntimeHandle.runtime.cancelActiveGeneration(
+                                    "visible_stall_watchdog"
+                                )
                                 parentJob?.cancel(
-                                    VisibleOutputStalledTimeout(
-                                        VISIBLE_STALL_WATCHDOG_MESSAGE
-                                    )
+                                    VisibleOutputStalledTimeout(VISIBLE_STALL_WATCHDOG_MESSAGE)
                                 )
                                 return@launch
                             }
@@ -358,80 +419,120 @@ class DownloadedModelInferenceClient(
                     }
 
                     try {
-                        runtimeHandle.runtime.stream(
+                        currentRuntimeHandle.runtime.stream(
+                            sessionId = activeSessionId,
                             prompt = formattedPrompt.userMessage,
                             systemInstruction = formattedPrompt.systemInstruction
-                        ).collect { runtimeChunk ->
-                            currentCoroutineContext().ensureActive()
-                            rawCallbackCount += 1
-                            if (firstRawCallbackAt == 0L) {
-                                firstRawCallbackAt = System.currentTimeMillis()
-                                Log.d(
-                                    TAG,
-                                    "local_generation_first_callback modelId=$resolvedModelId callbackMs=${firstRawCallbackAt - generationStart} rawChunk='${chunkPreview(runtimeChunk)}'"
-                                )
-                            }
-
-                            if (runtimeChunk.isBlank() || runtimeChunk.equals(
-                                    "null",
-                                    ignoreCase = true
-                                )
-                            ) {
-                                nonVisibleChunkCount += 1
-                                if (shouldLogChunk(rawCallbackCount)) {
+                        )
+                            .collect { runtimeChunk ->
+                                currentCoroutineContext().ensureActive()
+                                rawCallbackCount += 1
+                                if (firstRawCallbackAt == 0L) {
+                                    firstRawCallbackAt = System.currentTimeMillis()
                                     Log.d(
                                         TAG,
-                                        "local_generation_chunk_non_visible modelId=$resolvedModelId index=$rawCallbackCount reason=blank_or_null raw='${chunkPreview(runtimeChunk)}'"
+                                        "local_generation_first_callback modelId=$resolvedModelId callbackMs=${firstRawCallbackAt - generationStart} rawChunk='${
+                                            chunkPreview(
+                                                runtimeChunk
+                                            )
+                                        }'"
                                     )
                                 }
-                                return@collect
-                            }
 
-                            rawOutput = mergeRuntimeChunk(rawOutput, runtimeChunk)
-                            val sanitizedSnapshot = GeneratedTextSanitizer.sanitize(rawOutput)
-                            val snapshotDelta = incrementalVisibleDelta(visibleOutput, sanitizedSnapshot)
-                            visibleOutput = sanitizedSnapshot
-
-                            if (snapshotDelta.isBlank()) {
-                                nonVisibleChunkCount += 1
-                                if (shouldLogChunk(rawCallbackCount)) {
-                                    Log.d(
-                                        TAG,
-                                        "local_generation_chunk_non_visible modelId=$resolvedModelId index=$rawCallbackCount reason=sanitized_empty raw='${chunkPreview(runtimeChunk)}' sanitizedLen=${sanitizedSnapshot.length}"
-                                    )
-                                }
-                                return@collect
-                            }
-
-                            if (isLikelyDegenerateOutput(visibleOutput)) {
-                                completionReason = "degenerate_output"
-                                Log.w(
-                                    TAG,
-                                    "local_generation_degenerate_output modelId=$resolvedModelId sample='${chunkPreview(visibleOutput)}' visibleLen=${visibleOutput.length}"
-                                )
-                                runtimeHandle.runtime.cancelActiveGeneration("degenerate_output")
-                                throw DegenerateOutputException()
-                            }
-
-                            if (!emissionUnlocked) {
-                                if (!shouldUnlockVisibleEmission(visibleOutput)) {
+                                if (runtimeChunk.isBlank() ||
+                                    runtimeChunk.equals("null", ignoreCase = true)
+                                ) {
                                     nonVisibleChunkCount += 1
                                     if (shouldLogChunk(rawCallbackCount)) {
                                         Log.d(
                                             TAG,
-                                            "local_generation_chunk_non_visible modelId=$resolvedModelId index=$rawCallbackCount reason=buffering_pre_unlock raw='${chunkPreview(runtimeChunk)}' visibleLen=${visibleOutput.length}"
+                                            "local_generation_chunk_non_visible modelId=$resolvedModelId index=$rawCallbackCount reason=blank_or_null raw='${
+                                                chunkPreview(
+                                                    runtimeChunk
+                                                )
+                                            }'"
                                         )
                                     }
                                     return@collect
                                 }
-                                emissionUnlocked = true
-                            }
 
-                            emitStableDelta(
-                                currentSnapshot = visibleOutput,
-                                chunkIndex = rawCallbackCount
-                            )
-                        }
+                                rawOutput = mergeRuntimeChunk(rawOutput, runtimeChunk)
+                                val sanitizedSnapshot =
+                                    GeneratedTextSanitizer.sanitize(rawOutput)
+                                val snapshotDelta =
+                                    incrementalVisibleDelta(
+                                        visibleOutput,
+                                        sanitizedSnapshot
+                                    )
+                                visibleOutput = sanitizedSnapshot
+
+                                if (snapshotDelta.isBlank()) {
+                                    nonVisibleChunkCount += 1
+                                    if (shouldLogChunk(rawCallbackCount)) {
+                                        Log.d(
+                                            TAG,
+                                            "local_generation_chunk_non_visible modelId=$resolvedModelId index=$rawCallbackCount reason=sanitized_empty raw='${
+                                                chunkPreview(
+                                                    runtimeChunk
+                                                )
+                                            }' sanitizedLen=${sanitizedSnapshot.length}"
+                                        )
+                                    }
+                                    return@collect
+                                }
+
+                                if (repetitionDetector.isLikelyDegenerate(visibleOutput)) {
+                                    completionReason = "degenerate_output"
+                                    Log.w(
+                                        TAG,
+                                        "local_generation_degenerate_output modelId=$resolvedModelId sample='${
+                                            chunkPreview(
+                                                visibleOutput
+                                            )
+                                        }' visibleLen=${visibleOutput.length}"
+                                    )
+                                    currentRuntimeHandle.runtime.cancelActiveGeneration(
+                                        "degenerate_output"
+                                    )
+                                    throw DegenerateOutputException()
+                                }
+
+                                if (stopSequenceDetector.hasStopSequence(visibleOutput)) {
+                                    completionReason = "stop_sequence"
+                                    Log.d(
+                                        TAG,
+                                        "local_generation_stop_sequence modelId=$resolvedModelId sequence='${stopSequenceDetector.foundSequence}' visibleLen=${visibleOutput.length}"
+                                    )
+                                    stopSequenceFound.set(true)
+                                    currentRuntimeHandle.runtime.cancelActiveGeneration(
+                                        "stop_sequence"
+                                    )
+                                    return@collect
+                                }
+
+                                if (!emissionUnlocked) {
+                                    if (!shouldUnlockVisibleEmission(visibleOutput)) {
+                                        nonVisibleChunkCount += 1
+                                        if (shouldLogChunk(rawCallbackCount)) {
+                                            Log.d(
+                                                TAG,
+                                                "local_generation_chunk_non_visible modelId=$resolvedModelId index=$rawCallbackCount reason=buffering_pre_unlock raw='${
+                                                    chunkPreview(
+                                                        runtimeChunk
+                                                    )
+                                                }' visibleLen=${visibleOutput.length}"
+                                            )
+                                        }
+                                        return@collect
+                                    }
+                                    emissionUnlocked = true
+                                }
+
+                                emitStableDelta(
+                                    currentSnapshot = visibleOutput,
+                                    chunkIndex = rawCallbackCount
+                                )
+                            }
                     } finally {
                         noVisibleWatchdogJob.cancel()
                         visibleStallWatchdogJob.cancel()
@@ -442,8 +543,13 @@ class DownloadedModelInferenceClient(
                     }
                 }
 
-                val finalizedVisibleOutput = GeneratedTextSanitizer.sanitize(rawOutput)
-                if (isLikelyDegenerateOutput(finalizedVisibleOutput)) {
+                var finalizedVisibleOutput = GeneratedTextSanitizer.sanitize(rawOutput)
+                if (stopSequenceFound.get()) {
+                    finalizedVisibleOutput =
+                        stopSequenceDetector.trimStopSequence(finalizedVisibleOutput)
+                }
+
+                if (repetitionDetector.isLikelyDegenerate(finalizedVisibleOutput)) {
                     completionReason = "degenerate_output"
                     throw DegenerateOutputException()
                 }
@@ -469,14 +575,15 @@ class DownloadedModelInferenceClient(
                 val tokensPerSecond = visibleChunkCount * 1000.0 / generationDurationMs.toDouble()
 
                 telemetry.onMetrics(
-                    LocalRuntimeMetrics(
+                    com.fcm.nanochat.models.runtime.LocalRuntimeMetrics(
                         modelId = resolvedModelId,
-                        initDurationMs = runtimeHandle.initDurationMs,
-                        timeToFirstTokenMs = if (firstVisibleTokenAt == 0L) {
-                            finishedAt - generationStart
-                        } else {
-                            firstVisibleTokenAt - generationStart
-                        },
+                        initDurationMs = currentRuntimeHandle.initDurationMs,
+                        timeToFirstTokenMs =
+                            if (firstVisibleTokenAt == 0L) {
+                                finishedAt - generationStart
+                            } else {
+                                firstVisibleTokenAt - generationStart
+                            },
                         generationDurationMs = generationDurationMs,
                         tokensPerSecond = tokensPerSecond,
                         backend = "litert-lm"
@@ -488,11 +595,16 @@ class DownloadedModelInferenceClient(
                     "local_generation_completed modelId=$resolvedModelId completionReason=$completionReason rawCallbacks=$rawCallbackCount nonVisibleChunks=$nonVisibleChunkCount visibleChunks=$visibleChunkCount visibleChars=$emittedVisibleChars durationMs=$generationDurationMs"
                 )
             } catch (cancellation: CancellationException) {
-                runtimeHandle.runtime.cancelActiveGeneration("cancelled")
+                currentRuntimeHandle.runtime.cancelActiveGeneration("cancelled")
                 if (cancellation is NoTokenWatchdogTimeout) {
                     Log.w(
                         TAG,
-                        "local_generation_no_visible modelId=$resolvedModelId waitedMs=$noTokenWatchdogMs state=${visibilityState(firstRawCallbackAt, firstVisibleTokenAt).name} rawCallbacks=$rawCallbackCount"
+                        "local_generation_no_visible modelId=$resolvedModelId waitedMs=$noTokenWatchdogMs state=${
+                            visibilityState(
+                                firstRawCallbackAt,
+                                firstVisibleTokenAt
+                            ).name
+                        } rawCallbacks=$rawCallbackCount"
                     )
                     throw InferenceException.BackendUnavailable(
                         cancellation.message ?: NO_TOKEN_WATCHDOG_MESSAGE
@@ -534,25 +646,24 @@ class DownloadedModelInferenceClient(
                 throw degenerate
             } catch (error: Throwable) {
                 completionReason = "error"
-                runtimeHandle.runtime.cancelActiveGeneration("error")
+                currentRuntimeHandle.runtime.cancelActiveGeneration("error")
                 Log.e(TAG, "Downloaded runtime generation failed modelId=$resolvedModelId", error)
-                throw InferenceException.BackendUnavailable(toFriendlyRuntimeError(error.message))
+                throw InferenceException.BackendUnavailable(toFriendlyRuntimeError(error))
             }
         }
 
-        val attemptConfigs = generationAttemptConfigs(
-            config = baseRuntimeConfig
-        )
+        val attemptConfigs = generationAttemptConfigs(config = baseRuntimeConfig)
 
         for ((attemptIndex, runtimeConfig) in attemptConfigs.withIndex()) {
             try {
-                emitGenerationAttempt(runtimeConfig)
+                emitGenerationAttempt(runtimeConfig, isRetry = attemptIndex > 0)
                 return@flow
             } catch (degenerate: DegenerateOutputException) {
-                val shouldRetry = shouldRetryOnCpuFallback(
-                    attemptIndex = attemptIndex,
-                    attemptCount = attemptConfigs.size
-                )
+                val shouldRetry =
+                    shouldRetryOnCpuFallback(
+                        attemptIndex = attemptIndex,
+                        attemptCount = attemptConfigs.size
+                    )
                 if (!shouldRetry) {
                     throw unstableOutputException(request.settings.acceleratorPreference)
                 }
@@ -623,39 +734,28 @@ class DownloadedModelInferenceClient(
     }
 
     private fun chunkPreview(raw: String): String {
-        return raw
-            .replace("\r\n", "\n")
-            .replace("\n", "\\n")
-            .take(200)
-    }
-
-    private fun isLikelyDegenerateOutput(output: String): Boolean {
-        val compact = output.filterNot(Char::isWhitespace)
-        if (compact.length < 48) return false
-
-        val first = compact.first()
-        if (first.isLetterOrDigit()) return false
-        
-        val punctuationCandidates = setOf('#', '\'', '$', '-', '_', '=', '|', '`', '.', '*', '+')
-        if (first !in punctuationCandidates) return false
-
-        val sameRatio = compact.count { it == first }.toDouble() / compact.length
-        return sameRatio >= 0.95
+        return raw.replace("\r\n", "\n").replace("\n", "\\n").take(200)
     }
 
     private fun shouldUnlockVisibleEmission(output: String): Boolean {
         if (output.isBlank()) return false
 
-        val normalized = output
-            .replace("<think>", "", ignoreCase = true)
-            .replace("</think>", "", ignoreCase = true)
-            .replace(Regex("(?i)<[^>]*$"), "")
+        val normalized =
+            output.replace("<think>", "", ignoreCase = true)
+                .replace("</think>", "", ignoreCase = true)
+                .replace(Regex("(?i)<[^>]*$"), "")
         return normalized.any(Char::isLetterOrDigit)
     }
 
-    private fun configuredNoTokenWatchdogMs(): Long {
+    private fun configuredNoTokenWatchdogMs(isRetry: Boolean): Long {
         val overrideMs = System.getProperty(DEBUG_NO_TOKEN_WATCHDOG_PROPERTY)?.toLongOrNull()
-        return overrideMs?.coerceAtLeast(1_000L) ?: LOCAL_NO_TOKEN_WATCHDOG_MS
+        if (overrideMs != null) return overrideMs.coerceAtLeast(1_000L)
+
+        return if (isRetry) {
+            LOCAL_RETRY_NO_TOKEN_WATCHDOG_MS
+        } else {
+            LOCAL_NO_TOKEN_WATCHDOG_MS
+        }
     }
 
     private fun configuredVisibleStallWatchdogMs(): Long {
@@ -667,21 +767,24 @@ class DownloadedModelInferenceClient(
         modelId: String,
         family: DownloadedPromptFamily,
         systemInstruction: String,
-        userMessage: String
+        userMessage: String,
+        isReusing: Boolean
     ) {
         if (!isPromptLoggingEnabled()) return
 
-        val systemPreview = systemInstruction
-            .replace("\r\n", "\n")
-            .replace("\n", "\\n")
-            .take(PROMPT_LOG_PREVIEW_LIMIT)
-        val userPreview = userMessage
-            .replace("\r\n", "\n")
-            .replace("\n", "\\n")
-            .take(PROMPT_LOG_PREVIEW_LIMIT)
+        val systemPreview =
+            systemInstruction
+                .replace("\r\n", "\n")
+                .replace("\n", "\\n")
+                .take(PROMPT_LOG_PREVIEW_LIMIT)
+        val userPreview =
+            userMessage
+                .replace("\r\n", "\n")
+                .replace("\n", "\\n")
+                .take(PROMPT_LOG_PREVIEW_LIMIT)
         Log.d(
             TAG,
-            "local_prompt modelId=$modelId family=${family.name} systemChars=${systemInstruction.length} userChars=${userMessage.length} system='$systemPreview' user='$userPreview'"
+            "local_prompt modelId=$modelId family=${family.name} systemChars=${systemInstruction.length} userChars=${userMessage.length} isReusing=$isReusing system='$systemPreview' user='$userPreview'"
         )
     }
 
@@ -689,14 +792,16 @@ class DownloadedModelInferenceClient(
         return System.getProperty(DEBUG_PROMPT_LOGGING_PROPERTY)?.toBooleanStrictOrNull() == true
     }
 
-    private fun SettingsSnapshot.toFallbackDownloadedConfig(): com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig {
+    private fun SettingsSnapshot.toFallbackDownloadedConfig():
+            com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig {
         return com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig(
             topK = 40,
             topP = topP,
             temperature = temperature,
             maxTokens = contextLength,
             accelerators = "cpu",
-            strictAccelerator = false
+            strictAccelerator = false,
+            promptFamily = null
         )
     }
 
@@ -708,16 +813,19 @@ class DownloadedModelInferenceClient(
             return config.copy(strictAccelerator = false)
         }
 
-        val normalized = when (preference) {
-            AcceleratorPreference.AUTO -> config.accelerators
-            AcceleratorPreference.CPU -> "cpu"
-            AcceleratorPreference.GPU -> "gpu"
-            AcceleratorPreference.NNAPI -> "npu"
-        }
+        val normalized =
+            when (preference) {
+                AcceleratorPreference.AUTO -> config.accelerators
+                AcceleratorPreference.CPU -> "cpu"
+                AcceleratorPreference.GPU -> "gpu"
+                AcceleratorPreference.NNAPI -> "npu"
+            }
         return config.copy(accelerators = normalized, strictAccelerator = true)
     }
 
-    private fun generationAttemptConfigs(config: AllowlistDefaultConfig): List<AllowlistDefaultConfig> {
+    private fun generationAttemptConfigs(
+        config: AllowlistDefaultConfig
+    ): List<AllowlistDefaultConfig> {
         val firstAccelerator = config.acceleratorHints.firstOrNull()?.lowercase()
         val cpuConfig = config.copy(accelerators = "cpu", strictAccelerator = true)
 
@@ -728,25 +836,66 @@ class DownloadedModelInferenceClient(
         }
     }
 
-    private fun shouldRetryOnCpuFallback(
-        attemptIndex: Int,
-        attemptCount: Int
-    ): Boolean {
+    private fun shouldRetryOnCpuFallback(attemptIndex: Int, attemptCount: Int): Boolean {
         return attemptIndex + 1 < attemptCount
     }
 
     private fun unstableOutputException(
         preference: AcceleratorPreference
     ): InferenceException.BackendUnavailable {
-        val message = when (preference) {
-            AcceleratorPreference.CPU -> {
-                "Local model produced unstable repetitive output on CPU. Retry, or switch to a different model."
+        val message =
+            when (preference) {
+                AcceleratorPreference.CPU -> {
+                    "Local model produced unstable repetitive output on CPU. Retry, or switch to a different model."
+                }
+
+                else -> {
+                    "Local model produced unstable repetitive output on all available accelerators. Retry, or switch to a different model."
+                }
             }
-            else -> {
-                "Local model produced unstable repetitive output on all available accelerators. Retry, or switch to a different model."
-            }
-        }
         return InferenceException.BackendUnavailable(message)
+    }
+
+    private fun toFriendlyRuntimeError(error: Throwable): String {
+        val message = error.message?.trim().orEmpty()
+        val cause = error.cause?.message?.trim().orEmpty()
+        val combined = "$message $cause".lowercase()
+
+        if (combined.isBlank()) {
+            return "This model could not start on this device."
+        }
+
+        return when {
+            "session already exists" in combined -> {
+                "LiteRT-LM is busy cleaning up a previous chat. Wait a moment and retry."
+            }
+
+            "missing runtime option method" in combined ||
+                    "settopk" in combined ||
+                    "setmaxtokens" in combined -> {
+                "This downloaded file may be incompatible with the current runtime."
+            }
+
+            "flatbuffer" in combined ||
+                    "error building tflite model" in combined ||
+                    "invocationtargetexception" in combined -> {
+                "Installed, but NanoChat could not start this model."
+            }
+
+            "missing" in combined && "file" in combined -> {
+                "This install appears incomplete. Try re-downloading."
+            }
+
+            "outofmemory" in combined || "out of memory" in combined -> {
+                "This model needs more memory on this device."
+            }
+
+            "permission" in combined -> {
+                "NanoChat cannot access the local model file. Move or re-download the model."
+            }
+
+            else -> "This model could not start on this device."
+        }
     }
 
     private fun toFriendlyRuntimeError(raw: String?): String {
@@ -757,30 +906,28 @@ class DownloadedModelInferenceClient(
 
         val lowercase = message.lowercase()
         return when {
+            "session already exists" in lowercase -> {
+                "LiteRT-LM is busy cleaning up a previous chat. Wait a moment and retry."
+            }
             "missing runtime option method" in lowercase ||
                     "settopk" in lowercase ||
                     "setmaxtokens" in lowercase -> {
                 "This downloaded file may be incompatible with the current runtime."
             }
-
             "flatbuffer" in lowercase ||
                     "error building tflite model" in lowercase ||
                     "invocationtargetexception" in lowercase -> {
                 "Installed, but NanoChat could not start this model."
             }
-
             "missing" in lowercase && "file" in lowercase -> {
                 "This install appears incomplete. Try re-downloading."
             }
-
             "outofmemory" in lowercase || "out of memory" in lowercase -> {
                 "This model needs more memory on this device."
             }
-
             "permission" in lowercase -> {
                 "NanoChat cannot access the local model file. Move or re-download the model."
             }
-
             else -> "This model could not start on this device."
         }
     }
@@ -788,6 +935,7 @@ class DownloadedModelInferenceClient(
     private companion object {
         const val TAG = "DownloadedInference"
         const val LOCAL_NO_TOKEN_WATCHDOG_MS = 15_000L
+        const val LOCAL_RETRY_NO_TOKEN_WATCHDOG_MS = 45_000L
         const val LOCAL_VISIBLE_STALL_WATCHDOG_MS = 10_000L
         const val NO_TOKEN_WATCHDOG_MESSAGE =
             "Local generation started but produced no visible output. Retry, or reselect this model."
@@ -845,9 +993,3 @@ private class NoTokenWatchdogTimeout(message: String) : CancellationException(me
 private class VisibleOutputStalledTimeout(message: String) : CancellationException(message)
 
 private class DegenerateOutputException : RuntimeException("Degenerate local output")
-
-
-
-
-
-
