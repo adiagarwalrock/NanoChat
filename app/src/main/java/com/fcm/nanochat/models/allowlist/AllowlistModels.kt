@@ -48,7 +48,6 @@ data class AllowlistedModel(
     val llmSupportAudio: Boolean,
     val backendType: String,
     val sourceRepo: String,
-    val requiresHfToken: Boolean,
     val isExperimental: Boolean,
     val supportedUseCases: List<String>,
     val recommendedForChat: Boolean,
@@ -139,11 +138,6 @@ internal object AllowlistParser {
         val backendType = optString("backendType").ifBlank { "litert-lm" }
         val sourceRepo = optString("sourceRepo").ifBlank { modelId }
 
-        val requiresHfToken = if (has("requiresHfToken")) {
-            optBoolean("requiresHfToken", false)
-        } else {
-            modelId.startsWith("google/", ignoreCase = true)
-        }
 
         val isExperimental = optBoolean("isExperimental", false)
         val supportedUseCases = optStringList("supportedUseCases").ifEmpty { taskTypes }
@@ -195,7 +189,6 @@ internal object AllowlistParser {
             llmSupportAudio = llmSupportAudio,
             backendType = backendType,
             sourceRepo = sourceRepo,
-            requiresHfToken = requiresHfToken,
             isExperimental = isExperimental,
             supportedUseCases = supportedUseCases,
             recommendedForChat = recommendedForChat,

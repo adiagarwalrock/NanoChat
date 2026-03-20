@@ -46,7 +46,6 @@
     <string name="recommended_for_chat">Recommended for chat</string>
     <string name="other_supported_models">Other local models</string>
     <string name="view_details">View details</string>
-    <string name="add_hf_token">Add token</string>
     <string name="selected_for_chat">Selected</string>
     <string name="ready_to_use">Ready to use</string>
     <string name="download_model">Download</string>
@@ -59,7 +58,6 @@
     <string name="model_details">Model details</string>
     <string name="supports_image">Image</string>
     <string name="supports_audio">Audio</string>
-    <string name="requires_token">HF token required</string>
     <string name="not_chat_ready">Not chat-first</string>
     <string name="fits_device">Fits this device</string>
     <string name="installed">Installed</string>
@@ -71,7 +69,6 @@
     <string name="model_corrupted">Model file issue</string>
     <string name="runtime_unavailable">Runtime unavailable</string>
     <string name="not_compatible">Not compatible</string>
-    <string name="requires_hf_token_message">Connect your Hugging Face account with a read token to continue.</string>
     <string name="local_model_runtime_error">This model could not start on this device.</string>
     <string name="local_model_file_error">This install appears incomplete. Try re-downloading.</string>
     <string name="local_model_incompatible_error">This downloaded file may be incompatible with the current runtime.</string>
@@ -84,7 +81,6 @@
     <string name="filter_chat_ready">Chat ready</string>
     <string name="filter_installed">Installed</string>
     <string name="filter_not_installed">Not installed</string>
-    <string name="filter_requires_token">Requires token</string>
     <string name="filter_fits_device">Fits device</string>
     <string name="filter_needs_attention">Needs attention</string>
     <string name="allowlist_version">Allowlist v%1$s</string>
@@ -125,9 +121,6 @@
     <string name="details_task_support">Task support</string>
     <string name="details_storage_estimate">Estimated storage</string>
     <string name="details_minimum_ram">Minimum RAM</string>
-    <string name="details_token_requirement">Token requirement</string>
-    <string name="details_token_required">Requires a Hugging Face read token</string>
-    <string name="details_token_not_required">No token required</string>
     <string name="details_source">Source</string>
     <string name="details_runtime_defaults">Runtime defaults</string>
     <string name="details_runtime_defaults_value">topK=%1$d, topP=%2$.2f, temp=%3$.2f, maxTokens=%4$d</string>
@@ -179,4 +172,16 @@
     <string name="notification_model_validating">Validating download…</string>
     <string name="notification_chat_ready_title">%1$s ready</string>
     <string name="notification_chat_ready_body">Response finished.</string>
+
+    <string name="gemma_terms_title">Welcome to NanoChat</string>
+    <string name="gemma_terms_body">NanoChat downloads and runs Gemma-family models from Google on your device for private, local AI chat. By continuing, you agree to the Gemma Terms of Use.</string>
+    <string name="gemma_terms_read_link">Read Gemma Terms of Use ↗</string>
+    <string name="gemma_terms_accept">I accept the Gemma Terms of Use</string>
+    <string name="gemma_terms_continue">Continue</string>
+
+    <string name="about_title">About</string>
+    <string name="open_source_licenses">Open source licenses</string>
+    <string name="about_developer">About · Privacy policy</string>
+    <string name="about_developer_title">About the developer</string>
+    <string name="privacy_policy_title">Privacy policy</string>
 </resources>

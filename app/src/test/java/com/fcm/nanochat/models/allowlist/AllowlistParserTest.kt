@@ -48,7 +48,6 @@ class AllowlistParserTest {
         assertEquals("Qwen2.5-1.5B-Instruct.litertlm", model.modelFile)
         assertEquals("litert-lm", model.backendType)
         assertEquals("litert-community/Qwen2.5-1.5B-Instruct", model.sourceRepo)
-        assertFalse(model.requiresHfToken)
         assertTrue(model.recommendedForChat)
         assertFalse(model.supportsThinking)
         assertTrue(model.downloadUrl.contains("/resolve/abc123/"))

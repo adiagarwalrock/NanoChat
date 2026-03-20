@@ -83,7 +83,6 @@ private enum class ModelFilter(val labelRes: Int) {
     All(R.string.filter_all),
     ChatReady(R.string.filter_chat_ready),
     Installed(R.string.filter_installed),
-    RequiresToken(R.string.filter_requires_token),
     NeedsAttention(R.string.filter_needs_attention)
 }
 
@@ -100,7 +99,6 @@ private enum class ActionType {
     Retry,
     Use,
     Eject,
-    AddToken,
     Cancel,
     Delete,
     OpenDetails,
@@ -168,12 +166,10 @@ private fun hasPendingActionConverged(
                             model.installState == ModelInstallState.PAUSED ||
                             model.installState == ModelInstallState.QUEUED)
         }
-        PendingActionType.Delete -> {
+        PendingActionType.Delete ->
             model == null ||
                     model.installState == ModelInstallState.NOT_INSTALLED ||
-                    model.installState == ModelInstallState.FAILED ||
                     model.installState == ModelInstallState.BROKEN
-        }
         PendingActionType.Use -> hasPendingUseConverged(model)
         PendingActionType.Cancel -> {
             model == null ||
@@ -198,7 +194,7 @@ internal fun ModelsTab(
     onDeleteModel: (String) -> Unit,
     onMoveStorage: (String, ModelStorageLocation) -> Unit,
     onImportLocalModel: () -> Unit,
-    onOpenHuggingFaceSettings: () -> Unit = {}
+    onOpenSettings: () -> Unit
 ) {
     var detailsModelId by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -340,7 +336,6 @@ internal fun ModelsTab(
                             model = model,
                             pendingAction = pendingActions[model.modelId],
                             onOpenDetails = { detailsModelId = model.modelId },
-                            onOpenHuggingFaceSettings = onOpenHuggingFaceSettings,
                             onDownload = {
                                 pendingActions[model.modelId] =
                                     PendingModelAction(PendingActionType.Download)
@@ -395,7 +390,6 @@ internal fun ModelsTab(
                                         model = model,
                                         pendingAction = pendingActions[model.modelId],
                                         onOpenDetails = { detailsModelId = model.modelId },
-                                        onOpenHuggingFaceSettings = onOpenHuggingFaceSettings,
                                         onDownload = {
                                             pendingActions[model.modelId] =
                                                 PendingModelAction(
@@ -465,10 +459,6 @@ internal fun ModelsTab(
             model = detailsModel,
             pendingAction = pendingActions[detailsModel.modelId],
             onDismiss = { detailsModelId = null },
-            onOpenHuggingFaceSettings = {
-                detailsModelId = null
-                onOpenHuggingFaceSettings()
-            },
             onDownload = {
                 pendingActions[detailsModel.modelId] =
                     PendingModelAction(PendingActionType.Download)
@@ -905,7 +895,6 @@ private fun SimplifiedModelCard(
     model: ModelCardUi,
     pendingAction: PendingModelAction?,
     onOpenDetails: () -> Unit,
-    onOpenHuggingFaceSettings: () -> Unit,
     onDownload: () -> Unit,
     onCancelDownload: () -> Unit,
     onRetryDownload: () -> Unit,
@@ -1001,12 +990,6 @@ private fun SimplifiedModelCard(
                         tone = ModelBadgeTone.Neutral
                     )
                 }
-                if (model.requiresHfToken) {
-                    ModelStatusBadge(
-                        text = stringResource(id = R.string.requires_token),
-                        tone = ModelBadgeTone.Warning
-                    )
-                }
                 if (!model.recommendedForChat) {
                     ModelStatusBadge(
                         text = stringResource(id = R.string.not_chat_ready),
@@ -1015,12 +998,7 @@ private fun SimplifiedModelCard(
                 }
             }
 
-            val statusModifier =
-                if (model.healthState == LocalModelHealthState.RequiresToken) {
-                    Modifier.clickable(onClick = onOpenHuggingFaceSettings)
-                } else {
-                    Modifier
-                }
+            val statusModifier = Modifier
             StatusRow(
                 text = status.label,
                 supporting = status.supporting,
@@ -1042,7 +1020,6 @@ private fun SimplifiedModelCard(
                             ActionType.Resume, ActionType.Retry -> onRetryDownload()
                             ActionType.Use -> onUseModel()
                             ActionType.Eject -> onEjectModel()
-                            ActionType.AddToken -> onOpenHuggingFaceSettings()
                             ActionType.Cancel -> onCancelDownload()
                             ActionType.Delete -> onDeleteModel()
                             ActionType.OpenDetails -> onOpenDetails()
@@ -1090,7 +1067,6 @@ private fun RedesignedDetailsSheet(
     model: ModelCardUi,
     pendingAction: PendingModelAction?,
     onDismiss: () -> Unit,
-    onOpenHuggingFaceSettings: () -> Unit,
     onDownload: () -> Unit,
     onCancelDownload: () -> Unit,
     onRetryDownload: () -> Unit,
@@ -1141,12 +1117,7 @@ private fun RedesignedDetailsSheet(
             }
 
             item {
-                val statusModifier =
-                    if (model.healthState == LocalModelHealthState.RequiresToken) {
-                        Modifier.clickable(onClick = onOpenHuggingFaceSettings)
-                    } else {
-                        Modifier
-                    }
+                val statusModifier = Modifier
                 StatusRow(
                     text = status.label,
                     supporting = status.supporting,
@@ -1166,7 +1137,6 @@ private fun RedesignedDetailsSheet(
                                 ActionType.Resume, ActionType.Retry -> onRetryDownload()
                                 ActionType.Use -> onUseModel()
                                 ActionType.Eject -> onEjectModel()
-                                ActionType.AddToken -> onOpenHuggingFaceSettings()
                                 ActionType.Cancel -> onCancelDownload()
                                 ActionType.Delete -> onDeleteModel()
                                 ActionType.OpenDetails, ActionType.None -> Unit
@@ -1261,15 +1231,6 @@ private fun RedesignedDetailsSheet(
                                 id = R.string.minimum_ram_value,
                                 model.minDeviceMemoryInGb
                             )
-                    )
-                    DetailRow(
-                        label = stringResource(id = R.string.details_token_requirement),
-                        value =
-                            if (model.requiresHfToken) {
-                                stringResource(id = R.string.details_token_required)
-                            } else {
-                                stringResource(id = R.string.details_token_not_required)
-                            }
                     )
                 }
             }
@@ -1528,9 +1489,9 @@ private fun ModelCardUi.matchesFilter(filter: ModelFilter): Boolean {
         ModelFilter.All -> true
         ModelFilter.ChatReady -> recommendedForChat
         ModelFilter.Installed -> installState == ModelInstallState.INSTALLED
-        ModelFilter.RequiresToken -> healthState == LocalModelHealthState.RequiresToken
         ModelFilter.NeedsAttention -> {
-            healthState.needsAttention ||
+            healthState is LocalModelHealthState.NotCompatible ||
+                    healthState.needsAttention ||
                     memoryState == com.fcm.nanochat.model.LocalModelMemoryState.FailedToLoad ||
                     memoryState == com.fcm.nanochat.model.LocalModelMemoryState.NeedsReload
         }
@@ -1559,7 +1520,6 @@ private fun ModelCardUi.compatibilityRank(): Int {
     return when (compatibility) {
         LocalModelCompatibilityState.Ready -> 0
         LocalModelCompatibilityState.Downloadable -> 1
-        LocalModelCompatibilityState.TokenRequired -> 2
         is LocalModelCompatibilityState.DownloadedButNotActivatable -> 3
         is LocalModelCompatibilityState.RuntimeUnavailable -> 4
         LocalModelCompatibilityState.UnsupportedForChat -> 5
@@ -1742,12 +1702,6 @@ private fun ModelCardUi.fallbackStatusLine(progressValue: Float?): StatusLine {
                 supporting = toFriendlyError(state.message),
                 tone = ModelBadgeTone.Warning
             )
-        LocalModelHealthState.RequiresToken ->
-            StatusLine(
-                label = "Token required",
-                supporting = "Add a Hugging Face read token to continue setup.",
-                tone = ModelBadgeTone.Warning
-            )
         LocalModelHealthState.RequiresLicenseApproval ->
             StatusLine(
                 label = "Access approval required",
@@ -1884,14 +1838,6 @@ private fun ModelCardUi.actionPlan(pendingAction: PendingModelAction? = null): A
                 primaryAction = ActionType.OpenDetails,
                 primaryEnabled = true
             )
-        LocalModelHealthState.RequiresToken ->
-            ActionPlan(
-                primaryLabel = "Add token",
-                primaryAction = ActionType.AddToken,
-                primaryEnabled = true,
-                secondaryLabel = "View details",
-                secondaryAction = ActionType.OpenDetails
-            )
         LocalModelHealthState.RequiresLicenseApproval ->
             ActionPlan(
                 primaryLabel = "View details",
@@ -1937,7 +1883,6 @@ private fun ModelCardUi.healthStateLabel(): String {
         LocalModelHealthState.InstalledNeedsValidation -> "Needs validation"
         LocalModelHealthState.InstalledReady -> "Installed and ready"
         is LocalModelHealthState.InstalledStartupFailed -> "Startup failed"
-        LocalModelHealthState.RequiresToken -> "Token required"
         LocalModelHealthState.RequiresLicenseApproval -> "License approval required"
         is LocalModelHealthState.NotCompatible -> "Not compatible"
         LocalModelHealthState.UnsupportedForChat -> "Unsupported for chat"
@@ -1993,7 +1938,6 @@ private fun ModelCardUi.compatibilitySummary(): String {
         is LocalModelCompatibilityState.NeedsMoreRam -> "Needs more RAM"
         is LocalModelCompatibilityState.UnsupportedDevice -> toFriendlyError(value.reason)
         LocalModelCompatibilityState.UnsupportedForChat -> "Not optimized for chat"
-        LocalModelCompatibilityState.TokenRequired -> "Requires Hugging Face token"
         is LocalModelCompatibilityState.DownloadedButNotActivatable -> toFriendlyError(value.reason)
         LocalModelCompatibilityState.CorruptedModel -> "Model file issue"
         is LocalModelCompatibilityState.RuntimeUnavailable -> toFriendlyError(value.reason)
@@ -2165,7 +2109,6 @@ private fun ModelCardUi.startupValidationResult(): String {
         LocalModelHealthState.InstalledReady -> "Runnable"
         LocalModelHealthState.InstalledNeedsValidation -> "Validation pending"
         is LocalModelHealthState.InstalledStartupFailed -> "Startup failed"
-        LocalModelHealthState.RequiresToken -> "Blocked: token required"
         LocalModelHealthState.RequiresLicenseApproval -> "Blocked: access approval required"
         LocalModelHealthState.NotInstalled,
         is LocalModelHealthState.Downloading,
@@ -2216,7 +2159,6 @@ private fun ModelsTabReadyPreview() {
             bestForTaskTypes = listOf("Chat"),
             llmSupportImage = false,
             llmSupportAudio = false,
-            requiresHfToken = false,
             recommendedForChat = true,
             isExperimental = false,
             installState = ModelInstallState.INSTALLED,
@@ -2262,7 +2204,8 @@ private fun ModelsTabReadyPreview() {
             onEjectModel = { _ -> },
             onMoveStorage = { _, _ -> },
             onRefresh = {},
-            onImportLocalModel = {}
+            onImportLocalModel = {},
+            onOpenSettings = {}
         )
     }
 }
@@ -2281,7 +2224,8 @@ private fun ModelsTabLoadingPreview() {
             onEjectModel = { _ -> },
             onMoveStorage = { _, _ -> },
             onRefresh = {},
-            onImportLocalModel = {}
+            onImportLocalModel = {},
+            onOpenSettings = {}
         )
     }
 }
@@ -2302,7 +2246,6 @@ private fun ModelsTabReadyInconsistentPreview() {
             bestForTaskTypes = listOf("Chat"),
             llmSupportImage = false,
             llmSupportAudio = false,
-            requiresHfToken = false,
             recommendedForChat = true,
             isExperimental = false,
             installState = ModelInstallState.INSTALLED,
@@ -2337,15 +2280,8 @@ private fun ModelsTabReadyInconsistentPreview() {
                                 isActive = false,
                                 memoryState =
                                     LocalModelMemoryState.NotSelected
-                            ),
-                            mockModel.copy(
-                                modelId = "qwen",
-                                displayName = "Qwen",
-                                healthState =
-                                    LocalModelHealthState.RequiresToken,
-                                requiresHfToken = true
                             )
-                        )
+                    )
                 ),
             onDownload = { _ -> },
             onCancelDownload = { _ -> },
@@ -2355,7 +2291,8 @@ private fun ModelsTabReadyInconsistentPreview() {
             onEjectModel = { _ -> },
             onMoveStorage = { _, _ -> },
             onRefresh = {},
-            onImportLocalModel = {}
+            onImportLocalModel = {},
+            onOpenSettings = {}
         )
     }
 }
@@ -2374,7 +2311,8 @@ private fun ModelsTabEmptyPreview() {
             onEjectModel = { _ -> },
             onMoveStorage = { _, _ -> },
             onRefresh = {},
-            onImportLocalModel = {}
+            onImportLocalModel = {},
+            onOpenSettings = {}
         )
     }
 }

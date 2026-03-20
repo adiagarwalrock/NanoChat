@@ -3,6 +3,7 @@ package com.fcm.nanochat.data
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -22,12 +23,10 @@ data class SettingsSnapshot(
     val baseUrl: String = "",
     val modelName: String = "",
     val apiKey: String = "",
-    val huggingFaceToken: String = "",
     val temperature: Double = 0.7,
     val topP: Double = 0.9,
     val contextLength: Int = 4096,
     val geminiNanoModelSizeBytes: Long = 0,
-    val huggingFaceAccountJson: String = "",
     val thinkingEffort: ThinkingEffort = ThinkingEffort.MEDIUM,
     val acceleratorPreference: AcceleratorPreference = AcceleratorPreference.AUTO
 )
@@ -67,12 +66,10 @@ class AppPreferences(context: Context) {
                 baseUrl = preferences[Keys.baseUrl].orEmpty(),
                 modelName = preferences[Keys.modelName].orEmpty(),
                 apiKey = readSecret(SecretKeys.apiKey),
-                huggingFaceToken = readSecret(SecretKeys.huggingFaceToken),
                 temperature = preferences[Keys.temperature] ?: DEFAULT_TEMPERATURE,
                 topP = preferences[Keys.topP] ?: DEFAULT_TOP_P,
                 contextLength = preferences[Keys.contextLength] ?: DEFAULT_CONTEXT_LENGTH,
                 geminiNanoModelSizeBytes = preferences[Keys.geminiNanoModelSizeBytes] ?: 0,
-                huggingFaceAccountJson = preferences[Keys.huggingFaceAccountJson] ?: "",
                 thinkingEffort = parseThinkingEffort(preferences[Keys.thinkingEffort]),
                 acceleratorPreference =
                     parseAccelerator(preferences[Keys.acceleratorPreference])
@@ -96,6 +93,15 @@ class AppPreferences(context: Context) {
                 .toSet()
         }
 
+    val gemmaTermsAccepted: Flow<Boolean> =
+        appContext.dataStore.data.map { preferences ->
+            preferences[Keys.gemmaTermsAccepted] ?: false
+        }
+
+    suspend fun updateGemmaTermsAccepted(accepted: Boolean) {
+        appContext.dataStore.edit { it[Keys.gemmaTermsAccepted] = accepted }
+    }
+
     suspend fun updateInferenceMode(mode: InferenceMode) {
         appContext.dataStore.edit { it[Keys.inferenceMode] = mode.name }
     }
@@ -107,12 +113,11 @@ class AppPreferences(context: Context) {
         }
     }
 
-    fun updateSecrets(apiKey: String, huggingFaceToken: String) {
+    fun updateSecrets(apiKey: String) {
         runCatching {
             secretStore
                 ?.edit()
                 ?.putString(SecretKeys.apiKey, apiKey.trim())
-                ?.putString(SecretKeys.huggingFaceToken, huggingFaceToken.trim())
                 ?.apply()
         }
     }
@@ -139,10 +144,6 @@ class AppPreferences(context: Context) {
             preferences[Keys.topP] = topP.coerceIn(0.0, 1.0)
             preferences[Keys.contextLength] = contextLength.coerceIn(512, 32768)
         }
-    }
-
-    suspend fun updateHuggingFaceAccount(json: String) {
-        appContext.dataStore.edit { it[Keys.huggingFaceAccountJson] = json }
     }
 
     suspend fun updateAllowlistCache(
@@ -212,8 +213,6 @@ class AppPreferences(context: Context) {
         val contextLength: Preferences.Key<Int> = intPreferencesKey("context_length")
         val geminiNanoModelSizeBytes: Preferences.Key<Long> =
             longPreferencesKey("gemini_nano_model_size_bytes")
-        val huggingFaceAccountJson: Preferences.Key<String> =
-            stringPreferencesKey("hugging_face_account_json")
         val thinkingEffort: Preferences.Key<String> = stringPreferencesKey("thinking_effort")
         val acceleratorPreference: Preferences.Key<String> =
             stringPreferencesKey("accelerator_preference")
@@ -221,11 +220,12 @@ class AppPreferences(context: Context) {
         val allowlistJson: Preferences.Key<String> = stringPreferencesKey("allowlist_json")
         val allowlistLastRefreshEpochMs: Preferences.Key<Long> =
             longPreferencesKey("allowlist_last_refresh_epoch_ms")
+        val gemmaTermsAccepted: Preferences.Key<Boolean> =
+            booleanPreferencesKey("gemma_terms_accepted")
     }
 
     private object SecretKeys {
         const val apiKey: String = "api_key"
-        const val huggingFaceToken: String = "hugging_face_token"
     }
 
     companion object {

@@ -85,7 +85,6 @@ class ModelManagerViewModel @Inject constructor(
                     defaultTemperature = model?.defaultConfig?.temperature ?: 0.7,
                     defaultMaxTokens = model?.defaultConfig?.maxTokens ?: 1024,
                     acceleratorHints = model?.acceleratorHints.orEmpty(),
-                    requiresHfToken = model?.requiresHfToken ?: false,
                     recommendedForChat = model?.recommendedForChat ?: true,
                     isExperimental = model?.isExperimental ?: false,
                     installState = record.installState,
@@ -265,10 +264,6 @@ class ModelManagerViewModel @Inject constructor(
 
             ModelInstallState.FAILED -> {
                 when {
-                    compatibility is LocalModelCompatibilityState.TokenRequired -> {
-                        LocalModelHealthState.RequiresToken
-                    }
-
                     indicatesLicenseApproval(issueMessage) -> {
                         LocalModelHealthState.RequiresLicenseApproval
                     }
@@ -324,7 +319,6 @@ class ModelManagerViewModel @Inject constructor(
         compatibility: LocalModelCompatibilityState
     ): LocalModelHealthState? {
         return when (compatibility) {
-            LocalModelCompatibilityState.TokenRequired -> LocalModelHealthState.RequiresToken
             LocalModelCompatibilityState.UnsupportedForChat -> LocalModelHealthState.UnsupportedForChat
             is LocalModelCompatibilityState.NeedsMoreRam -> {
                 LocalModelHealthState.NotCompatible("Requires ${compatibility.requiredGb} GB RAM.")
@@ -368,7 +362,6 @@ class ModelManagerViewModel @Inject constructor(
 
             LocalModelCompatibilityState.Ready,
             LocalModelCompatibilityState.Downloadable,
-            LocalModelCompatibilityState.TokenRequired,
             LocalModelCompatibilityState.UnsupportedForChat,
             is LocalModelCompatibilityState.NeedsMoreRam,
             is LocalModelCompatibilityState.NeedsMoreStorage,
@@ -537,7 +530,6 @@ internal fun ModelCardUi.primaryActionLabel(): String {
         LocalModelHealthState.InstalledNeedsValidation -> "Continue setup"
         LocalModelHealthState.InstalledReady -> "Use model"
         is LocalModelHealthState.InstalledStartupFailed -> "Troubleshoot"
-        LocalModelHealthState.RequiresToken -> "Add token"
         LocalModelHealthState.RequiresLicenseApproval -> "View details"
         is LocalModelHealthState.NotCompatible -> "View details"
         LocalModelHealthState.UnsupportedForChat -> "View details"

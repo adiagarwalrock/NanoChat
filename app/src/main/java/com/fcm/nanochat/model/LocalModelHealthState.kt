@@ -16,7 +16,6 @@ sealed interface LocalModelHealthState {
     data object InstalledNeedsValidation : LocalModelHealthState
     data object InstalledReady : LocalModelHealthState
     data class InstalledStartupFailed(val message: String) : LocalModelHealthState
-    data object RequiresToken : LocalModelHealthState
     data object RequiresLicenseApproval : LocalModelHealthState
     data class NotCompatible(val message: String) : LocalModelHealthState
     data object UnsupportedForChat : LocalModelHealthState

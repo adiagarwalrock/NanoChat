@@ -112,7 +112,6 @@ class ActiveModelResolverTest {
             llmSupportAudio = false,
             backendType = "litert-lm",
             sourceRepo = "org/model-a",
-            requiresHfToken = false,
             isExperimental = false,
             supportedUseCases = listOf("prompt_lab"),
             recommendedForChat = recommendedForChat,

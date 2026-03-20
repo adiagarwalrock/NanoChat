@@ -54,8 +54,9 @@ import com.fcm.nanochat.ui.SettingsSection.AiConfiguration
 import com.fcm.nanochat.ui.SettingsSection.Connection
 import com.fcm.nanochat.ui.SettingsSection.DataHistory
 import com.fcm.nanochat.ui.SettingsSection.Home
-import com.fcm.nanochat.ui.SettingsSection.HuggingFaceConnection
 import com.fcm.nanochat.ui.SettingsSection.ModelControls
+import com.fcm.nanochat.ui.SettingsSection.AboutDeveloper
+import com.fcm.nanochat.ui.SettingsSection.OpenSourceLicenses
 import com.fcm.nanochat.ui.theme.NanoChatTheme
 import kotlinx.coroutines.launch
 
@@ -103,8 +104,7 @@ fun NanoChatApp(
     onBaseUrlChange: (String) -> Unit = {},
     onModelNameChange: (String) -> Unit = {},
     onApiKeyChange: (String) -> Unit = {},
-    onHuggingFaceTokenChange: (String) -> Unit = {},
-    onValidateHuggingFaceToken: () -> Unit = {},
+    onRemoteConfigCheck: () -> Unit = {},
     onTemperatureChange: (Double) -> Unit = {},
     onTopPChange: (Double) -> Unit = {},
     onContextLengthChange: (Int) -> Unit = {},
@@ -227,8 +227,8 @@ fun NanoChatApp(
                                 settingsStartSection = Home
                             }
                         },
-                        onOpenHuggingFaceSettings = {
-                            settingsStartSection = HuggingFaceConnection
+                        onNavigateSettings = {
+                            settingsStartSection = Connection
                             destination = AppDestination.Settings
                         },
                         onRefreshAllowlist = onRefreshAllowlist,
@@ -258,8 +258,7 @@ fun NanoChatApp(
                         onBaseUrlChange = onBaseUrlChange,
                         onModelNameChange = onModelNameChange,
                         onApiKeyChange = onApiKeyChange,
-                        onHuggingFaceTokenChange = onHuggingFaceTokenChange,
-                        onValidateHuggingFaceToken = onValidateHuggingFaceToken,
+                        onRemoteConfigCheck = onRemoteConfigCheck,
                         onTemperatureChange = onTemperatureChange,
                         onTopPChange = onTopPChange,
                         onContextLengthChange = onContextLengthChange,
@@ -322,7 +321,7 @@ private fun ModelsPage(
     state: ModelGalleryScreenState,
     modifier: Modifier = Modifier,
     onBack: () -> Unit,
-    onOpenHuggingFaceSettings: () -> Unit,
+    onNavigateSettings: () -> Unit,
     onRefreshAllowlist: () -> Unit,
     onDownloadModel: (String) -> Unit,
     onCancelModelDownload: (String) -> Unit,
@@ -368,7 +367,7 @@ private fun ModelsPage(
             onDeleteModel = onDeleteModel,
             onMoveStorage = onMoveModelStorage,
             onImportLocalModel = onImportLocalModel,
-            onOpenHuggingFaceSettings = onOpenHuggingFaceSettings
+            onOpenSettings = onNavigateSettings
         )
     }
 }
@@ -385,8 +384,7 @@ private fun SettingsPage(
     onBaseUrlChange: (String) -> Unit,
     onModelNameChange: (String) -> Unit,
     onApiKeyChange: (String) -> Unit,
-    onHuggingFaceTokenChange: (String) -> Unit,
-    onValidateHuggingFaceToken: () -> Unit,
+    onRemoteConfigCheck: () -> Unit,
     onTemperatureChange: (Double) -> Unit,
     onTopPChange: (Double) -> Unit,
     onContextLengthChange: (Int) -> Unit,
@@ -403,8 +401,9 @@ private fun SettingsPage(
             AiConfiguration -> "Remote AI configuration"
             Connection -> "Connection"
             ModelControls -> "Model behavior"
-            HuggingFaceConnection -> "Hugging Face"
             DataHistory -> "Usage and history"
+            AboutDeveloper -> "About the developer"
+            OpenSourceLicenses -> "Open source licenses"
         }
 
     val navigateBack: () -> Unit = {
@@ -413,7 +412,7 @@ private fun SettingsPage(
                 onBack()
             }
 
-            AiConfiguration, HuggingFaceConnection, DataHistory -> {
+            AiConfiguration, DataHistory, AboutDeveloper, OpenSourceLicenses -> {
                 section = Home
             }
 
@@ -483,15 +482,6 @@ private fun SettingsPage(
                     onSaveSettings = onSaveSettings
                 )
 
-            HuggingFaceConnection ->
-                HuggingFaceConnectionSettings(
-                    state = state,
-                    modifier = contentModifier,
-                    onHuggingFaceTokenChange = onHuggingFaceTokenChange,
-                    onValidateHuggingFaceToken = onValidateHuggingFaceToken,
-                    onSaveSettings = onSaveSettings
-                )
-
             DataHistory ->
                 DataHistorySettings(
                     state = state,
@@ -499,6 +489,12 @@ private fun SettingsPage(
                     onRefreshStats = onRefreshStats,
                     onClearHistory = onClearHistory
                 )
+
+            AboutDeveloper ->
+                AboutDeveloperSettings(modifier = contentModifier)
+
+            OpenSourceLicenses ->
+                OpenSourceLicensesSettings(modifier = contentModifier)
         }
     }
 }

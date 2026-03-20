@@ -50,7 +50,6 @@ data class SettingsScreenState(
         val baseUrl: String = "",
         val modelName: String = "",
         val apiKey: String = "",
-        val huggingFaceToken: String = "",
         val temperature: Double = com.fcm.nanochat.data.AppPreferences.DEFAULT_TEMPERATURE,
         val topP: Double = com.fcm.nanochat.data.AppPreferences.DEFAULT_TOP_P,
         val contextLength: Int = com.fcm.nanochat.data.AppPreferences.DEFAULT_CONTEXT_LENGTH,
@@ -61,8 +60,7 @@ data class SettingsScreenState(
         val stats: UsageStats = UsageStats(),
         val saveNotice: String? = null,
         val clearNotice: String? = null,
-        val geminiStatus: GeminiNanoStatusUi = GeminiNanoStatusUi(),
-        val huggingFaceAccount: HuggingFaceAccountUi = HuggingFaceAccountUi()
+        val geminiStatus: GeminiNanoStatusUi = GeminiNanoStatusUi()
 )
 
 data class UsageStats(
@@ -79,21 +77,6 @@ data class GeminiNanoStatusUi(
         val bytesDownloaded: Long? = null,
         val bytesToDownload: Long? = null,
         val lastKnownModelSizeBytes: Long = 0,
-        val message: String? = null
-)
-
-data class HuggingFaceAccountUi(
-        val isValidating: Boolean = false,
-        val isValid: Boolean = false,
-        val username: String? = null,
-        val fullName: String? = null,
-        val email: String? = null,
-        val emailVerified: Boolean = false,
-        val avatarUrl: String? = null,
-        val profileUrl: String? = null,
-        val isPro: Boolean = false,
-        val tokenName: String? = null,
-        val tokenRole: String? = null,
         val message: String? = null
 )
 
@@ -154,7 +137,6 @@ data class ModelCardUi(
         val defaultTemperature: Double = 0.7,
         val defaultMaxTokens: Int = 1024,
         val acceleratorHints: List<String> = emptyList(),
-        val requiresHfToken: Boolean,
         val recommendedForChat: Boolean,
         val isExperimental: Boolean,
         val installState: ModelInstallState,

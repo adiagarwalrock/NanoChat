@@ -72,9 +72,6 @@ class DownloadedModelInferenceClient(
             LocalModelCompatibilityState.Downloadable -> {
                 BackendAvailability.Unavailable("Download this local model before using it.")
             }
-            LocalModelCompatibilityState.TokenRequired -> {
-                BackendAvailability.Unavailable("Hugging Face token is required for this model.")
-            }
             is LocalModelCompatibilityState.NeedsMoreRam -> {
                 BackendAvailability.Unavailable(
                     "This model needs ${compatibility.requiredGb} GB RAM."

@@ -15,19 +15,26 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fcm.nanochat.notifications.NotificationCoordinator
+import com.fcm.nanochat.ui.GemmaTermsScreen
 import com.fcm.nanochat.ui.NanoChatApp
 import com.fcm.nanochat.ui.theme.NanoChatTheme
 import com.fcm.nanochat.viewmodel.ChatViewModel
 import com.fcm.nanochat.viewmodel.ModelManagerViewModel
 import com.fcm.nanochat.viewmodel.SettingsViewModel
+import com.fcm.nanochat.data.AppPreferences
 import dagger.hilt.android.AndroidEntryPoint
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @Inject
     lateinit var notificationCoordinator: NotificationCoordinator
+
+    @Inject
+    lateinit var appPreferences: AppPreferences
 
     private val sessionNavigation = MutableStateFlow<Long?>(null)
     private val modelsNavigation = MutableStateFlow(false)
@@ -52,11 +59,21 @@ class MainActivity : ComponentActivity() {
                 val modelState by modelManagerViewModel.uiState.collectAsStateWithLifecycle()
                 val targetSessionId by sessionNavigation.collectAsStateWithLifecycle()
                 val navigateToModels by modelsNavigation.collectAsStateWithLifecycle()
+                val gemmaTermsAccepted by appPreferences.gemmaTermsAccepted.collectAsStateWithLifecycle(initialValue = false)
 
-                NanoChatApp(
-                    chatState = chatState,
-                    modelState = modelState,
-                    settingsState = settingsState,
+                if (!gemmaTermsAccepted) {
+                    GemmaTermsScreen(
+                        onAccepted = {
+                            lifecycleScope.launch {
+                                appPreferences.updateGemmaTermsAccepted(true)
+                            }
+                        }
+                    )
+                } else {
+                    NanoChatApp(
+                        chatState = chatState,
+                        modelState = modelState,
+                        settingsState = settingsState,
                     navigateToChatSessionId = targetSessionId,
                     navigateToModels = navigateToModels,
                     onConsumedNavigation = { sessionNavigation.value = null },
@@ -86,8 +103,6 @@ class MainActivity : ComponentActivity() {
                     onBaseUrlChange = settingsViewModel::updateBaseUrl,
                     onModelNameChange = settingsViewModel::updateModelName,
                     onApiKeyChange = settingsViewModel::updateApiKey,
-                    onHuggingFaceTokenChange = settingsViewModel::updateHuggingFaceToken,
-                    onValidateHuggingFaceToken = settingsViewModel::validateHuggingFaceToken,
                     onTemperatureChange = settingsViewModel::updateTemperature,
                     onTopPChange = settingsViewModel::updateTopP,
                     onContextLengthChange = settingsViewModel::updateContextLength,
@@ -99,6 +114,7 @@ class MainActivity : ComponentActivity() {
                     onRefreshGeminiStatus = settingsViewModel::refreshGeminiStatus,
                     onDownloadGeminiNano = settingsViewModel::downloadGeminiNano
                 )
+                }
             }
         }
     }

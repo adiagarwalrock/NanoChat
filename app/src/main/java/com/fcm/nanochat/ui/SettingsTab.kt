@@ -1,5 +1,7 @@
 package com.fcm.nanochat.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.tween
@@ -42,7 +44,9 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -71,6 +75,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
@@ -84,7 +89,6 @@ import coil.compose.AsyncImage
 import com.fcm.nanochat.R
 import com.fcm.nanochat.inference.RemoteConfigValidator
 import com.fcm.nanochat.model.GeminiNanoStatusUi
-import com.fcm.nanochat.model.HuggingFaceAccountUi
 import com.fcm.nanochat.model.ModelGalleryScreenState
 import com.fcm.nanochat.model.SettingsScreenState
 import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
@@ -102,8 +106,9 @@ internal enum class SettingsSection {
     AiConfiguration,
     ModelControls,
     Connection,
-    HuggingFaceConnection,
-    DataHistory
+    DataHistory,
+    AboutDeveloper,
+    OpenSourceLicenses
 }
 
 private enum class BehaviorPreset(
@@ -230,24 +235,6 @@ internal fun SettingsHome(
         }
 
         item {
-            SettingsGroup(title = "Integrations") {
-                SettingsNavigationRow(
-                    icon = {
-                        Icon(
-                            Icons.Default.VpnKey,
-                            contentDescription = null
-                        )
-                    },
-                    title = "Hugging Face",
-                    subtitle = huggingFaceSubtitle(state),
-                    onClick = {
-                        onNavigate(SettingsSection.HuggingFaceConnection)
-                    }
-                )
-            }
-        }
-
-        item {
             SettingsGroup(title = "Data") {
                 SettingsNavigationRow(
                     icon = {
@@ -260,6 +247,33 @@ internal fun SettingsHome(
                     subtitle =
                         "Sessions ${state.stats.sessionCount} · Sent ${state.stats.messagesSent} · Received ${state.stats.messagesReceived}",
                     onClick = { onNavigate(SettingsSection.DataHistory) }
+                )
+            }
+        }
+
+        item {
+            SettingsGroup(title = "About") {
+                SettingsNavigationRow(
+                    icon = {
+                        Icon(
+                            Icons.Outlined.Code,
+                            contentDescription = null
+                        )
+                    },
+                    title = stringResource(R.string.open_source_licenses),
+                    subtitle = "Libraries and tools powering NanoChat",
+                    onClick = { onNavigate(SettingsSection.OpenSourceLicenses) }
+                )
+                SettingsNavigationRow(
+                    icon = {
+                        Icon(
+                            Icons.Outlined.Info,
+                            contentDescription = null
+                        )
+                    },
+                    title = stringResource(R.string.about_developer),
+                    subtitle = "Contact details and privacy information",
+                    onClick = { onNavigate(SettingsSection.AboutDeveloper) }
                 )
             }
         }
@@ -771,220 +785,6 @@ internal fun ModelControlsSettings(
 }
 
 @Composable
-internal fun HuggingFaceConnectionSettings(
-    state: SettingsScreenState,
-    modifier: Modifier = Modifier,
-    onHuggingFaceTokenChange: (String) -> Unit,
-    onValidateHuggingFaceToken: () -> Unit,
-    onSaveSettings: () -> Unit
-) {
-    var manageTokenExpanded by rememberSaveable {
-        mutableStateOf(state.huggingFaceToken.isBlank())
-    }
-    var tokenVisible by rememberSaveable { mutableStateOf(false) }
-    val haptics = LocalHapticFeedback.current
-    var lastTokenValid by rememberSaveable { mutableStateOf(state.huggingFaceAccount.isValid) }
-
-    LaunchedEffect(state.huggingFaceAccount.isValid) {
-        if (!lastTokenValid && state.huggingFaceAccount.isValid) {
-            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-        }
-        lastTokenValid = state.huggingFaceAccount.isValid
-    }
-
-    LazyColumn(
-        modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
-        contentPadding = PaddingValues(bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(SectionSpacing)
-    ) {
-        item {
-            SettingsPanel(
-                title = "Account",
-                subtitle = "Connected integration status"
-            ) {
-                when {
-                    state.huggingFaceAccount.isValidating -> {
-                        Row(
-                            horizontalArrangement =
-                                Arrangement.spacedBy(10.dp),
-                            verticalAlignment =
-                                Alignment.CenterVertically
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Text(
-                                text =
-                                    "Refreshing account details...",
-                                style =
-                                    MaterialTheme.typography
-                                        .bodyMedium
-                            )
-                        }
-                    }
-
-                    state.huggingFaceAccount.isValid -> {
-                        AccountDetailsCard(
-                            account = state.huggingFaceAccount,
-                            onRefresh = onValidateHuggingFaceToken
-                        )
-                    }
-
-                    else -> {
-                        Column(
-                            verticalArrangement =
-                                Arrangement.spacedBy(10.dp)
-                        ) {
-                            SummaryStatusRow(
-                                icon = {
-                                    Icon(
-                                        Icons.Default
-                                            .VpnKey,
-                                        contentDescription =
-                                            null
-                                    )
-                                },
-                                label = "Connection",
-                                value = "Not connected",
-                                badge =
-                                    BadgeData(
-                                        "Disconnected",
-                                        BadgeTone.Warning
-                                    )
-                            )
-                            Text(
-                                text =
-                                    state.huggingFaceAccount
-                                        .message
-                                        ?: "Validate your token to fetch account details.",
-                                style =
-                                    MaterialTheme.typography
-                                        .bodySmall.copy(
-                                            fontSize = 13.sp
-                                        ),
-                                color =
-                                    MaterialTheme.colorScheme
-                                        .onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            ExpandablePanel(
-                title = "Manage token",
-                subtitle = "Access token and validation actions",
-                expanded = manageTokenExpanded,
-                onToggle = { manageTokenExpanded = !manageTokenExpanded }
-            ) {
-                OutlinedTextField(
-                    value = state.huggingFaceToken,
-                    onValueChange = onHuggingFaceTokenChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = InputShape,
-                    singleLine = true,
-                    label = { Text("Access token") },
-                    visualTransformation =
-                        if (tokenVisible) {
-                            VisualTransformation.None
-                        } else {
-                            PasswordVisualTransformation()
-                        },
-                    trailingIcon = {
-                        IconButton(
-                            onClick = { tokenVisible = !tokenVisible }
-                        ) {
-                            Icon(
-                                imageVector =
-                                    if (tokenVisible) {
-                                        Icons.Default
-                                            .VisibilityOff
-                                    } else {
-                                        Icons.Default
-                                            .Visibility
-                                    },
-                                contentDescription =
-                                    if (tokenVisible) {
-                                        "Hide token"
-                                    } else {
-                                        "Show token"
-                                    }
-                            )
-                        }
-                    },
-                    supportingText = {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                "Use a token with read access for model downloads."
-                            )
-                            val uriHandler = LocalUriHandler.current
-                            Text(
-                                text = "Get your token from here.",
-                                modifier = Modifier.clickable {
-                                    uriHandler.openUri("https://huggingface.co/settings/tokens")
-                                },
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            )
-                        }
-                    }
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    TextButton(
-                        enabled =
-                            state.huggingFaceToken.isNotBlank() &&
-                                    !state.huggingFaceAccount
-                                        .isValidating,
-                        onClick = onValidateHuggingFaceToken
-                    ) { Text("Validate token") }
-                    TextButton(
-                        enabled =
-                            state.huggingFaceAccount.isValid &&
-                                    !state.huggingFaceAccount
-                                        .isValidating,
-                        onClick = onValidateHuggingFaceToken
-                    ) {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = null
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Refresh account")
-                    }
-                }
-
-                state.saveNotice?.takeIf { it.isNotBlank() }?.let { notice ->
-                    Text(
-                        text = notice,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                Button(
-                    onClick = onSaveSettings,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = InputShape
-                ) {
-                    Icon(Icons.Default.Save, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Save")
-                }
-            }
-        }
-    }
-}
-
-@Composable
 internal fun DataHistorySettings(
     state: SettingsScreenState,
     modifier: Modifier = Modifier,
@@ -1260,6 +1060,51 @@ private fun SettingsNavigationRow(
                         .padding(8.dp),
                 contentAlignment = Alignment.Center
             ) { icon() }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = title,
+                    style =
+                        MaterialTheme.typography.bodyLarge.copy(
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                )
+                Text(
+                    text = subtitle,
+                    style =
+                        MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 13.sp
+                        ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsActionRow(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Surface(shape = SettingsRowShape, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onClick)
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -1599,117 +1444,6 @@ private fun StatusBadge(label: String, tone: BadgeTone) {
 }
 
 @Composable
-private fun AccountDetailsCard(account: HuggingFaceAccountUi, onRefresh: () -> Unit) {
-    val uriHandler = LocalUriHandler.current
-
-    Surface(shape = SettingsRowShape, color = MaterialTheme.colorScheme.surface) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Avatar(
-                        avatarUrl = account.avatarUrl,
-                        name = account.fullName ?: account.username ?: "?"
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(
-                            text = account.fullName
-                                ?: account.username
-                                ?: "Unknown account",
-                            style =
-                                MaterialTheme.typography.bodyLarge
-                                    .copy(
-                                        fontSize = 15.sp,
-                                        fontWeight =
-                                            FontWeight
-                                                .Medium
-                                    )
-                        )
-                        if (account.username != null) {
-                            Text(
-                                text = "@${account.username}",
-                                style =
-                                    MaterialTheme.typography
-                                        .bodySmall.copy(
-                                            fontSize = 13.sp
-                                        ),
-                                color =
-                                    MaterialTheme.colorScheme
-                                        .onSurfaceVariant
-                            )
-                        }
-                        if (account.email != null) {
-                            Text(
-                                text = account.email,
-                                style =
-                                    MaterialTheme.typography
-                                        .bodySmall.copy(
-                                            fontSize = 13.sp
-                                        ),
-                                color =
-                                    MaterialTheme.colorScheme
-                                        .onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                IconButton(onClick = onRefresh) {
-                    Icon(
-                        Icons.Default.Refresh,
-                        contentDescription = "Refresh account"
-                    )
-                }
-            }
-
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                StatusBadge(label = "Connected", tone = BadgeTone.Positive)
-                if (account.tokenRole != null) {
-                    StatusBadge(
-                        label =
-                            "Role: ${
-                                account.tokenRole.lowercase()
-                                    .replaceFirstChar { c -> c.titlecase() }
-                            }",
-                        tone = BadgeTone.Neutral
-                    )
-                }
-                if (account.tokenName != null) {
-                    StatusBadge(
-                        label = "Token: Active",
-                        tone = BadgeTone.Positive
-                    )
-                }
-            }
-
-            if (account.profileUrl != null) {
-                TextButton(
-                    onClick = { runCatching { uriHandler.openUri(account.profileUrl) } }
-                ) { Text("View profile") }
-            }
-        }
-    }
-}
-
-@Composable
 private fun Avatar(avatarUrl: String?, name: String) {
     val initials =
         name.trim()
@@ -1775,23 +1509,6 @@ private fun connectionModeSummary(remoteConfigured: Boolean): String {
     return if (remoteConfigured) "Remote API connected" else "Not configured"
 }
 
-private fun huggingFaceSubtitle(state: SettingsScreenState): String {
-    return when {
-        state.huggingFaceToken.isBlank() -> "Token not set"
-        state.huggingFaceAccount.isValidating -> "Validating token"
-        state.huggingFaceAccount.isValid -> {
-            val label =
-                state.huggingFaceAccount.fullName
-                    ?: state.huggingFaceAccount.username
-                    ?: state.huggingFaceAccount.email
-            if (label.isNullOrBlank()) "Connected" else "Connected as $label"
-        }
-
-        !state.huggingFaceAccount.message.isNullOrBlank() -> "Validation failed"
-        else -> "Token saved"
-    }
-}
-
 private fun formatTokens(value: Int): String {
     return "${NumberFormat.getIntegerInstance().format(value)} tokens"
 }
@@ -1814,6 +1531,94 @@ private fun humanReadableByteCount(bytes: Long): String {
     val prefix = "kMGTPE"[exp - 1]
     val value = bytes / unit.pow(exp.toDouble())
     return "%.1f %sB".format(value, prefix)
+}
+
+@Composable
+internal fun AboutDeveloperSettings(
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val privacyUrl = "https://github.com/adiagarwalrock/NanoChat/blob/main/docs/privacy_policy.md"
+
+    LazyColumn(
+        modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(SectionSpacing)
+    ) {
+        item {
+            SettingsGroup(title = stringResource(R.string.about_developer_title)) {
+                SettingsActionRow(
+                    title = "Aditya Agarwal",
+                    subtitle = "Lead Developer",
+                    onClick = { }
+                )
+                SettingsActionRow(
+                    title = "Nilesh Kumar Mandal",
+                    subtitle = "Lead Developer",
+                    onClick = { }
+                )
+                SettingsActionRow(
+                    title = "Contact Us",
+                    subtitle = "strikecode.fcm@gmail.com",
+                    onClick = {
+                        runCatching {
+                            val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                data = Uri.parse("mailto:strikecode.fcm@gmail.com")
+                                putExtra(Intent.EXTRA_SUBJECT, "NanoChat Feedback")
+                            }
+                            context.startActivity(intent)
+                        }
+                    }
+                )
+            }
+        }
+
+        item {
+            SettingsGroup(title = "Legal") {
+                SettingsActionRow(
+                    title = stringResource(R.string.privacy_policy_title),
+                    subtitle = "Read our privacy policy online",
+                    onClick = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(privacyUrl))
+                            )
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun OpenSourceLicensesSettings(
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(
+        modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(SectionSpacing)
+    ) {
+        item {
+            SettingsGroup(title = "Dependencies") {
+                SettingsActionRow(title = "Jetpack Compose", subtitle = "Android UI toolkit", onClick = {})
+                SettingsActionRow(title = "Material 3", subtitle = "Design system & components", onClick = {})
+                SettingsActionRow(title = "Kotlin Coroutines", subtitle = "Asynchronous programming", onClick = {})
+                SettingsActionRow(title = "Room", subtitle = "Local SQLite persistence", onClick = {})
+                SettingsActionRow(title = "DataStore", subtitle = "Typed preferences storage", onClick = {})
+                SettingsActionRow(title = "Hilt", subtitle = "Dependency injection", onClick = {})
+                SettingsActionRow(title = "OkHttp", subtitle = "HTTP client and SSE processing", onClick = {})
+                SettingsActionRow(title = "Coil", subtitle = "Image loading", onClick = {})
+                SettingsActionRow(title = "Markwon", subtitle = "Markdown rendering", onClick = {})
+                SettingsActionRow(title = "AICore", subtitle = "Android on-device AI integration", onClick = {})
+                SettingsActionRow(title = "LiteRT-LM", subtitle = "Local LLM runtime for downloaded models", onClick = {})
+                SettingsActionRow(title = "Firebase", subtitle = "App distribution and analytics", onClick = {})
+                SettingsActionRow(title = "kotlinx.serialization", subtitle = "JSON parsing and serialization", onClick = {})
+                SettingsActionRow(title = "EncryptedSharedPreferences", subtitle = "Secure secret storage", onClick = {})
+            }
+        }
+    }
 }
 
 @Preview(showBackground = true)
