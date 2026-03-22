@@ -288,11 +288,11 @@ private fun ChatTabContent(
                         onRetry = onRetryLast,
                         modifier =
                                 Modifier
-                                        .align(Alignment.BottomCenter)
-                                        .onSizeChanged { composerHeightPx = it.height }
-                                        .navigationBarsPadding()
-                                        .imePadding()
-                                        .padding(bottom = 15.dp)
+                                    .align(Alignment.BottomCenter)
+                                    .onSizeChanged { composerHeightPx = it.height }
+                                    .navigationBarsPadding()
+                                    .imePadding()
+                                    .padding(bottom = 15.dp)
                 )
 
                 if (controlsVisible) {
@@ -345,8 +345,8 @@ private fun ModelControlsSheet(
                 Column(
                         modifier =
                                 Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 18.dp, vertical = 4.dp),
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 18.dp, vertical = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                         Text(
@@ -364,7 +364,9 @@ private fun ModelControlsSheet(
                                 color = MaterialTheme.colorScheme.surfaceContainerHigh
                         ) {
                                 Column(
-                                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
                                         verticalArrangement = Arrangement.spacedBy(14.dp)
                                 ) {
                                         LabeledSlider(
@@ -665,7 +667,9 @@ private fun ChatTopBar(
                         }
 
                         Box(
-                            modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 12.dp),
                                 contentAlignment = Alignment.Center
                         ) {
                                 Box {
@@ -805,7 +809,8 @@ private fun LocalModelStatusSurface(
             color = if (isReady) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
         ) {
                 Column(
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -896,6 +901,15 @@ private fun MessageList(
         onRetryLast: () -> Unit,
         onDeleteMessage: (ChatMessage) -> Unit
 ) {
+    val streamingMessageId =
+        remember(messages, isSending) {
+            if (!isSending) {
+                null
+            } else {
+                messages.lastOrNull()?.takeIf { it.role == ChatRole.ASSISTANT }?.id
+            }
+        }
+
         if (messages.isEmpty() && !isSending) {
                 EmptyChatGreeting(bottomPadding = bottomPadding, modifier = modifier)
         } else {
@@ -915,6 +929,7 @@ private fun MessageList(
                                 MessageRow(
                                         message = message,
                                         isSending = isSending,
+                                    isStreaming = message.id == streamingMessageId,
                                         modifier = Modifier.padding(top = topPadding),
                                         onMessageInfo = onMessageInfo,
                                         onRetryLast = onRetryLast,
@@ -995,6 +1010,7 @@ private fun EmptyChatGreeting(bottomPadding: Dp, modifier: Modifier = Modifier) 
 private fun MessageRow(
         message: ChatMessage,
         isSending: Boolean,
+        isStreaming: Boolean,
         modifier: Modifier = Modifier,
         onMessageInfo: (ChatMessage) -> Unit,
         onRetryLast: () -> Unit,
@@ -1054,7 +1070,8 @@ private fun MessageRow(
                                             textColor = MaterialTheme.colorScheme.onPrimaryContainer,
                                                 fontSizeSp = 15f,
                                                 lineSpacingMultiplier = 1.33f,
-                                            modifier = Modifier.fillMaxWidth()
+                                            modifier = Modifier
+                                                .fillMaxWidth()
                                                 .padding(horizontal = 14.dp, vertical = 11.dp)
                                         )
                                 }
@@ -1066,7 +1083,7 @@ private fun MessageRow(
                                     ),
                                         verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                        if (message.content.isBlank() && message.isStreaming) {
+                                    if (message.content.isBlank() && isStreaming) {
                                                 TypingIndicator()
                                         } else if (message.content.isBlank()) {
                                                 Text(
@@ -1099,7 +1116,7 @@ private fun MessageRow(
                         MessageActionsMenu(
                                 expanded = actionMenuExpanded,
                                 canRegenerate = !isSending,
-                                canDelete = !message.isStreaming,
+                            canDelete = !isStreaming,
                                 onDismiss = { actionMenuExpanded = false },
                                 onCopy = {
                                         clipboardManager.setText(AnnotatedString(message.content))
@@ -1471,7 +1488,8 @@ private fun Composer(
                 shadowElevation = 10.dp
         ) {
                 Column(
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {

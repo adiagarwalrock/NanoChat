@@ -72,9 +72,6 @@ class DownloadedModelInferenceClient(
             LocalModelCompatibilityState.Downloadable -> {
                 BackendAvailability.Unavailable("Download this local model before using it.")
             }
-            LocalModelCompatibilityState.TokenRequired -> {
-                BackendAvailability.Unavailable("Hugging Face token is required for this model.")
-            }
             is LocalModelCompatibilityState.NeedsMoreRam -> {
                 BackendAvailability.Unavailable(
                     "This model needs ${compatibility.requiredGb} GB RAM."
@@ -105,8 +102,8 @@ class DownloadedModelInferenceClient(
 
     private fun availabilityForReadyModel(record: InstalledModelRecord): BackendAvailability {
         val runtimeState = runtimeManager.loadState.value
-        val runtimeModelId = runtimeState.modelId?.trim()?.lowercase().orEmpty()
-        val selectedModelId = record.modelId.trim().lowercase()
+        val runtimeModelId = normalizeModelId(runtimeState.modelId)
+        val selectedModelId = normalizeModelId(record.modelId)
         val matchesSelectedModel = runtimeModelId == selectedModelId
 
         return when (runtimeState.phase) {
@@ -170,6 +167,7 @@ class DownloadedModelInferenceClient(
                 )
 
         val resolvedModelId = record.modelId
+        val normalizedResolvedModelId = normalizeModelId(resolvedModelId)
         val model = record.allowlistedModel
         val baseRuntimeConfig =
             applyAcceleratorPreference(
@@ -190,14 +188,16 @@ class DownloadedModelInferenceClient(
         )
 
         val activeSessionId = request.sessionId
+        val runtimeState = runtimeManager.loadState.value
         val isReusing =
             activeSessionId != null &&
-                    runtimeManager.loadState.value.phase ==
+                    runtimeState.phase ==
                     com.fcm.nanochat.models.runtime.RuntimeLoadPhase.LOADED &&
-                    runtimeManager.loadState.value.modelId?.trim()?.lowercase() ==
-                    resolvedModelId.trim().lowercase() &&
+                    normalizeModelId(runtimeState.modelId) == normalizedResolvedModelId &&
                     runtimeManager.getActiveSessionId() == activeSessionId
 
+        val promptFamily = model?.promptFamily.toPromptFamily()
+        val isGemmaFamily = promptFamily == DownloadedPromptFamily.GEMMA
         val formattedPrompt =
             if (isReusing) {
                 val systemPrompt =
@@ -207,9 +207,7 @@ class DownloadedModelInferenceClient(
                         effort = request.settings.thinkingEffort,
                         supportsThinking = model?.supportsThinking ?: false
                     )
-                val finalSystemInstruction =
-                    if (model?.promptFamily?.trim()?.lowercase() == "gemma") ""
-                    else systemPrompt
+                val finalSystemInstruction = if (isGemmaFamily) "" else systemPrompt
                 val latestTurn =
                     PromptFormatter.formatLatestTurn(
                         prompt = request.prompt,
@@ -217,14 +215,14 @@ class DownloadedModelInferenceClient(
                         supportsThinking = model?.supportsThinking ?: false
                     )
                 val finalUserMessage =
-                    if (model?.promptFamily?.trim()?.lowercase() == "gemma") {
+                    if (isGemmaFamily) {
                         "$systemPrompt\n\n$latestTurn"
                     } else {
                         latestTurn
                     }
 
                 com.fcm.nanochat.inference.DownloadedPrompt(
-                    family = model?.promptFamily.toPromptFamily(),
+                    family = promptFamily,
                     systemInstruction = finalSystemInstruction,
                     userMessage = finalUserMessage
                 )
@@ -283,8 +281,8 @@ class DownloadedModelInferenceClient(
             }
 
             val loadedModelId =
-                runtimeManager.loadState.value.modelId?.trim()?.lowercase().orEmpty()
-            if (loadedModelId.isNotBlank() && loadedModelId != resolvedModelId.trim().lowercase()) {
+                normalizeModelId(runtimeManager.loadState.value.modelId)
+            if (loadedModelId.isNotBlank() && loadedModelId != normalizedResolvedModelId) {
                 throw InferenceException.BackendUnavailable(
                     "Selected local model is not the active runtime. Tap Use model and retry."
                 )
@@ -695,15 +693,16 @@ class DownloadedModelInferenceClient(
         settings: SettingsSnapshot,
         requestedActiveModelId: String?
     ): String? {
-        val preferredId = requestedActiveModelId?.trim()?.lowercase().orEmpty()
-        val settingsId = settings.activeLocalModelId.trim().lowercase()
+        val preferredId = normalizeModelId(requestedActiveModelId)
+        val settingsId = normalizeModelId(settings.activeLocalModelId)
         val candidateId = preferredId.ifBlank { settingsId }
         return candidateId.ifBlank { null }
     }
 
     private fun resolveActiveModelRecord(activeModelId: String): InstalledModelRecord? {
+        val normalized = activeModelId.trim()
         return modelRegistry.records.value.firstOrNull {
-            it.modelId.equals(activeModelId, ignoreCase = true)
+            it.modelId.equals(normalized, ignoreCase = true)
         }
     }
 
@@ -740,11 +739,19 @@ class DownloadedModelInferenceClient(
     private fun shouldUnlockVisibleEmission(output: String): Boolean {
         if (output.isBlank()) return false
 
-        val normalized =
-            output.replace("<think>", "", ignoreCase = true)
-                .replace("</think>", "", ignoreCase = true)
-                .replace(Regex("(?i)<[^>]*$"), "")
-        return normalized.any(Char::isLetterOrDigit)
+        var insideTag = false
+        output.forEach { char ->
+            when {
+                char == '<' -> insideTag = true
+                char == '>' -> insideTag = false
+                !insideTag && char.isLetterOrDigit() -> return true
+            }
+        }
+        return false
+    }
+
+    private fun normalizeModelId(value: String?): String {
+        return value?.trim()?.lowercase().orEmpty()
     }
 
     private fun configuredNoTokenWatchdogMs(isRetry: Boolean): Long {

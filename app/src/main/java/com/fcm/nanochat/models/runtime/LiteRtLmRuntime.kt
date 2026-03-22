@@ -250,17 +250,18 @@ internal class LiteRtLmRuntime(
     }
 
     private suspend fun cancelAndDrainActiveConversationLocked(reason: String) {
-        val active = activeConversation.get() ?: return
-        
+        if (activeConversation.get() == null) return
+
         cancelActiveGeneration(reason)
 
-        repeat(SUPERSEDE_DRAIN_ATTEMPTS) {
-            if (activeConversation.get() == null || activeConversation.get()?.gate?.isFinalized() == true) {
-                // If it's finalized but not null, it means it's a stateful conversation 
-                // that finished its turn. We can now safely take it over or close it.
-                return@repeat
+        var attempts = 0
+        while (attempts < SUPERSEDE_DRAIN_ATTEMPTS) {
+            val current = activeConversation.get()
+            if (current == null || current.gate.isFinalized()) {
+                break
             }
             delay(SUPERSEDE_DRAIN_POLL_MS)
+            attempts++
         }
 
         val stale = activeConversation.getAndSet(null) ?: return

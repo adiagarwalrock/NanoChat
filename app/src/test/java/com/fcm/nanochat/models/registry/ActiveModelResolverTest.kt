@@ -4,6 +4,8 @@ import com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig
 import com.fcm.nanochat.models.allowlist.AllowlistedModel
 import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -20,7 +22,7 @@ class ActiveModelResolverTest {
         val resolution = ActiveModelResolver.resolve("model-a", listOf(record))
 
         assertFalse(resolution.shouldClearSelection)
-        assertTrue(resolution.activeRecord != null)
+        assertNotNull(resolution.activeRecord)
     }
 
     @Test
@@ -28,7 +30,7 @@ class ActiveModelResolverTest {
         val resolution = ActiveModelResolver.resolve("unknown", emptyList())
 
         assertTrue(resolution.shouldClearSelection)
-        assertTrue(resolution.activeRecord == null)
+        assertNull(resolution.activeRecord)
     }
 
     @Test
@@ -44,7 +46,7 @@ class ActiveModelResolverTest {
         val resolution = ActiveModelResolver.resolve("model-a", listOf(record))
 
         assertTrue(resolution.shouldClearSelection)
-        assertTrue(resolution.message?.contains("broken") == true)
+        assertTrue(resolution.message.orEmpty().contains("broken"))
     }
 
     @Test
@@ -54,13 +56,13 @@ class ActiveModelResolverTest {
                 modelId = "model-a",
                 installState = ModelInstallState.INSTALLED,
                 compatibility = LocalModelCompatibilityState.Ready,
-                allowlistedModel = sampleAllowlistedModel(recommendedForChat = false)
+                allowlistedModel = sampleAllowlistedModel()
             )
 
         val resolution = ActiveModelResolver.resolve("model-a", listOf(record))
 
         assertTrue(resolution.shouldClearSelection)
-        assertTrue(resolution.message?.contains("not optimized") == true)
+        assertTrue(resolution.message.orEmpty().contains("not optimized"))
     }
 
     private fun sampleRecord(
@@ -86,7 +88,7 @@ class ActiveModelResolverTest {
         )
     }
 
-    private fun sampleAllowlistedModel(recommendedForChat: Boolean): AllowlistedModel {
+    private fun sampleAllowlistedModel(): AllowlistedModel {
         return AllowlistedModel(
             id = "model-a",
             enabled = true,
@@ -112,10 +114,11 @@ class ActiveModelResolverTest {
             llmSupportAudio = false,
             backendType = "litert-lm",
             sourceRepo = "org/model-a",
-            requiresHfToken = false,
+            downloadRepo = null,
+            downloadPath = null,
             isExperimental = false,
             supportedUseCases = listOf("prompt_lab"),
-            recommendedForChat = recommendedForChat,
+            recommendedForChat = false,
             memoryTier = "mid",
             acceleratorHints = listOf("cpu"),
             downloadUrl = "https://example.com/model-a.litertlm",

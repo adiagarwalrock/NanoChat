@@ -222,7 +222,7 @@ object AppModule {
         )
     }
 
-    private const val BUNDLED_ALLOWLIST_ASSET = "model_allowlist_2_0_1.json"
-    private const val BUNDLED_ALLOWLIST_VERSION = "2_0_1"
+    private const val BUNDLED_ALLOWLIST_ASSET = "model_allowlist_2_0_3.json"
+    private const val BUNDLED_ALLOWLIST_VERSION = "2_0_3"
     private const val REMOTE_ALLOWLIST_URL = ""
 }

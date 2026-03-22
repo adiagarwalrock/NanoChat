@@ -61,7 +61,6 @@ object ActiveModelResolver {
             is LocalModelCompatibilityState.DownloadedButNotActivatable -> compatibility.reason
             LocalModelCompatibilityState.Ready,
             LocalModelCompatibilityState.Downloadable,
-            LocalModelCompatibilityState.TokenRequired,
             is LocalModelCompatibilityState.NeedsMoreRam,
             is LocalModelCompatibilityState.NeedsMoreStorage,
             is LocalModelCompatibilityState.UnsupportedDevice,

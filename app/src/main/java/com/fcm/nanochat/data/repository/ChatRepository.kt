@@ -195,7 +195,6 @@ class ChatRepository(
             baseUrl: String,
             modelName: String,
             apiKey: String,
-            huggingFaceToken: String,
             temperature: Double,
             topP: Double,
             contextLength: Int
@@ -207,7 +206,7 @@ class ChatRepository(
                 topP = topP,
                 contextLength = contextLength
         )
-        preferences.updateSecrets(apiKey = apiKey, huggingFaceToken = huggingFaceToken)
+        preferences.updateSecrets(apiKey = apiKey)
     }
 
     suspend fun settingsSnapshot(): SettingsSnapshot = preferences.settings.first()

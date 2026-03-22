@@ -11,17 +11,6 @@ import org.junit.Test
 
 class ModelCardActionLabelTest {
     @Test
-    fun `token required state maps to requires token`() {
-        val card = card(
-            installState = ModelInstallState.NOT_INSTALLED,
-            compatibility = LocalModelCompatibilityState.TokenRequired,
-            healthState = LocalModelHealthState.RequiresToken
-        )
-
-        assertEquals("Add token", card.primaryActionLabel())
-    }
-
-    @Test
     fun `installed active state maps to use model`() {
         val card = card(
             installState = ModelInstallState.INSTALLED,
@@ -64,7 +53,6 @@ class ModelCardActionLabelTest {
             bestForTaskTypes = listOf("llm_chat"),
             llmSupportImage = false,
             llmSupportAudio = false,
-            requiresHfToken = false,
             recommendedForChat = true,
             isExperimental = false,
             installState = installState,

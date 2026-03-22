@@ -48,7 +48,8 @@ data class AllowlistedModel(
     val llmSupportAudio: Boolean,
     val backendType: String,
     val sourceRepo: String,
-    val requiresHfToken: Boolean,
+    val downloadRepo: String?,
+    val downloadPath: String?,
     val isExperimental: Boolean,
     val supportedUseCases: List<String>,
     val recommendedForChat: Boolean,
@@ -138,12 +139,9 @@ internal object AllowlistParser {
         val llmSupportAudio = optBoolean("llmSupportAudio", false)
         val backendType = optString("backendType").ifBlank { "litert-lm" }
         val sourceRepo = optString("sourceRepo").ifBlank { modelId }
+        val downloadRepo = optString("downloadRepo").trim().ifBlank { null }
+        val downloadPath = optString("downloadPath").trim().trimStart('/').ifBlank { null }
 
-        val requiresHfToken = if (has("requiresHfToken")) {
-            optBoolean("requiresHfToken", false)
-        } else {
-            modelId.startsWith("google/", ignoreCase = true)
-        }
 
         val isExperimental = optBoolean("isExperimental", false)
         val supportedUseCases = optStringList("supportedUseCases").ifEmpty { taskTypes }
@@ -163,7 +161,11 @@ internal object AllowlistParser {
             defaultConfig.acceleratorHints
         }
         val downloadUrl = optString("downloadUrl").ifBlank {
-            "https://huggingface.co/$sourceRepo/resolve/$commitHash/$modelFile?download=true"
+            buildDownloadUrl(
+                repo = downloadRepo ?: sourceRepo,
+                commitHash = commitHash,
+                path = downloadPath ?: modelFile
+            )
         }
         val fileType = modelFile.substringAfterLast('.', missingDelimiterValue = "").lowercase()
         val supportedAbis = optStringList("supportedAbis")
@@ -195,7 +197,8 @@ internal object AllowlistParser {
             llmSupportAudio = llmSupportAudio,
             backendType = backendType,
             sourceRepo = sourceRepo,
-            requiresHfToken = requiresHfToken,
+            downloadRepo = downloadRepo,
+            downloadPath = downloadPath,
             isExperimental = isExperimental,
             supportedUseCases = supportedUseCases,
             recommendedForChat = recommendedForChat,
@@ -207,6 +210,17 @@ internal object AllowlistParser {
             promptFamily = parsedPromptFamily,
             supportsThinking = supportsThinking
         )
+    }
+
+    private fun buildDownloadUrl(
+        repo: String,
+        commitHash: String,
+        path: String
+    ): String {
+        val normalizedRepo = repo.trim().trim('/')
+        val normalizedCommit = commitHash.trim().ifBlank { "main" }
+        val normalizedPath = path.trim().trimStart('/')
+        return "https://huggingface.co/$normalizedRepo/resolve/$normalizedCommit/$normalizedPath?download=true"
     }
 
     private fun JSONObject.optStringList(key: String): List<String> {
