@@ -129,7 +129,6 @@ internal fun ChatTab(
         onSendMessage: () -> Unit,
         onStopGeneration: () -> Unit,
         onMessageDraftChange: (String) -> Unit,
-        onCreateSession: () -> Unit,
         onRetryLast: () -> Unit,
         onInferenceModeChange: (InferenceMode) -> Unit,
         onOpenModelGallery: () -> Unit,
@@ -199,8 +198,8 @@ private fun ChatTabContent(
         onDeleteMessage: (ChatMessage) -> Unit
 ) {
         var controlsVisible by remember { mutableStateOf(false) }
-        var composerHeightPx by remember { mutableIntStateOf(0) }
-        val bottomPadding = with(LocalDensity.current) { composerHeightPx.toDp() }
+    val composerHeightPxState = remember { mutableIntStateOf(0) }
+    val bottomPadding = with(LocalDensity.current) { composerHeightPxState.intValue.toDp() }
         val listState = rememberLazyListState()
     val showLocalModelCta = remember(state.inferenceMode, state.isLocalModelReady) {
                 state.inferenceMode == InferenceMode.DOWNLOADED && !state.isLocalModelReady
@@ -289,7 +288,7 @@ private fun ChatTabContent(
                         modifier =
                                 Modifier
                                     .align(Alignment.BottomCenter)
-                                    .onSizeChanged { composerHeightPx = it.height }
+                                    .onSizeChanged { composerHeightPxState.intValue = it.height }
                                     .navigationBarsPadding()
                                     .imePadding()
                                     .padding(bottom = 15.dp)
@@ -1672,7 +1671,6 @@ private fun ChatTabPreview() {
                         onSendMessage = {},
                         onStopGeneration = {},
                         onMessageDraftChange = {},
-                        onCreateSession = {},
                         onRetryLast = {},
                         onInferenceModeChange = {},
                         onOpenModelGallery = {},
@@ -1708,7 +1706,6 @@ private fun ChatTabDarkPreview() {
                         onSendMessage = {},
                         onStopGeneration = {},
                         onMessageDraftChange = {},
-                        onCreateSession = {},
                         onRetryLast = {},
                         onInferenceModeChange = {},
                         onOpenModelGallery = {},

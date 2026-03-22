@@ -221,7 +221,7 @@ class DownloadedModelInferenceClient(
                         latestTurn
                     }
 
-                com.fcm.nanochat.inference.DownloadedPrompt(
+                DownloadedPrompt(
                     family = promptFamily,
                     systemInstruction = finalSystemInstruction,
                     userMessage = finalUserMessage
@@ -246,7 +246,7 @@ class DownloadedModelInferenceClient(
         )
 
         suspend fun kotlinx.coroutines.flow.FlowCollector<String>.emitGenerationAttempt(
-            runtimeConfig: com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig,
+            runtimeConfig: AllowlistDefaultConfig,
             isRetry: Boolean
         ) {
             val currentRuntimeHandle =
@@ -656,7 +656,7 @@ class DownloadedModelInferenceClient(
             try {
                 emitGenerationAttempt(runtimeConfig, isRetry = attemptIndex > 0)
                 return@flow
-            } catch (degenerate: DegenerateOutputException) {
+            } catch (_: DegenerateOutputException) {
                 val shouldRetry =
                     shouldRetryOnCpuFallback(
                         attemptIndex = attemptIndex,
@@ -800,8 +800,8 @@ class DownloadedModelInferenceClient(
     }
 
     private fun SettingsSnapshot.toFallbackDownloadedConfig():
-            com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig {
-        return com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig(
+            AllowlistDefaultConfig {
+        return AllowlistDefaultConfig(
             topK = 40,
             topP = topP,
             temperature = temperature,
@@ -816,18 +816,17 @@ class DownloadedModelInferenceClient(
         config: AllowlistDefaultConfig,
         preference: AcceleratorPreference
     ): AllowlistDefaultConfig {
-        if (preference == AcceleratorPreference.AUTO) {
-            return config.copy(strictAccelerator = false)
-        }
+        return when (preference) {
+            AcceleratorPreference.AUTO -> config.copy(strictAccelerator = false)
+            AcceleratorPreference.CPU ->
+                config.copy(accelerators = "cpu", strictAccelerator = true)
 
-        val normalized =
-            when (preference) {
-                AcceleratorPreference.AUTO -> config.accelerators
-                AcceleratorPreference.CPU -> "cpu"
-                AcceleratorPreference.GPU -> "gpu"
-                AcceleratorPreference.NNAPI -> "npu"
-            }
-        return config.copy(accelerators = normalized, strictAccelerator = true)
+            AcceleratorPreference.GPU ->
+                config.copy(accelerators = "gpu", strictAccelerator = true)
+
+            AcceleratorPreference.NNAPI ->
+                config.copy(accelerators = "npu", strictAccelerator = true)
+        }
     }
 
     private fun generationAttemptConfigs(

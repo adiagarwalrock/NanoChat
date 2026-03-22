@@ -848,7 +848,8 @@ internal fun DataHistorySettings(
         )
     val remoteConfigured = missingRemoteFields.isEmpty()
     val nanoAvailable = state.geminiStatus.supported && state.geminiStatus.downloaded
-    var confirmClearHistory by rememberSaveable { mutableStateOf(false) }
+    val confirmClearHistoryState = rememberSaveable { mutableStateOf(false) }
+    val confirmClearHistory = confirmClearHistoryState.value
 
     LazyColumn(
         modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
@@ -981,7 +982,7 @@ internal fun DataHistorySettings(
                 }
 
                 Button(
-                    onClick = { confirmClearHistory = true },
+                    onClick = { confirmClearHistoryState.value = true },
                     modifier = Modifier.fillMaxWidth(),
                     shape = InputShape,
                     colors =
@@ -1004,13 +1005,13 @@ internal fun DataHistorySettings(
 
     if (confirmClearHistory) {
         AlertDialog(
-            onDismissRequest = { confirmClearHistory = false },
+            onDismissRequest = { confirmClearHistoryState.value = false },
             title = { Text("Delete all conversations?") },
             text = { Text("This action cannot be undone.") },
             confirmButton = {
                 Button(
                     onClick = {
-                        confirmClearHistory = false
+                        confirmClearHistoryState.value = false
                         onClearHistory()
                     },
                     colors =
@@ -1023,7 +1024,7 @@ internal fun DataHistorySettings(
                 ) { Text("Delete") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmClearHistory = false }) {
+                TextButton(onClick = { confirmClearHistoryState.value = false }) {
                     Text("Cancel")
                 }
             }

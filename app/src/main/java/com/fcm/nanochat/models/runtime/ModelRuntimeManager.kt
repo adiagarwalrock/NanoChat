@@ -134,6 +134,7 @@ class ModelRuntimeManager(
         }
     }
 
+    @Suppress("unused")
     suspend fun probe(modelPath: String, defaultConfig: AllowlistDefaultConfig): String? {
         return probe(
             modelId = "unknown",
@@ -145,6 +146,7 @@ class ModelRuntimeManager(
         )
     }
 
+    @Suppress("unused")
     suspend fun probe(
         modelId: String,
         modelPath: String,

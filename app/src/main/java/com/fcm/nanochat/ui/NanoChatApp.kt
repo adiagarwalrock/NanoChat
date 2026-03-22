@@ -122,8 +122,8 @@ fun NanoChatApp(
     var destination by rememberSaveable { mutableStateOf(AppDestination.Chat) }
     var modelsBackDestination by rememberSaveable { mutableStateOf(AppDestination.Chat) }
     var settingsStartSection by rememberSaveable { mutableStateOf(Home) }
-    var renameTargetId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var renameDraft by rememberSaveable { mutableStateOf("") }
+    val renameTargetIdState = rememberSaveable { mutableStateOf<Long?>(null) }
+    val renameDraftState = rememberSaveable { mutableStateOf("") }
 
     val windowInfo = LocalWindowInfo.current
     val screenWidthDp = with(LocalDensity.current) { windowInfo.containerSize.width.toDp() }
@@ -166,8 +166,8 @@ fun NanoChatApp(
             onPinSession = onPinSession,
             onDeleteSession = onDeleteSession,
             onRenameSession = { id, currentTitle ->
-                renameTargetId = id
-                renameDraft = currentTitle
+                renameTargetIdState.value = id
+                renameDraftState.value = currentTitle
             },
             onOpenModels = {
                 modelsBackDestination = AppDestination.Chat
@@ -200,7 +200,6 @@ fun NanoChatApp(
                         onSendMessage = onSendMessage,
                         onStopGeneration = onStopGeneration,
                         onMessageDraftChange = onMessageDraftChange,
-                        onCreateSession = onCreateSession,
                         onRetryLast = onRetryLast,
                         onInferenceModeChange = onInferenceModeChange,
                         onOpenModelGallery = {
@@ -303,14 +302,14 @@ fun NanoChatApp(
     }
 
     RenameSessionDialog(
-        sessionId = renameTargetId,
-        draft = renameDraft,
-        onDraftChange = { renameDraft = it },
+        sessionId = renameTargetIdState.value,
+        draft = renameDraftState.value,
+        onDraftChange = { renameDraftState.value = it },
         onConfirm = { id, title ->
             onRenameSession(id, title)
-            renameTargetId = null
+            renameTargetIdState.value = null
         },
-        onDismiss = { renameTargetId = null }
+        onDismiss = { renameTargetIdState.value = null }
     )
 }
 

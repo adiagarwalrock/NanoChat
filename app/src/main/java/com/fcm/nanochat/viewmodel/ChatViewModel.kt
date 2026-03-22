@@ -235,7 +235,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
                     withContext(Dispatchers.IO) {
                         repository.prepareSelectedLocalModel(settings.value)
                     }
-                if (!preparationError.isNullOrBlank() && shouldSurfaceNotice(mode, preparationError)
+                if (!preparationError.isNullOrBlank() && shouldSurfaceNotice(preparationError)
                 ) {
                     notice.value = preparationError
                     return@launch
@@ -248,7 +248,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
                             }
             ) {
                 is BackendAvailability.Unavailable -> {
-                    notice.value = availability.message.takeIf { shouldSurfaceNotice(mode, it) }
+                    notice.value = availability.message.takeIf { shouldSurfaceNotice(it) }
                 }
                 BackendAvailability.Available -> notice.value = null
             }
@@ -390,7 +390,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
                     repository.prepareSelectedLocalModel(snapshot)
                 }
             if (!error.isNullOrBlank()) {
-                notice.value = error.takeIf { shouldSurfaceNotice(mode, it) }
+                notice.value = error.takeIf { shouldSurfaceNotice(it) }
                 return false
             }
         }
@@ -398,7 +398,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         val availability =
             withContext(Dispatchers.IO) { repository.backendAvailability(mode, snapshot) }
         if (availability is BackendAvailability.Unavailable) {
-            notice.value = availability.message.takeIf { shouldSurfaceNotice(mode, it) }
+            notice.value = availability.message.takeIf { shouldSurfaceNotice(it) }
             return false
         }
         return true
@@ -432,7 +432,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         if (watchdogTriggered || cancellation is GenerationWatchdogTimeout) {
             notice.value =
                 WATCHDOG_TIMEOUT_MESSAGE.takeIf {
-                    shouldSurfaceNotice(settings.value.inferenceMode, it)
+                    shouldSurfaceNotice(it)
                 }
         }
     }
@@ -452,7 +452,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
 
         notice.value =
             if (fallbackContent == null)
-                message.takeIf { shouldSurfaceNotice(settings.value.inferenceMode, it) }
+                message.takeIf { shouldSurfaceNotice(it) }
             else null
 
         assistantMessageId?.let { id ->
@@ -542,7 +542,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         }
     }
 
-    private fun shouldSurfaceNotice(mode: InferenceMode, message: String): Boolean {
+    private fun shouldSurfaceNotice(message: String): Boolean {
         return message.isNotBlank()
     }
 
