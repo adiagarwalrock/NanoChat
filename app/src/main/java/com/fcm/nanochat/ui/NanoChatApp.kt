@@ -50,12 +50,13 @@ import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.ModelGalleryScreenState
 import com.fcm.nanochat.model.SettingsScreenState
+import com.fcm.nanochat.ui.SettingsSection.AboutDeveloper
 import com.fcm.nanochat.ui.SettingsSection.AiConfiguration
+import com.fcm.nanochat.ui.SettingsSection.AppInfo
 import com.fcm.nanochat.ui.SettingsSection.Connection
 import com.fcm.nanochat.ui.SettingsSection.DataHistory
 import com.fcm.nanochat.ui.SettingsSection.Home
 import com.fcm.nanochat.ui.SettingsSection.ModelControls
-import com.fcm.nanochat.ui.SettingsSection.AboutDeveloper
 import com.fcm.nanochat.ui.SettingsSection.OpenSourceLicenses
 import com.fcm.nanochat.ui.theme.NanoChatTheme
 import kotlinx.coroutines.launch
@@ -402,6 +403,7 @@ private fun SettingsPage(
             Connection -> "Connection"
             ModelControls -> "Model behavior"
             DataHistory -> "Usage and history"
+            AppInfo -> "App info"
             AboutDeveloper -> "About the developer"
             OpenSourceLicenses -> "Open source licenses"
         }
@@ -412,7 +414,7 @@ private fun SettingsPage(
                 onBack()
             }
 
-            AiConfiguration, DataHistory, AboutDeveloper, OpenSourceLicenses -> {
+            AiConfiguration, DataHistory, AppInfo, AboutDeveloper, OpenSourceLicenses -> {
                 section = Home
             }
 
@@ -488,6 +490,13 @@ private fun SettingsPage(
                     modifier = contentModifier,
                     onRefreshStats = onRefreshStats,
                     onClearHistory = onClearHistory
+                )
+
+            AppInfo ->
+                AppInfoSettings(
+                    state = state,
+                    modifier = contentModifier,
+                    onNavigate = { section = it }
                 )
 
             AboutDeveloper ->

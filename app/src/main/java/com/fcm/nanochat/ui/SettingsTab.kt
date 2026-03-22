@@ -1,7 +1,10 @@
 package com.fcm.nanochat.ui
 
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.tween
@@ -30,6 +33,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
@@ -42,7 +46,6 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.History
@@ -50,7 +53,6 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -64,20 +66,17 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.painter.ColorPainter
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -85,6 +84,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationManagerCompat
 import coil.compose.AsyncImage
 import com.fcm.nanochat.R
 import com.fcm.nanochat.inference.RemoteConfigValidator
@@ -95,6 +95,10 @@ import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
 import com.fcm.nanochat.models.registry.ModelInstallState
 import com.fcm.nanochat.ui.theme.NanoChatTheme
 import java.text.NumberFormat
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.ln
@@ -107,6 +111,7 @@ internal enum class SettingsSection {
     ModelControls,
     Connection,
     DataHistory,
+    AppInfo,
     AboutDeveloper,
     OpenSourceLicenses
 }
@@ -151,6 +156,53 @@ private val ScreenHorizontalPadding = 20.dp
 private val SectionSpacing = 28.dp
 private val ItemSpacing = 16.dp
 private val CardPadding = 20.dp
+private const val SupportEmail = "strikecode.fcm@gmail.com"
+private const val PrivacyPolicyUrl =
+    "https://docs.google.com/document/d/1RsLlKxclAe3LfuaDMTz6CjWW3-4P-i-P_X6IJHjvtb0/"
+private const val GitHubRepoUrl = "https://github.com/adiagarwalrock/NanoChat"
+private const val HuggingFaceModelsUrl = "https://huggingface.co/adiagarwal/nanochat-models"
+private const val AppInfoTitle = "App info"
+private const val AppInfoSubtitle = "Version, device diagnostics, and debug report"
+private const val AppInfoSummary =
+    "Helpful app, device, and runtime details for support and debugging."
+private const val DeviceTitle = "Device"
+private const val DeviceSubtitle = "OS, hardware, and notification state."
+private const val RuntimeTitle = "Runtime"
+private const val RuntimeSubtitle = "Current AI configuration and app activity."
+private const val AppVersionLabel = "App version"
+private const val BuildTypeLabel = "Build type"
+private const val PackageNameLabel = "Package name"
+private const val LastUpdatedLabel = "Last updated"
+private const val AndroidVersionLabel = "Android version"
+private const val SecurityPatchLabel = "Security patch"
+private const val DeviceNameLabel = "Device"
+private const val PrimaryAbiLabel = "Primary ABI"
+private const val LocaleLabel = "Locale"
+private const val NotificationsLabel = "Notifications"
+private const val InstalledOnLabel = "Installed on"
+private const val RemoteProviderLabel = "Remote provider"
+private const val ModelNameLabel = "Model name"
+private const val GeminiStatusLabel = "Gemini Nano"
+private const val UsageLabel = "Usage"
+private const val EnabledLabel = "Enabled"
+private const val DisabledLabel = "Disabled"
+private const val ConfiguredLabel = "Configured"
+private const val NeedsSetupLabel = "Needs setup"
+private const val NotSetLabel = "Not set"
+private const val ReadyLabel = "Ready"
+private const val DownloadNeededLabel = "Download needed"
+private const val UnavailableLabel = "Unavailable"
+private const val DebugReportTitle = "Send debug report"
+private const val DebugReportSubtitle =
+    "Open your email app with a prefilled diagnostics report. Review it before sending."
+private const val SendDebugReportLabel = "Send debug report"
+private const val DebugEmailIntro = "Issue summary:"
+private const val DebugEmailSteps = "Steps to reproduce:"
+private const val DebugEmailExpected = "Expected result:"
+private const val DebugEmailActual = "Actual result:"
+private const val DebugEmailAppHeading = "App info"
+private const val DebugEmailDeviceHeading = "Device info"
+private const val DebugEmailRuntimeHeading = "Runtime info"
 
 @Composable
 internal fun SettingsHome(
@@ -256,13 +308,13 @@ internal fun SettingsHome(
                 SettingsNavigationRow(
                     icon = {
                         Icon(
-                            Icons.Outlined.Code,
+                            Icons.Outlined.Info,
                             contentDescription = null
                         )
                     },
-                    title = stringResource(R.string.open_source_licenses),
-                    subtitle = "Libraries and tools powering NanoChat",
-                    onClick = { onNavigate(SettingsSection.OpenSourceLicenses) }
+                    title = AppInfoTitle,
+                    subtitle = AppInfoSubtitle,
+                    onClick = { onNavigate(SettingsSection.AppInfo) }
                 )
                 SettingsNavigationRow(
                     icon = {
@@ -1096,14 +1148,46 @@ private fun SettingsActionRow(
     subtitle: String,
     onClick: () -> Unit
 ) {
+    SettingsDetailRow(
+        title = title,
+        subtitle = subtitle,
+        modifier = Modifier.clickable(onClick = onClick),
+        trailing = {
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    )
+}
+
+@Composable
+private fun SettingsStaticRow(
+    title: String,
+    subtitle: String
+) {
+    SettingsDetailRow(
+        title = title,
+        subtitle = subtitle
+    )
+}
+
+@Composable
+private fun SettingsDetailRow(
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null
+) {
     Surface(shape = SettingsRowShape, color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Row(
             modifier =
-                Modifier
+                modifier
                     .fillMaxWidth()
-                    .clickable(onClick = onClick)
                     .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Column(
                 modifier = Modifier.weight(1f),
@@ -1126,11 +1210,7 @@ private fun SettingsActionRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            trailing?.invoke()
         }
     }
 }
@@ -1479,6 +1559,181 @@ private fun Avatar(avatarUrl: String?, name: String) {
 
 private data class BadgeData(val label: String, val tone: BadgeTone)
 
+private data class DebugReport(
+    val appVersion: String,
+    val buildType: String,
+    val packageName: String,
+    val lastUpdated: String,
+    val installedOn: String,
+    val androidVersion: String,
+    val securityPatch: String,
+    val deviceName: String,
+    val primaryAbi: String,
+    val locale: String,
+    val notifications: String,
+    val remoteProvider: String,
+    val modelName: String,
+    val geminiStatus: String,
+    val usageSummary: String,
+    val emailSubject: String,
+    val emailBody: String,
+    val emailIntent: Intent
+)
+
+private fun buildDebugReport(context: Context, state: SettingsScreenState): DebugReport {
+    val packageInfo = context.packageInfoOrNull()
+    val versionCode =
+        packageInfo?.longVersionCode?.toString() ?: context.getString(R.string.unknown_value)
+    val versionName = packageInfo?.versionName ?: context.getString(R.string.unknown_value)
+    val buildType = debugBuildType(context)
+    val installedOn =
+        packageInfo?.firstInstallTime?.let(::formatTimestamp)
+            ?: context.getString(R.string.unknown_value)
+    val lastUpdated =
+        packageInfo?.lastUpdateTime?.let(::formatTimestamp)
+            ?: context.getString(R.string.unknown_value)
+    val securityPatch =
+        Build.VERSION.SECURITY_PATCH.ifBlank { context.getString(R.string.unknown_value) }
+    val locale = Locale.getDefault().toLanguageTag()
+    val remoteConfigured =
+        RemoteConfigValidator.missingFields(
+            baseUrl = state.baseUrl,
+            modelName = state.modelName,
+            apiKey = state.apiKey
+        ).isEmpty()
+    val notificationStatus =
+        if (NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            EnabledLabel
+        } else {
+            DisabledLabel
+        }
+    val geminiStatus = geminiStatusLabel(state)
+    val modelName = state.modelName.ifBlank { NotSetLabel }
+    val usageSummary =
+        "Sessions ${state.stats.sessionCount} · Sent ${state.stats.messagesSent} · Received ${state.stats.messagesReceived}"
+    val remoteProvider =
+        "${inferProviderStatus(state.baseUrl)} · ${if (remoteConfigured) ConfiguredLabel else NeedsSetupLabel}"
+    val temperature = String.format(Locale.US, "%.2f", state.temperature)
+    val topP = String.format(Locale.US, "%.2f", state.topP)
+    val contextLength = formatTokens(state.contextLength)
+    val thinkingEffort =
+        state.thinkingEffort.name.lowercase().replaceFirstChar { it.titlecase() }
+    val accelerator = state.acceleratorPreference.name.uppercase(Locale.US)
+    val emailSubject = "NanoChat Debug Report - $versionName - ${Build.MODEL}"
+    val emailBody =
+        buildString {
+            appendLine(DebugEmailIntro)
+            appendLine()
+            appendLine(DebugEmailSteps)
+            appendLine()
+            appendLine(DebugEmailExpected)
+            appendLine()
+            appendLine(DebugEmailActual)
+            appendLine()
+            appendLine(DebugEmailAppHeading)
+            appendLine("$AppVersionLabel: $versionName ($versionCode)")
+            appendLine("$BuildTypeLabel: $buildType")
+            appendLine("$PackageNameLabel: ${context.packageName}")
+            appendLine("$InstalledOnLabel: $installedOn")
+            appendLine("$LastUpdatedLabel: $lastUpdated")
+            appendLine()
+            appendLine(DebugEmailDeviceHeading)
+            appendLine("$AndroidVersionLabel: Android ${Build.VERSION.RELEASE_OR_CODENAME} (SDK ${Build.VERSION.SDK_INT})")
+            appendLine("$SecurityPatchLabel: $securityPatch")
+            appendLine("$DeviceNameLabel: ${Build.MANUFACTURER} ${Build.MODEL} (${Build.DEVICE})")
+            appendLine(
+                "$PrimaryAbiLabel: ${
+                    Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
+                        .ifBlank { context.getString(R.string.unknown_value) }
+                }"
+            )
+            appendLine("$LocaleLabel: $locale")
+            appendLine("$NotificationsLabel: $notificationStatus")
+            appendLine()
+            appendLine(DebugEmailRuntimeHeading)
+            appendLine("$RemoteProviderLabel: $remoteProvider")
+            appendLine("$ModelNameLabel: $modelName")
+            appendLine("${context.getString(R.string.temperature_label)}: $temperature")
+            appendLine("${context.getString(R.string.top_p_label)}: $topP")
+            appendLine("${context.getString(R.string.context_length_label)}: $contextLength")
+            appendLine("${context.getString(R.string.thinking_effort_label)}: $thinkingEffort")
+            appendLine("${context.getString(R.string.accelerator_label)}: $accelerator")
+            appendLine("$GeminiStatusLabel: $geminiStatus")
+            appendLine("$UsageLabel: $usageSummary")
+        }.trim()
+    val emailIntent = buildEmailIntent(SupportEmail, emailSubject, emailBody)
+
+    return DebugReport(
+        appVersion = "$versionName ($versionCode)",
+        buildType = buildType,
+        packageName = context.packageName,
+        lastUpdated = lastUpdated,
+        installedOn = installedOn,
+        androidVersion = "Android ${Build.VERSION.RELEASE_OR_CODENAME} (SDK ${Build.VERSION.SDK_INT})",
+        securityPatch = securityPatch,
+        deviceName = "${Build.MANUFACTURER} ${Build.MODEL}",
+        primaryAbi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty().ifBlank {
+            context.getString(R.string.unknown_value)
+        },
+        locale = locale,
+        notifications = notificationStatus,
+        remoteProvider = remoteProvider,
+        modelName = modelName,
+        geminiStatus = geminiStatus,
+        usageSummary = usageSummary,
+        emailSubject = emailSubject,
+        emailBody = emailBody,
+        emailIntent = emailIntent
+    )
+}
+
+private fun geminiStatusLabel(state: SettingsScreenState): String {
+    return when {
+        state.geminiStatus.downloaded -> ReadyLabel
+        state.geminiStatus.downloading -> "Downloading"
+        state.geminiStatus.supported -> DownloadNeededLabel
+        else -> UnavailableLabel
+    }
+}
+
+private fun buildEmailIntent(recipient: String, subject: String, body: String): Intent {
+    val uri =
+        Uri.Builder()
+            .scheme("mailto")
+            .opaquePart(recipient)
+            .appendQueryParameter("subject", subject)
+            .appendQueryParameter("body", body)
+            .build()
+    return Intent(Intent.ACTION_SENDTO, uri).apply {
+        putExtra(Intent.EXTRA_EMAIL, arrayOf(recipient))
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, body)
+    }
+}
+
+private fun debugBuildType(context: Context): String {
+    return if ((context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+        "debug"
+    } else {
+        "release"
+    }
+}
+
+@Suppress("DEPRECATION")
+private fun Context.packageInfoOrNull() =
+    runCatching {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+        } else {
+            packageManager.getPackageInfo(packageName, 0)
+        }
+    }.getOrNull()
+
+private fun formatTimestamp(epochMs: Long): String {
+    return DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM)
+        .format(Instant.ofEpochMilli(epochMs).atZone(ZoneId.systemDefault()))
+}
+
 private fun closestBehaviorPreset(temperature: Double, topP: Double): BehaviorPreset {
     return BehaviorPreset.entries.minByOrNull { preset ->
         abs(temperature - preset.temperature) + abs(topP - preset.topP)
@@ -1534,11 +1789,147 @@ private fun humanReadableByteCount(bytes: Long): String {
 }
 
 @Composable
+internal fun AppInfoSettings(
+    state: SettingsScreenState,
+    modifier: Modifier = Modifier,
+    onNavigate: (SettingsSection) -> Unit
+) {
+    val context = LocalContext.current
+    val debugReport = remember(state, context) { buildDebugReport(context, state) }
+
+    LazyColumn(
+        modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(SectionSpacing)
+    ) {
+        item {
+            SettingsPanel(
+                title = AppInfoTitle,
+                subtitle = AppInfoSummary
+            ) {
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Outlined.Info, contentDescription = null) },
+                    label = AppVersionLabel,
+                    value = debugReport.appVersion
+                )
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Outlined.Code, contentDescription = null) },
+                    label = BuildTypeLabel,
+                    value = debugReport.buildType
+                )
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Default.Storage, contentDescription = null) },
+                    label = PackageNameLabel,
+                    value = debugReport.packageName
+                )
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                    label = LastUpdatedLabel,
+                    value = debugReport.lastUpdated
+                )
+            }
+        }
+
+        item {
+            SettingsPanel(
+                title = DeviceTitle,
+                subtitle = DeviceSubtitle
+            ) {
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Default.Storage, contentDescription = null) },
+                    label = AndroidVersionLabel,
+                    value = debugReport.androidVersion
+                )
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Outlined.Info, contentDescription = null) },
+                    label = DeviceNameLabel,
+                    value = debugReport.deviceName
+                )
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Outlined.Code, contentDescription = null) },
+                    label = PrimaryAbiLabel,
+                    value = debugReport.primaryAbi
+                )
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Default.Link, contentDescription = null) },
+                    label = NotificationsLabel,
+                    value = debugReport.notifications
+                )
+            }
+        }
+
+        item {
+            SettingsPanel(
+                title = RuntimeTitle,
+                subtitle = RuntimeSubtitle
+            ) {
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Default.Link, contentDescription = null) },
+                    label = RemoteProviderLabel,
+                    value = debugReport.remoteProvider
+                )
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Default.Star, contentDescription = null) },
+                    label = ModelNameLabel,
+                    value = debugReport.modelName
+                )
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
+                    label = GeminiStatusLabel,
+                    value = debugReport.geminiStatus
+                )
+                SummaryStatusRow(
+                    icon = { Icon(Icons.Outlined.History, contentDescription = null) },
+                    label = UsageLabel,
+                    value = debugReport.usageSummary
+                )
+            }
+        }
+
+        item {
+            SettingsPanel(
+                title = DebugReportTitle,
+                subtitle = DebugReportSubtitle
+            ) {
+                Button(
+                    onClick = {
+                        runCatching {
+                            context.startActivity(debugReport.emailIntent)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = InputShape
+                ) {
+                    Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(SendDebugReportLabel)
+                }
+            }
+        }
+
+        item {
+            SettingsGroup(title = "Resources") {
+                SettingsNavigationRow(
+                    icon = {
+                        Icon(
+                            Icons.Outlined.Code,
+                            contentDescription = null
+                        )
+                    },
+                    title = stringResource(R.string.open_source_licenses),
+                    subtitle = "Libraries and tools powering NanoChat",
+                    onClick = { onNavigate(SettingsSection.OpenSourceLicenses) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 internal fun AboutDeveloperSettings(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val privacyUrl = "https://github.com/adiagarwalrock/NanoChat/blob/main/docs/privacy_policy.md"
 
     LazyColumn(
         modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
@@ -1547,26 +1938,56 @@ internal fun AboutDeveloperSettings(
     ) {
         item {
             SettingsGroup(title = stringResource(R.string.about_developer_title)) {
-                SettingsActionRow(
+                SettingsStaticRow(
                     title = "Aditya Agarwal",
-                    subtitle = "Lead Developer",
-                    onClick = { }
+                    subtitle = "Lead Developer"
                 )
-                SettingsActionRow(
+                SettingsStaticRow(
                     title = "Nilesh Kumar Mandal",
-                    subtitle = "Lead Developer",
-                    onClick = { }
+                    subtitle = "Lead Developer"
                 )
                 SettingsActionRow(
                     title = "Contact Us",
-                    subtitle = "strikecode.fcm@gmail.com",
+                    subtitle = SupportEmail,
                     onClick = {
                         runCatching {
-                            val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                data = Uri.parse("mailto:strikecode.fcm@gmail.com")
-                                putExtra(Intent.EXTRA_SUBJECT, "NanoChat Feedback")
-                            }
+                            val intent = buildEmailIntent(
+                                recipient = SupportEmail,
+                                subject = "NanoChat Feedback",
+                                body = ""
+                            )
                             context.startActivity(intent)
+                        }
+                    }
+                )
+            }
+        }
+
+        item {
+            SettingsGroup(title = "Project") {
+                SettingsStaticRow(
+                    title = "NanoChat is open source",
+                    subtitle = "We appreciate every bug report, suggestion, contribution, and bit of help from the community."
+                )
+                SettingsActionRow(
+                    title = "GitHub repository",
+                    subtitle = "Source code and project repository for NanoChat",
+                    onClick = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(GitHubRepoUrl))
+                            )
+                        }
+                    }
+                )
+                SettingsActionRow(
+                    title = "Model hub",
+                    subtitle = "NanoChat models on Hugging Face",
+                    onClick = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(HuggingFaceModelsUrl))
+                            )
                         }
                     }
                 )
@@ -1581,7 +2002,7 @@ internal fun AboutDeveloperSettings(
                     onClick = {
                         runCatching {
                             context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(privacyUrl))
+                                Intent(Intent.ACTION_VIEW, Uri.parse(PrivacyPolicyUrl))
                             )
                         }
                     }
@@ -1602,20 +2023,32 @@ internal fun OpenSourceLicensesSettings(
     ) {
         item {
             SettingsGroup(title = "Dependencies") {
-                SettingsActionRow(title = "Jetpack Compose", subtitle = "Android UI toolkit", onClick = {})
-                SettingsActionRow(title = "Material 3", subtitle = "Design system & components", onClick = {})
-                SettingsActionRow(title = "Kotlin Coroutines", subtitle = "Asynchronous programming", onClick = {})
-                SettingsActionRow(title = "Room", subtitle = "Local SQLite persistence", onClick = {})
-                SettingsActionRow(title = "DataStore", subtitle = "Typed preferences storage", onClick = {})
-                SettingsActionRow(title = "Hilt", subtitle = "Dependency injection", onClick = {})
-                SettingsActionRow(title = "OkHttp", subtitle = "HTTP client and SSE processing", onClick = {})
-                SettingsActionRow(title = "Coil", subtitle = "Image loading", onClick = {})
-                SettingsActionRow(title = "Markwon", subtitle = "Markdown rendering", onClick = {})
-                SettingsActionRow(title = "AICore", subtitle = "Android on-device AI integration", onClick = {})
-                SettingsActionRow(title = "LiteRT-LM", subtitle = "Local LLM runtime for downloaded models", onClick = {})
-                SettingsActionRow(title = "Firebase", subtitle = "App distribution and analytics", onClick = {})
-                SettingsActionRow(title = "kotlinx.serialization", subtitle = "JSON parsing and serialization", onClick = {})
-                SettingsActionRow(title = "EncryptedSharedPreferences", subtitle = "Secure secret storage", onClick = {})
+                SettingsStaticRow(title = "Jetpack Compose", subtitle = "Android UI toolkit")
+                SettingsStaticRow(title = "Material 3", subtitle = "Design system & components")
+                SettingsStaticRow(
+                    title = "Kotlin Coroutines",
+                    subtitle = "Asynchronous programming"
+                )
+                SettingsStaticRow(title = "Room", subtitle = "Local SQLite persistence")
+                SettingsStaticRow(title = "DataStore", subtitle = "Typed preferences storage")
+                SettingsStaticRow(title = "Hilt", subtitle = "Dependency injection")
+                SettingsStaticRow(title = "OkHttp", subtitle = "HTTP client and SSE processing")
+                SettingsStaticRow(title = "Coil", subtitle = "Image loading")
+                SettingsStaticRow(title = "Markwon", subtitle = "Markdown rendering")
+                SettingsStaticRow(title = "AICore", subtitle = "Android on-device AI integration")
+                SettingsStaticRow(
+                    title = "LiteRT-LM",
+                    subtitle = "Local LLM runtime for downloaded models"
+                )
+                SettingsStaticRow(title = "Firebase", subtitle = "App distribution and analytics")
+                SettingsStaticRow(
+                    title = "kotlinx.serialization",
+                    subtitle = "JSON parsing and serialization"
+                )
+                SettingsStaticRow(
+                    title = "EncryptedSharedPreferences",
+                    subtitle = "Secure secret storage"
+                )
             }
         }
     }
