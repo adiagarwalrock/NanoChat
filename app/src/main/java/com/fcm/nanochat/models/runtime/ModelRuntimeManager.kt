@@ -40,10 +40,12 @@ class ModelRuntimeManager(
     ): RuntimeHandle {
         return withContext(Dispatchers.IO) {
             mutex.withLock {
+                val normalizedModelId = modelId.trim().lowercase()
+                val configSignature = configSignature(defaultConfig)
                 val shouldReuse = activeRuntime != null &&
-                        activeModelId?.trim()?.lowercase() == modelId.trim().lowercase() &&
+                        activeModelId == normalizedModelId &&
                         activeModelPath == modelPath &&
-                        activeConfigSignature == configSignature(defaultConfig)
+                        activeConfigSignature == configSignature
                 if (shouldReuse) {
                     Log.d(TAG, "Reusing local runtime for modelId=$modelId")
                     _loadState.value = RuntimeLoadState(
@@ -91,9 +93,9 @@ class ModelRuntimeManager(
                 }
                 val initDuration = System.currentTimeMillis() - initStart
 
-                activeModelId = modelId
+                activeModelId = normalizedModelId
                 activeModelPath = modelPath
-                activeConfigSignature = configSignature(defaultConfig)
+                activeConfigSignature = configSignature
                 activeRuntime = runtime
 
                 _loadState.value = RuntimeLoadState(

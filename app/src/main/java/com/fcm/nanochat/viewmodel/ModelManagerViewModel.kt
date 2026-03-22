@@ -53,6 +53,7 @@ class ModelManagerViewModel @Inject constructor(
         inputs.copy(notice = noticeValue)
     }.combine(isRefreshing) { inputs, refreshing ->
         val runtimeMetrics = localModelRepository.latestRuntimeMetrics()
+        val nowEpochMs = System.currentTimeMillis()
         val cardItems = inputs.records
             .map { record ->
                 val model = record.allowlistedModel
@@ -60,7 +61,8 @@ class ModelManagerViewModel @Inject constructor(
                 val memory = mapMemoryState(
                     record = record,
                     runtimeLoadState = inputs.runtimeLoadState,
-                    runtimeMetrics = runtimeMetrics
+                    runtimeMetrics = runtimeMetrics,
+                    nowEpochMs = nowEpochMs
                 )
                 val diagnosticsMessage = when (val compatibility = record.compatibility) {
                     LocalModelCompatibilityState.Ready -> record.errorMessage
@@ -101,11 +103,6 @@ class ModelManagerViewModel @Inject constructor(
                     errorMessage = diagnosticsMessage
                 )
             }
-            .sortedWith(
-                compareByDescending<ModelCardUi> { it.isActive }
-                    .thenByDescending { it.recommendedForChat }
-                    .thenBy { it.displayName.lowercase() }
-            )
 
         val allowlistHydrated = inputs.allowlist.models.isNotEmpty() ||
                 inputs.allowlist.version.value.isNotBlank() ||
@@ -372,13 +369,14 @@ class ModelManagerViewModel @Inject constructor(
     private fun mapMemoryState(
         record: com.fcm.nanochat.models.registry.InstalledModelRecord,
         runtimeLoadState: RuntimeLoadState,
-        runtimeMetrics: com.fcm.nanochat.models.runtime.LocalRuntimeMetrics?
+        runtimeMetrics: com.fcm.nanochat.models.runtime.LocalRuntimeMetrics?,
+        nowEpochMs: Long
     ): ModelMemoryUi {
         val recordId = record.modelId.lowercase()
         val runtimeModelId = runtimeLoadState.modelId?.lowercase()
         val recentlyUsed = runtimeMetrics != null &&
                 runtimeMetrics.modelId.equals(record.modelId, ignoreCase = true) &&
-                System.currentTimeMillis() - runtimeMetrics.measuredAtEpochMs <= RECENT_USE_WINDOW_MS
+                nowEpochMs - runtimeMetrics.measuredAtEpochMs <= RECENT_USE_WINDOW_MS
 
         if (!record.isActive) {
             return ModelMemoryUi(LocalModelMemoryState.NotSelected, null)

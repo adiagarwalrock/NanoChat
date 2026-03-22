@@ -1,6 +1,9 @@
 package com.fcm.nanochat.inference
 
 object RepetitionDetector {
+    private val punctuationCandidates =
+        setOf('#', '\'', '$', '-', '_', '=', '|', '`', '.', '*', '+')
+
     /**
      * Determines if the given visible output is likely caught in a runaway repetition loop. This
      * checks for both single-character repeats (e.g. "########") and multi-word phrase limits (e.g.
@@ -22,7 +25,6 @@ object RepetitionDetector {
         val first = compact.first()
         if (first.isLetterOrDigit()) return false
 
-        val punctuationCandidates = setOf('#', '\'', '$', '-', '_', '=', '|', '`', '.', '*', '+')
         if (first !in punctuationCandidates) return false
 
         val sameRatio = compact.count { it == first }.toDouble() / compact.length
@@ -54,10 +56,7 @@ object RepetitionDetector {
 
             for (i in 1 until repeatThreshold) {
                 val startIdx = textLength - (blockSize * (i + 1))
-                val endIdx = textLength - (blockSize * i)
-                val precedingBlock = text.substring(startIdx, endIdx)
-
-                if (precedingBlock == candidateBlock) {
+                if (text.regionMatches(startIdx, candidateBlock, 0, blockSize)) {
                     repeatCount++
                 } else {
                     break

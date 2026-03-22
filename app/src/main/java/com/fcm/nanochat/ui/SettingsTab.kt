@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -74,8 +73,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.painter.ColorPainter
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -85,7 +82,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
-import coil.compose.AsyncImage
+import androidx.core.net.toUri
 import com.fcm.nanochat.R
 import com.fcm.nanochat.inference.RemoteConfigValidator
 import com.fcm.nanochat.model.GeminiNanoStatusUi
@@ -1523,40 +1520,6 @@ private fun StatusBadge(label: String, tone: BadgeTone) {
     }
 }
 
-@Composable
-private fun Avatar(avatarUrl: String?, name: String) {
-    val initials =
-        name.trim()
-            .split(" ")
-            .filter { it.isNotBlank() }
-            .mapNotNull { it.firstOrNull()?.uppercase() }
-            .take(2)
-            .joinToString("")
-
-    Box(
-        modifier =
-            Modifier
-                .size(52.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceContainer),
-        contentAlignment = Alignment.Center
-    ) {
-        AsyncImage(
-            model = avatarUrl,
-            contentDescription = "Avatar",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            placeholder = ColorPainter(MaterialTheme.colorScheme.surfaceContainer),
-            error = ColorPainter(MaterialTheme.colorScheme.surfaceContainer)
-        )
-        Text(
-            text = initials.ifBlank { "?" },
-            style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
 private data class BadgeData(val label: String, val tone: BadgeTone)
 
 private data class DebugReport(
@@ -1661,7 +1624,7 @@ private fun buildDebugReport(context: Context, state: SettingsScreenState): Debu
             appendLine("$GeminiStatusLabel: $geminiStatus")
             appendLine("$UsageLabel: $usageSummary")
         }.trim()
-    val emailIntent = buildEmailIntent(SupportEmail, emailSubject, emailBody)
+    val emailIntent = buildEmailIntent(emailSubject, emailBody)
 
     return DebugReport(
         appVersion = "$versionName ($versionCode)",
@@ -1696,19 +1659,29 @@ private fun geminiStatusLabel(state: SettingsScreenState): String {
     }
 }
 
-private fun buildEmailIntent(recipient: String, subject: String, body: String): Intent {
+private fun buildEmailIntent(subject: String, body: String): Intent {
     val uri =
         Uri.Builder()
             .scheme("mailto")
-            .opaquePart(recipient)
+            .opaquePart(SupportEmail)
             .appendQueryParameter("subject", subject)
             .appendQueryParameter("body", body)
             .build()
     return Intent(Intent.ACTION_SENDTO, uri).apply {
-        putExtra(Intent.EXTRA_EMAIL, arrayOf(recipient))
+        putExtra(Intent.EXTRA_EMAIL, arrayOf(SupportEmail))
         putExtra(Intent.EXTRA_SUBJECT, subject)
         putExtra(Intent.EXTRA_TEXT, body)
     }
+}
+
+private fun Context.startActivitySafely(intent: Intent) {
+    runCatching {
+        startActivity(intent)
+    }
+}
+
+private fun Context.openExternalLink(url: String) {
+    startActivitySafely(Intent(Intent.ACTION_VIEW, url.toUri()))
 }
 
 private fun debugBuildType(context: Context): String {
@@ -1892,11 +1865,7 @@ internal fun AppInfoSettings(
                 subtitle = DebugReportSubtitle
             ) {
                 Button(
-                    onClick = {
-                        runCatching {
-                            context.startActivity(debugReport.emailIntent)
-                        }
-                    },
+                    onClick = { context.startActivitySafely(debugReport.emailIntent) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = InputShape
                 ) {
@@ -1950,14 +1919,9 @@ internal fun AboutDeveloperSettings(
                     title = "Contact Us",
                     subtitle = SupportEmail,
                     onClick = {
-                        runCatching {
-                            val intent = buildEmailIntent(
-                                recipient = SupportEmail,
-                                subject = "NanoChat Feedback",
-                                body = ""
-                            )
-                            context.startActivity(intent)
-                        }
+                        context.startActivitySafely(
+                            buildEmailIntent(subject = "NanoChat Feedback", body = "")
+                        )
                     }
                 )
             }
@@ -1972,24 +1936,12 @@ internal fun AboutDeveloperSettings(
                 SettingsActionRow(
                     title = "GitHub repository",
                     subtitle = "Source code and project repository for NanoChat",
-                    onClick = {
-                        runCatching {
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(GitHubRepoUrl))
-                            )
-                        }
-                    }
+                    onClick = { context.openExternalLink(GitHubRepoUrl) }
                 )
                 SettingsActionRow(
                     title = "Model hub",
                     subtitle = "NanoChat models on Hugging Face",
-                    onClick = {
-                        runCatching {
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(HuggingFaceModelsUrl))
-                            )
-                        }
-                    }
+                    onClick = { context.openExternalLink(HuggingFaceModelsUrl) }
                 )
             }
         }
@@ -1999,13 +1951,7 @@ internal fun AboutDeveloperSettings(
                 SettingsActionRow(
                     title = stringResource(R.string.privacy_policy_title),
                     subtitle = "Read our privacy policy online",
-                    onClick = {
-                        runCatching {
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(PrivacyPolicyUrl))
-                            )
-                        }
-                    }
+                    onClick = { context.openExternalLink(PrivacyPolicyUrl) }
                 )
             }
         }

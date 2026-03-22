@@ -12,7 +12,6 @@ import com.fcm.nanochat.inference.GeneratedTextSanitizer
 import com.fcm.nanochat.inference.InferenceException
 import com.fcm.nanochat.inference.InferenceMode
 import com.fcm.nanochat.model.ChatMessage
-import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.ChatSession
 import com.fcm.nanochat.models.registry.ActiveModelStatus
@@ -114,37 +113,25 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
                     }
                     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    private val orderedSessions =
+        combine(sessions, pinnedSessionIds) { sessionList, pinnedIds ->
+            sessionList
+                .map { session -> session.copy(isPinned = pinnedIds.contains(session.id)) }
+                .sortedWith(
+                    compareByDescending<ChatSession> { it.isPinned }
+                        .thenByDescending { it.updatedAt }
+                )
+        }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     private val sessionState =
-            combine(sessions, pinnedSessionIds, messages, activeSessionId, isSending) {
-                    sessionList,
-                    pinnedIds,
-                    messageList,
-                    selectedId,
-                    sending ->
-                val orderedSessions =
-                        sessionList
-                                .map { session ->
-                                    session.copy(isPinned = pinnedIds.contains(session.id))
-                                }
-                                .sortedWith(
-                                        compareByDescending<ChatSession> { it.isPinned }
-                                                .thenByDescending { it.updatedAt }
-                                )
-
-                val uiMessages =
-                        messageList.map { message ->
-                            message.copy(
-                                    isStreaming =
-                                            sending &&
-                                                    message.role == ChatRole.ASSISTANT &&
-                                                    message.id == messageList.lastOrNull()?.id
-                            )
-                        }
-
+        combine(orderedSessions, messages, activeSessionId) { ordered,
+                                                              messageList,
+                                                              selectedId ->
                 SessionUiState(
-                        sessions = orderedSessions,
+                    sessions = ordered,
                         selectedSessionId = selectedId,
-                        messages = uiMessages
+                    messages = messageList
                 )
             }
 
@@ -400,7 +387,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         if (mode == InferenceMode.DOWNLOADED) {
             val error =
                 withContext(Dispatchers.IO) {
-                    repository.prepareSelectedLocalModel(settings.value)
+                    repository.prepareSelectedLocalModel(snapshot)
                 }
             if (!error.isNullOrBlank()) {
                 notice.value = error.takeIf { shouldSurfaceNotice(mode, it) }
@@ -480,7 +467,6 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
             TAG,
             "chat_generation_finished requestId=$requestId isCurrent=${activeRequestId == requestId}"
         )
-        isSending.value = false
         watchdogJob?.cancel()
         if (activeAssistantMessageId == assistantMessageId) {
             activeAssistantMessageId = null
