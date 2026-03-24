@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <cache-path
+        name="chat_capture"
+        path="chat_capture/" />
+    <files-path
+        name="chat_media"
+        path="chat_media/" />
+</paths>

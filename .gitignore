@@ -40,3 +40,7 @@ Thumbs.db
 .tmp/
 logs/
 app/google-services.json
+.gradle/
+.gradle-home/
+.idea/
+local.properties

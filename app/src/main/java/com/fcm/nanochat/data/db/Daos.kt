@@ -1,9 +1,11 @@
 package com.fcm.nanochat.data.db
 
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Relation
 import androidx.room.Transaction
 import com.fcm.nanochat.model.ChatRole
 import kotlinx.coroutines.flow.Flow
@@ -34,8 +36,9 @@ interface ChatSessionDao {
 
 @Dao
 interface ChatMessageDao {
+    @Transaction
     @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY createdAt ASC, id ASC")
-    fun observeMessages(sessionId: Long): Flow<List<ChatMessageEntity>>
+    fun observeMessages(sessionId: Long): Flow<List<ChatMessageWithParts>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(message: ChatMessageEntity): Long
@@ -50,6 +53,27 @@ interface ChatMessageDao {
     @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY createdAt DESC, id DESC LIMIT :limit")
     suspend fun latestMessages(sessionId: Long, limit: Int): List<ChatMessageEntity>
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPart(part: ChatMessagePartEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertParts(parts: List<ChatMessagePartEntity>): List<Long>
+
+    @Query("SELECT * FROM chat_message_parts WHERE messageId = :messageId ORDER BY partIndex ASC, id ASC")
+    suspend fun messageParts(messageId: Long): List<ChatMessagePartEntity>
+
+    @Query(
+        "SELECT * FROM chat_message_parts " +
+                "WHERE messageId IN (SELECT id FROM chat_messages WHERE sessionId = :sessionId)"
+    )
+    suspend fun sessionParts(sessionId: Long): List<ChatMessagePartEntity>
+
+    @Query("DELETE FROM chat_message_parts WHERE messageId = :messageId")
+    suspend fun deleteMessageParts(messageId: Long): Int
+
+    @Query("SELECT COUNT(*) FROM chat_message_parts WHERE relativePath = :relativePath")
+    suspend fun countPartsByRelativePath(relativePath: String): Long
+
     @Query("SELECT COUNT(*) FROM chat_messages WHERE role = :role")
     suspend fun countByRole(role: ChatRole): Long
 
@@ -59,6 +83,16 @@ interface ChatMessageDao {
     @Query("DELETE FROM chat_messages")
     suspend fun deleteAll(): Int
 }
+
+data class ChatMessageWithParts(
+    @Embedded val message: ChatMessageEntity,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "messageId",
+        entity = ChatMessagePartEntity::class
+    )
+    val parts: List<ChatMessagePartEntity>
+)
 
 @Dao
 interface InstalledModelDao {

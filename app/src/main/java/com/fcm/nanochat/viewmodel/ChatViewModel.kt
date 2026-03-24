@@ -1,19 +1,26 @@
 package com.fcm.nanochat.viewmodel
 
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fcm.nanochat.data.SettingsSnapshot
 import com.fcm.nanochat.data.ThinkingEffort
+import com.fcm.nanochat.data.db.ChatMessagePartState
+import com.fcm.nanochat.data.db.ChatMessagePartType
 import com.fcm.nanochat.data.repository.ChatRepository
 import com.fcm.nanochat.data.repository.LocalModelCapabilities
+import com.fcm.nanochat.data.repository.MessagePartWrite
 import com.fcm.nanochat.inference.BackendAvailability
 import com.fcm.nanochat.inference.GeneratedTextSanitizer
+import com.fcm.nanochat.inference.InferenceCapabilities
 import com.fcm.nanochat.inference.InferenceException
 import com.fcm.nanochat.inference.InferenceMode
 import com.fcm.nanochat.model.ChatMessage
 import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.ChatSession
+import com.fcm.nanochat.model.ComposerAttachment
+import com.fcm.nanochat.model.ComposerAttachmentType
 import com.fcm.nanochat.models.registry.ActiveModelStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -29,6 +36,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -44,6 +53,10 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
     private val generationMutex = Mutex()
     private val selectedSessionId = MutableStateFlow<Long?>(null)
     private val draft = MutableStateFlow("")
+    private val draftAttachment = MutableStateFlow<ComposerAttachment?>(null)
+    private val isPreparingAttachment = MutableStateFlow(false)
+    private val backendCapabilities =
+        MutableStateFlow(InferenceCapabilities.defaultTextOnly())
     private val notice = MutableStateFlow<String?>(null)
     private val isSending = MutableStateFlow(false)
     private var sendJob: Job? = null
@@ -51,7 +64,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
     private var activeAssistantMessageId: Long? = null
     private var activeAssistantPreview: String = ""
     private val cancelledRequestIds = mutableSetOf<Long>()
-    private var lastUserPrompt: String? = null
+    private var lastUserRequest: PendingUserRequest? = null
 
     private val settings =
             repository
@@ -135,31 +148,52 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
                 )
             }
 
+    private val sessionComposerState =
+        combine(sessionState, draft, draftAttachment, isPreparingAttachment) { sessionUi,
+                                                                               draftValue,
+                                                                               attachment,
+                                                                               isPreparingAttachmentValue ->
+            SessionComposerState(
+                sessionUi = sessionUi,
+                draft = draftValue,
+                draftAttachment = attachment,
+                isPreparingAttachment = isPreparingAttachmentValue
+            )
+        }
+
     private val baseUiState: StateFlow<ChatScreenState> =
-            combine(sessionState, draft, settings, activeLocalModelStatus, isSending) {
-                            sessionUi,
-                            draftValue,
-                            settingsValue,
-                            activeLocalModel,
-                            isSendingValue ->
-                        ChatScreenState(
-                                sessions = sessionUi.sessions,
-                                selectedSessionId = sessionUi.selectedSessionId,
-                                messages = sessionUi.messages,
-                                draft = draftValue,
-                                inferenceMode = settingsValue.inferenceMode,
-                                activeLocalModelName = activeLocalModel.displayName,
-                                isLocalModelReady = activeLocalModel.ready,
-                                localModelStatusMessage = activeLocalModel.message,
-                                isSending = isSendingValue,
-                                notice = null
-                        )
-                    }
-                    .stateIn(
-                            viewModelScope,
-                            SharingStarted.WhileSubscribed(5_000),
-                            ChatScreenState()
-                    )
+        combine(
+            sessionComposerState,
+            settings,
+            activeLocalModelStatus,
+            isSending,
+            backendCapabilities
+        ) { sessionComposer,
+            settingsValue,
+            activeLocalModel,
+            isSendingValue,
+            capabilities ->
+            ChatScreenState(
+                sessions = sessionComposer.sessionUi.sessions,
+                selectedSessionId = sessionComposer.sessionUi.selectedSessionId,
+                messages = sessionComposer.sessionUi.messages,
+                draft = sessionComposer.draft,
+                draftAttachment = sessionComposer.draftAttachment,
+                isPreparingAttachment = sessionComposer.isPreparingAttachment,
+                inferenceMode = settingsValue.inferenceMode,
+                capabilities = capabilities,
+                activeLocalModelName = activeLocalModel.displayName,
+                isLocalModelReady = activeLocalModel.ready,
+                localModelStatusMessage = activeLocalModel.message,
+                isSending = isSendingValue,
+                notice = null
+            )
+        }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                ChatScreenState()
+            )
 
     val uiState: StateFlow<ChatScreenState> =
             combine(baseUiState, activeLocalModelCapabilities, notice) {
@@ -180,6 +214,15 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
                     )
 
     init {
+        settings
+            .onEach { snapshot ->
+                val capabilities = withContext(Dispatchers.IO) {
+                    repository.backendCapabilities(snapshot.inferenceMode, snapshot)
+                }
+                backendCapabilities.value = capabilities
+            }
+            .launchIn(viewModelScope)
+
         viewModelScope.launch { selectedSessionId.value = repository.ensureSession() }
     }
 
@@ -187,10 +230,42 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         draft.value = value
     }
 
+    fun importImageAttachment(uri: Uri) {
+        importAttachment { repository.importImageAttachment(uri) }
+    }
+
+    fun importAudioAttachment(uri: Uri) {
+        importAttachment { repository.importAudioAttachment(uri) }
+    }
+
+    fun importCapturedImage(tempAbsolutePath: String) {
+        importAttachment { repository.importCapturedImage(tempAbsolutePath) }
+    }
+
+    fun removeDraftAttachment() {
+        val attachment = draftAttachment.value ?: return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                repository.discardAttachment(attachment)
+            }
+            draftAttachment.value = null
+        }
+    }
+
+    fun postNotice(message: String) {
+        notice.value = message.takeIf { it.isNotBlank() }
+    }
+
     fun createSession() {
         viewModelScope.launch {
+            draftAttachment.value?.let { attachment ->
+                withContext(Dispatchers.IO) {
+                    repository.discardAttachment(attachment)
+                }
+            }
             selectedSessionId.value = repository.createSession()
             draft.value = ""
+            draftAttachment.value = null
             notice.value = null
         }
     }
@@ -229,11 +304,12 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
                 sendJob?.cancel()
             }
             withContext(Dispatchers.IO) { repository.setInferenceMode(mode) }
+            val updatedSnapshot = withContext(Dispatchers.IO) { repository.settingsSnapshot() }
 
             if (mode == InferenceMode.DOWNLOADED) {
                 val preparationError =
                     withContext(Dispatchers.IO) {
-                        repository.prepareSelectedLocalModel(settings.value)
+                        repository.prepareSelectedLocalModel(updatedSnapshot)
                     }
                 if (!preparationError.isNullOrBlank() && shouldSurfaceNotice(preparationError)
                 ) {
@@ -244,7 +320,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
 
             when (val availability =
                             withContext(Dispatchers.IO) {
-                                repository.backendAvailability(mode, settings.value)
+                                repository.backendAvailability(mode, updatedSnapshot)
                             }
             ) {
                 is BackendAvailability.Unavailable -> {
@@ -256,30 +332,46 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
     }
 
     fun retryLastMessage() {
-        val prompt = lastUserPrompt ?: return
-        draft.value = prompt
+        val last = lastUserRequest ?: return
+        draft.value = last.prompt
+        draftAttachment.value = last.attachment
         sendMessage()
     }
 
     fun sendMessage() {
         val prompt = draft.value.trim()
+        val attachment = draftAttachment.value
         val sessionId = activeSessionId.value ?: return
-        if (prompt.isBlank() || isSending.value) return
+        if ((prompt.isBlank() && attachment == null) || isSending.value || isPreparingAttachment.value) {
+            return
+        }
 
         sendJob?.cancel()
         val requestId = ++activeRequestId
         cancelledRequestIds.remove(requestId)
         isSending.value = true
         notice.value = null
-        lastUserPrompt = prompt
+        lastUserRequest = PendingUserRequest(prompt = prompt, attachment = attachment)
 
         sendJob =
                 viewModelScope.launch {
-                    generationMutex.withLock { executeGeneration(requestId, sessionId, prompt) }
+                    generationMutex.withLock {
+                        executeGeneration(
+                            requestId = requestId,
+                            sessionId = sessionId,
+                            prompt = prompt,
+                            attachment = attachment
+                        )
+                    }
                 }
     }
 
-    private suspend fun executeGeneration(requestId: Long, sessionId: Long, prompt: String) {
+    private suspend fun executeGeneration(
+        requestId: Long,
+        sessionId: Long,
+        prompt: String,
+        attachment: ComposerAttachment?
+    ) {
         var assistantMessageId: Long? = null
         val assembler = StreamingMessageAssembler()
         var watchdogJob: Job? = null
@@ -291,19 +383,56 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
             val mode = snapshot.inferenceMode
             Log.d(TAG, "chat_generation_started requestId=$requestId mode=${mode.name}")
 
-            if (!checkAvailability(mode, snapshot)) return
+            if (!checkAvailability(mode, snapshot, attachment)) return
 
             val history = withContext(Dispatchers.IO) { repository.recentTurnsFor(mode, sessionId) }
-            val assistantId =
+            val (createdUserMessageId, assistantId) =
                 withContext(Dispatchers.IO) {
-                    repository.saveUserMessage(sessionId, prompt, snapshot)
-                    repository.insertAssistantPlaceholder(sessionId, snapshot)
+                    val persistedPrompt = messageContentForPersistence(prompt, attachment)
+                    val userId =
+                        repository.saveUserMessage(
+                            sessionId = sessionId,
+                            content = persistedPrompt,
+                            settings = snapshot,
+                            parts = buildUserParts(attachment)
+                        )
+                    val assistantIdLocal =
+                        repository.insertAssistantPlaceholder(sessionId, snapshot)
+                    userId to assistantIdLocal
                 }
 
             assistantMessageId = assistantId
             activeAssistantMessageId = assistantId
             activeAssistantPreview = ""
             draft.value = ""
+            draftAttachment.value = null
+
+            if (attachment?.type == ComposerAttachmentType.AUDIO) {
+                val transcript =
+                    withContext(Dispatchers.IO) {
+                        repository.transcribeAudio(
+                            mode = mode,
+                            settings = snapshot,
+                            attachment = attachment
+                        )
+                    }
+                ensureRequestActive(requestId)
+                withContext(Dispatchers.IO) {
+                    repository.updateAssistantMessage(assistantId, transcript.transcript)
+                    repository.replaceMessageParts(
+                        messageId = assistantId,
+                        parts = listOf(
+                            MessagePartWrite(
+                                partType = ChatMessagePartType.TRANSCRIPT,
+                                displayName = null,
+                                sourceMessageId = createdUserMessageId,
+                                state = ChatMessagePartState.COMPLETED
+                            )
+                        )
+                    )
+                }
+                return
+            }
 
             val parentJob = currentCoroutineContext()[Job]
             watchdogJob =
@@ -323,7 +452,14 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
             var lastPersistedLength = 0
             var lastPersistedSnapshot = ""
 
-            repository.streamResponse(mode, history, prompt, snapshot, sessionId).collect { delta ->
+            repository.streamResponse(
+                mode = mode,
+                history = history,
+                prompt = prompt,
+                settings = snapshot,
+                imageAttachment = attachment,
+                sessionId = sessionId
+            ).collect { delta ->
                 ensureRequestActive(requestId)
                 val content = assembler.append(mode, delta)
                 val filtered = filterThinking(content, snapshot.thinkingEffort)
@@ -382,8 +518,30 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
 
     private suspend fun checkAvailability(
         mode: InferenceMode,
-        snapshot: SettingsSnapshot
+        snapshot: SettingsSnapshot,
+        attachment: ComposerAttachment?
     ): Boolean {
+        val capabilities = withContext(Dispatchers.IO) {
+            repository.backendCapabilities(mode, snapshot)
+        }
+        backendCapabilities.value = capabilities
+
+        if (attachment != null) {
+            val unsupportedReason = when (attachment.type) {
+                ComposerAttachmentType.IMAGE -> capabilities.visionUnderstanding
+                    .takeIf { !it.supported }
+                    ?.reasonIfUnsupported
+
+                ComposerAttachmentType.AUDIO -> capabilities.audioTranscription
+                    .takeIf { !it.supported }
+                    ?.reasonIfUnsupported
+            }
+            if (!unsupportedReason.isNullOrBlank()) {
+                notice.value = unsupportedReason.takeIf { shouldSurfaceNotice(it) }
+                return false
+            }
+        }
+
         if (mode == InferenceMode.DOWNLOADED) {
             val error =
                 withContext(Dispatchers.IO) {
@@ -499,6 +657,68 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         notice.value = null
     }
 
+    private fun importAttachment(importer: suspend () -> ComposerAttachment) {
+        if (isSending.value) return
+
+        viewModelScope.launch {
+            isPreparingAttachment.value = true
+            notice.value = null
+            try {
+                val previousAttachment = draftAttachment.value
+                val imported = withContext(Dispatchers.IO) { importer() }
+                if (previousAttachment != null) {
+                    withContext(Dispatchers.IO) {
+                        repository.discardAttachment(previousAttachment)
+                    }
+                }
+                draftAttachment.value = imported
+            } catch (error: Throwable) {
+                val message = userFacingError(error).ifBlank { "Unable to attach media." }
+                notice.value = message.takeIf { shouldSurfaceNotice(it) }
+            } finally {
+                isPreparingAttachment.value = false
+            }
+        }
+    }
+
+    private fun buildUserParts(attachment: ComposerAttachment?): List<MessagePartWrite> {
+        if (attachment == null) return emptyList()
+        return when (attachment.type) {
+            ComposerAttachmentType.IMAGE -> listOf(
+                MessagePartWrite(
+                    partType = ChatMessagePartType.IMAGE,
+                    relativePath = attachment.relativePath,
+                    mimeType = attachment.mimeType,
+                    displayName = attachment.displayName,
+                    sizeBytes = attachment.sizeBytes,
+                    widthPx = attachment.widthPx,
+                    heightPx = attachment.heightPx,
+                    state = ChatMessagePartState.READY
+                )
+            )
+
+            ComposerAttachmentType.AUDIO -> listOf(
+                MessagePartWrite(
+                    partType = ChatMessagePartType.AUDIO,
+                    relativePath = attachment.relativePath,
+                    mimeType = attachment.mimeType,
+                    displayName = attachment.displayName,
+                    sizeBytes = attachment.sizeBytes,
+                    durationMs = attachment.durationMs,
+                    state = ChatMessagePartState.READY
+                )
+            )
+        }
+    }
+
+    private fun messageContentForPersistence(
+        prompt: String,
+        attachment: ComposerAttachment?
+    ): String {
+        if (attachment == null) return prompt
+        return prompt
+    }
+
     private fun shouldPersistStreamSnapshot(
             content: String,
             lastPersistTimeMs: Long,
@@ -538,6 +758,11 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
             is InferenceException.Busy ->
                     "AICore is busy or quota-limited. Wait a moment and retry."
             is InferenceException.RemoteFailure -> error.message.orEmpty()
+            is InferenceException.UnsupportedModality -> error.message.orEmpty()
+            is InferenceException.MissingPermission -> error.message.orEmpty()
+            is InferenceException.MissingFile -> error.message.orEmpty()
+            is InferenceException.TranscriptionFailure -> error.message.orEmpty()
+            is InferenceException.UploadFailure -> error.message.orEmpty()
             else -> error.message ?: "Inference failed."
         }
     }
@@ -572,4 +797,16 @@ private data class SessionUiState(
         val sessions: List<ChatSession>,
         val selectedSessionId: Long?,
         val messages: List<ChatMessage>
+)
+
+private data class SessionComposerState(
+    val sessionUi: SessionUiState,
+    val draft: String,
+    val draftAttachment: ComposerAttachment?,
+    val isPreparingAttachment: Boolean
+)
+
+private data class PendingUserRequest(
+    val prompt: String,
+    val attachment: ComposerAttachment?
 )

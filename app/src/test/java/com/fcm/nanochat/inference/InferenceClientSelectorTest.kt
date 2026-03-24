@@ -69,6 +69,9 @@ class InferenceClientSelectorTest {
         override suspend fun availability(settings: SettingsSnapshot): BackendAvailability =
             BackendAvailability.Available
 
+        override suspend fun capabilities(settings: SettingsSnapshot): InferenceCapabilities =
+            InferenceCapabilities.defaultTextOnly()
+
         override fun streamChat(request: InferenceRequest): Flow<String> = emptyFlow()
 
         override fun toString(): String = name

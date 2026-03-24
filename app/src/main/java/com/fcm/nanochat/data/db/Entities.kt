@@ -46,6 +46,54 @@ data class ChatMessageEntity(
     val updatedAt: Long
 )
 
+enum class ChatMessagePartType {
+    IMAGE,
+    AUDIO,
+    TRANSCRIPT
+}
+
+enum class ChatMessagePartState {
+    READY,
+    PENDING,
+    FAILED,
+    COMPLETED
+}
+
+@Entity(
+    tableName = "chat_message_parts",
+    foreignKeys = [
+        ForeignKey(
+            entity = ChatMessageEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["messageId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index(value = ["messageId"]),
+        Index(value = ["messageId", "partIndex"]),
+        Index(value = ["partType"]),
+        Index(value = ["sourceMessageId"])
+    ]
+)
+data class ChatMessagePartEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val messageId: Long,
+    val partIndex: Int,
+    val partType: ChatMessagePartType,
+    val relativePath: String?,
+    val mimeType: String?,
+    val displayName: String?,
+    val sizeBytes: Long?,
+    val widthPx: Int?,
+    val heightPx: Int?,
+    val durationMs: Long?,
+    val sourceMessageId: Long?,
+    val state: ChatMessagePartState,
+    val createdAt: Long,
+    val updatedAt: Long
+)
+
 @Entity(
     tableName = "installed_models",
     indices = [

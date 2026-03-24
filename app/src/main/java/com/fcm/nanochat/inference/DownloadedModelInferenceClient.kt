@@ -3,11 +3,13 @@ package com.fcm.nanochat.inference
 import android.util.Log
 import com.fcm.nanochat.data.AcceleratorPreference
 import com.fcm.nanochat.data.SettingsSnapshot
+import com.fcm.nanochat.data.media.ChatMediaStore
 import com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig
 import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
 import com.fcm.nanochat.models.registry.InstalledModelRecord
 import com.fcm.nanochat.models.registry.ModelInstallState
 import com.fcm.nanochat.models.registry.ModelRegistry
+import com.fcm.nanochat.models.runtime.LocalRuntimeAttachment
 import com.fcm.nanochat.models.runtime.LocalRuntimeTelemetry
 import com.fcm.nanochat.models.runtime.ModelRuntimeManager
 import kotlinx.coroutines.CancellationException
@@ -22,11 +24,13 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 
 class DownloadedModelInferenceClient(
     private val modelRegistry: ModelRegistry,
     private val runtimeManager: ModelRuntimeManager,
+    private val mediaStore: ChatMediaStore,
     private val telemetry: LocalRuntimeTelemetry
 ) : InferenceClient {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -100,6 +104,55 @@ class DownloadedModelInferenceClient(
         }
     }
 
+    override suspend fun capabilities(settings: SettingsSnapshot): InferenceCapabilities {
+        val runtimeMultimodalReady = supportsRuntimeMultimodalContent()
+        val activeModelId = resolveActiveModelId(settings, settings.activeLocalModelId)
+        val record = activeModelId?.let { resolveActiveModelRecord(it) }
+        val model = record?.allowlistedModel
+        val missingModelReason = if (activeModelId == null || record == null) {
+            "Choose an installed local model to use multimodal input."
+        } else {
+            "Selected local model does not declare multimodal support."
+        }
+
+        val visionState = when {
+            !isDownloadedImageInputEnabled() -> SupportedState.unsupported(
+                downloadedImageInputDisabledReason()
+            )
+
+            !runtimeMultimodalReady -> SupportedState.unsupported(
+                "Current local runtime build does not expose image content support."
+            )
+
+            model == null -> SupportedState.unsupported(missingModelReason)
+            !model.llmSupportImage -> SupportedState.unsupported(
+                "Selected local model does not support image understanding."
+            )
+
+            else -> SupportedState.supported()
+        }
+
+        val audioState = when {
+            !runtimeMultimodalReady -> SupportedState.unsupported(
+                "Current local runtime build does not expose audio content support."
+            )
+
+            model == null -> SupportedState.unsupported(missingModelReason)
+            !model.llmSupportAudio -> SupportedState.unsupported(
+                "Selected local model does not support audio understanding."
+            )
+
+            else -> SupportedState.supported()
+        }
+
+        return InferenceCapabilities(
+            textGeneration = SupportedState.supported(),
+            visionUnderstanding = visionState,
+            audioTranscription = audioState,
+            streaming = SupportedState.supported()
+        )
+    }
+
     private fun availabilityForReadyModel(record: InstalledModelRecord): BackendAvailability {
         val runtimeState = runtimeManager.loadState.value
         val runtimeModelId = normalizeModelId(runtimeState.modelId)
@@ -169,6 +222,32 @@ class DownloadedModelInferenceClient(
         val resolvedModelId = record.modelId
         val normalizedResolvedModelId = normalizeModelId(resolvedModelId)
         val model = record.allowlistedModel
+        val imageAttachment = request.imageAttachment
+        if (imageAttachment != null) {
+            if (!isDownloadedImageInputEnabled()) {
+                throw InferenceException.UnsupportedModality(
+                    downloadedImageInputDisabledReason()
+                )
+            }
+            if (!supportsRuntimeMultimodalContent()) {
+                throw InferenceException.UnsupportedModality(
+                    "Current local runtime build does not expose image content support."
+                )
+            }
+            if (model?.llmSupportImage != true) {
+                throw InferenceException.UnsupportedModality(
+                    "Selected local model does not support image understanding."
+                )
+            }
+        }
+
+        val runtimeAttachments = mutableListOf<LocalRuntimeAttachment>()
+        imageAttachment?.let { attachment ->
+            val imageFile = mediaStore.resolveFile(attachment.relativePath)
+                ?: throw InferenceException.MissingFile("Selected image file is missing.")
+            runtimeAttachments += LocalRuntimeAttachment.ImageFile(imageFile.absolutePath)
+        }
+
         val baseRuntimeConfig =
             applyAcceleratorPreference(
                 config = model?.defaultConfig
@@ -198,6 +277,13 @@ class DownloadedModelInferenceClient(
 
         val promptFamily = model?.promptFamily.toPromptFamily()
         val isGemmaFamily = promptFamily == DownloadedPromptFamily.GEMMA
+        val effectivePrompt = request.prompt.ifBlank {
+            if (imageAttachment != null) {
+                "Describe the attached image."
+            } else {
+                ""
+            }
+        }
         val formattedPrompt =
             if (isReusing) {
                 val systemPrompt =
@@ -210,7 +296,7 @@ class DownloadedModelInferenceClient(
                 val finalSystemInstruction = if (isGemmaFamily) "" else systemPrompt
                 val latestTurn =
                     PromptFormatter.formatLatestTurn(
-                        prompt = request.prompt,
+                        prompt = effectivePrompt,
                         thinkingEffort = request.settings.thinkingEffort,
                         supportsThinking = model?.supportsThinking ?: false
                     )
@@ -229,7 +315,7 @@ class DownloadedModelInferenceClient(
             } else {
                 PromptFormatter.formatDownloadedPrompt(
                     history = request.history,
-                    prompt = request.prompt,
+                    prompt = effectivePrompt,
                     maxTurns = 20,
                     promptFamily = model?.promptFamily ?: resolvedModelId,
                     thinkingEffort = request.settings.thinkingEffort,
@@ -420,7 +506,8 @@ class DownloadedModelInferenceClient(
                         currentRuntimeHandle.runtime.stream(
                             sessionId = activeSessionId,
                             prompt = formattedPrompt.userMessage,
-                            systemInstruction = formattedPrompt.systemInstruction
+                            systemInstruction = formattedPrompt.systemInstruction,
+                            attachments = runtimeAttachments
                         )
                             .collect { runtimeChunk ->
                                 currentCoroutineContext().ensureActive()
@@ -646,6 +733,11 @@ class DownloadedModelInferenceClient(
                 completionReason = "error"
                 currentRuntimeHandle.runtime.cancelActiveGeneration("error")
                 Log.e(TAG, "Downloaded runtime generation failed modelId=$resolvedModelId", error)
+                if (imageAttachment != null && isLikelyUnsupportedMultimodalError(error, "image")) {
+                    throw InferenceException.UnsupportedModality(
+                        "Selected local model/runtime could not process image input."
+                    )
+                }
                 throw InferenceException.BackendUnavailable(toFriendlyRuntimeError(error))
             }
         }
@@ -680,6 +772,110 @@ class DownloadedModelInferenceClient(
         }
 
         throw unstableOutputException(request.settings.acceleratorPreference)
+    }
+
+    override suspend fun transcribeAudio(
+        request: AudioTranscriptionRequest
+    ): AudioTranscriptionResult {
+        if (!supportsRuntimeMultimodalContent()) {
+            throw InferenceException.UnsupportedModality(
+                "Current local runtime build does not expose audio content support."
+            )
+        }
+
+        when (val availability = availability(request.settings)) {
+            BackendAvailability.Available -> Unit
+            is BackendAvailability.Unavailable -> {
+                throw InferenceException.BackendUnavailable(availability.message)
+            }
+        }
+
+        val activeModelId =
+            resolveActiveModelId(request.settings, request.settings.activeLocalModelId)
+                ?: throw InferenceException.Configuration("No local model selected.")
+        val record =
+            resolveActiveModelRecord(activeModelId)
+                ?: throw InferenceException.BackendUnavailable(
+                    "Selected local model is unavailable. Choose another model."
+                )
+        val model = record.allowlistedModel
+        if (model?.llmSupportAudio != true) {
+            throw InferenceException.UnsupportedModality(
+                "Selected local model does not support audio understanding."
+            )
+        }
+        val allowlistedModel = requireNotNull(model)
+
+        val localPath = record.localPath?.trim().orEmpty()
+        if (localPath.isBlank()) {
+            throw InferenceException.MissingFile(
+                "Selected local model file is missing. Re-download the model."
+            )
+        }
+
+        val audioFile = mediaStore.resolveFile(request.audioAttachment.relativePath)
+            ?: throw InferenceException.MissingFile("Selected audio file is missing.")
+
+        val runtimeConfig =
+            applyAcceleratorPreference(
+                config = allowlistedModel.defaultConfig,
+                preference = request.settings.acceleratorPreference
+            )
+
+        val handle = runCatching {
+            runtimeManager.acquire(
+                modelId = record.modelId,
+                modelPath = localPath,
+                defaultConfig = runtimeConfig,
+                expectedFileName = allowlistedModel.modelFile,
+                expectedFileType = allowlistedModel.fileType,
+                expectedSizeBytes = allowlistedModel.sizeInBytes
+            )
+        }.getOrElse { error ->
+            throw InferenceException.BackendUnavailable(toFriendlyRuntimeError(error))
+        }
+
+        val transcript = StringBuilder()
+        val prompt = buildAudioTranscriptionPrompt(request.audioAttachment.displayName)
+
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                handle.runtime.stream(
+                    sessionId = null,
+                    prompt = prompt,
+                    systemInstruction = DOWNLOADED_AUDIO_TRANSCRIPTION_SYSTEM_PROMPT,
+                    attachments = listOf(LocalRuntimeAttachment.AudioFile(audioFile.absolutePath))
+                ).collect { chunk ->
+                    transcript.append(chunk)
+                }
+
+                val transcriptText = GeneratedTextSanitizer
+                    .sanitize(raw = transcript.toString(), preserveThinkingBlocks = false)
+                    .trim()
+                if (transcriptText.isBlank()) {
+                    throw InferenceException.TranscriptionFailure(
+                        "Local model returned an empty transcript."
+                    )
+                }
+                AudioTranscriptionResult(transcript = transcriptText)
+            }.getOrElse { error ->
+                when (error) {
+                    is CancellationException -> throw error
+                    is InferenceException -> throw error
+                    else -> {
+                        if (isLikelyUnsupportedMultimodalError(error, "audio")) {
+                            throw InferenceException.UnsupportedModality(
+                                "Selected local model/runtime could not process audio input."
+                            )
+                        }
+                        throw InferenceException.TranscriptionFailure(
+                            "Local audio transcription failed.",
+                            error
+                        )
+                    }
+                }
+            }
+        }
     }
 
     override fun release() {
@@ -748,6 +944,41 @@ class DownloadedModelInferenceClient(
             }
         }
         return false
+    }
+
+    private fun supportsRuntimeMultimodalContent(): Boolean {
+        return runCatching {
+            Class.forName("com.google.ai.edge.litertlm.Content\$ImageFile")
+            Class.forName("com.google.ai.edge.litertlm.Content\$AudioFile")
+        }.isSuccess
+    }
+
+    private fun isDownloadedImageInputEnabled(): Boolean {
+        // Temporary kill-switch until LiteRT-LM image turns are stable on production devices.
+        return System.getProperty(DEBUG_ENABLE_LOCAL_IMAGE_INPUT_PROPERTY)
+            ?.toBooleanStrictOrNull() == true
+    }
+
+    private fun downloadedImageInputDisabledReason(): String {
+        return "Local image input is temporarily unavailable in Downloaded mode. Use Remote mode for image understanding."
+    }
+
+    private fun isLikelyUnsupportedMultimodalError(error: Throwable, modality: String): Boolean {
+        val combined = buildString {
+            append(error.message.orEmpty())
+            append(' ')
+            append(error.cause?.message.orEmpty())
+        }.lowercase()
+
+        if (combined.isBlank()) return false
+        if ("unsupported" !in combined && "not support" !in combined) return false
+
+        return modality in combined || "multimodal" in combined || "content" in combined
+    }
+
+    private fun buildAudioTranscriptionPrompt(displayName: String): String {
+        val label = displayName.trim().ifBlank { "the attached audio file" }
+        return "Transcribe $label exactly as spoken. Return only the transcript text."
     }
 
     private fun normalizeModelId(value: String?): String {
@@ -951,7 +1182,11 @@ class DownloadedModelInferenceClient(
         const val DEBUG_VISIBLE_STALL_WATCHDOG_PROPERTY =
             "nanochat.debug.local_visible_stall_watchdog_ms"
         const val DEBUG_PROMPT_LOGGING_PROPERTY = "nanochat.debug.log_local_prompts"
+        const val DEBUG_ENABLE_LOCAL_IMAGE_INPUT_PROPERTY =
+            "nanochat.debug.enable_local_image_input"
         const val PROMPT_LOG_PREVIEW_LIMIT = 1_800
+        const val DOWNLOADED_AUDIO_TRANSCRIPTION_SYSTEM_PROMPT =
+            "You are a precise transcription assistant. Transcribe the audio faithfully in plain text without summaries or extra commentary."
     }
 }
 

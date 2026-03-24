@@ -12,17 +12,12 @@ import com.fcm.nanochat.model.SettingsScreenState
 import com.fcm.nanochat.model.UsageStats
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import javax.inject.Inject
 
 @HiltViewModel
@@ -43,6 +38,7 @@ class SettingsViewModel @Inject constructor(
                         current.copy(
                             baseUrl = snapshot.baseUrl,
                             modelName = snapshot.modelName,
+                            transcriptionModelName = snapshot.transcriptionModelName,
                             apiKey = snapshot.apiKey,
                             temperature = snapshot.temperature,
                             topP = snapshot.topP,
@@ -57,6 +53,7 @@ class SettingsViewModel @Inject constructor(
                         )
                     } else {
                         current.copy(
+                            transcriptionModelName = snapshot.transcriptionModelName,
                             thinkingEffort = snapshot.thinkingEffort,
                             acceleratorPreference = snapshot.acceleratorPreference,
                             geminiStatus = current.geminiStatus.copy(
@@ -83,6 +80,10 @@ class SettingsViewModel @Inject constructor(
 
     fun updateApiKey(value: String) {
         _uiState.update { it.copy(apiKey = value, saveNotice = null) }
+    }
+
+    fun updateTranscriptionModelName(value: String) {
+        _uiState.update { it.copy(transcriptionModelName = value, saveNotice = null) }
     }
 
     fun updateTemperature(value: Double) {
@@ -116,6 +117,7 @@ class SettingsViewModel @Inject constructor(
             preferences.updateModelSettings(
                 baseUrl = current.baseUrl,
                 modelName = current.modelName,
+                transcriptionModelName = current.transcriptionModelName,
                 temperature = current.temperature,
                 topP = current.topP,
                 contextLength = current.contextLength

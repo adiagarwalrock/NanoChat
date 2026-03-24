@@ -40,8 +40,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
@@ -97,6 +102,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import coil.compose.AsyncImage
 import com.fcm.nanochat.R
 import com.fcm.nanochat.data.AcceleratorPreference
 import com.fcm.nanochat.data.ThinkingEffort
@@ -105,12 +111,16 @@ import com.fcm.nanochat.inference.ReasoningContentParser
 import com.fcm.nanochat.model.ChatMessage
 import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatScreenState
+import com.fcm.nanochat.model.ComposerAttachment
+import com.fcm.nanochat.model.ComposerAttachmentType
+import com.fcm.nanochat.model.MessagePart
 import com.fcm.nanochat.model.SettingsScreenState
 import com.fcm.nanochat.ui.theme.NanoChatTheme
 import io.noties.markwon.Markwon
 import io.noties.markwon.ext.latex.JLatexMathPlugin
 import io.noties.markwon.ext.latex.JLatexMathTheme
 import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
+import java.io.File
 
 private val HeaderIconShape = RoundedCornerShape(14.dp)
 private val HeaderSelectorShape = RoundedCornerShape(18.dp)
@@ -129,6 +139,10 @@ internal fun ChatTab(
         onSendMessage: () -> Unit,
         onStopGeneration: () -> Unit,
         onMessageDraftChange: (String) -> Unit,
+        onRequestCameraCapture: () -> Unit,
+        onRequestImagePicker: () -> Unit,
+        onRequestAudioPicker: () -> Unit,
+        onRemoveDraftAttachment: () -> Unit,
         onRetryLast: () -> Unit,
         onInferenceModeChange: (InferenceMode) -> Unit,
         onOpenModelGallery: () -> Unit,
@@ -161,6 +175,10 @@ internal fun ChatTab(
                     onSendMessage = onSendMessage,
                     onStopGeneration = onStopGeneration,
                     onMessageDraftChange = onMessageDraftChange,
+                onRequestCameraCapture = onRequestCameraCapture,
+                onRequestImagePicker = onRequestImagePicker,
+                onRequestAudioPicker = onRequestAudioPicker,
+                onRemoveDraftAttachment = onRemoveDraftAttachment,
                     onRetryLast = onRetryLast,
                     onInferenceModeChange = onInferenceModeChange,
                     onOpenModelGallery = onOpenModelGallery,
@@ -186,6 +204,10 @@ private fun ChatTabContent(
         onSendMessage: () -> Unit,
         onStopGeneration: () -> Unit,
         onMessageDraftChange: (String) -> Unit,
+        onRequestCameraCapture: () -> Unit,
+        onRequestImagePicker: () -> Unit,
+        onRequestAudioPicker: () -> Unit,
+        onRemoveDraftAttachment: () -> Unit,
         onRetryLast: () -> Unit,
         onInferenceModeChange: (InferenceMode) -> Unit,
         onOpenModelGallery: () -> Unit,
@@ -198,6 +220,7 @@ private fun ChatTabContent(
         onDeleteMessage: (ChatMessage) -> Unit
 ) {
         var controlsVisible by remember { mutableStateOf(false) }
+    var attachmentsVisible by remember { mutableStateOf(false) }
     val composerHeightPxState = remember { mutableIntStateOf(0) }
     val bottomPadding = with(LocalDensity.current) { composerHeightPxState.intValue.toDp() }
         val listState = rememberLazyListState()
@@ -277,9 +300,14 @@ private fun ChatTabContent(
 
                 Composer(
                         draft = state.draft,
+                    draftAttachment = state.draftAttachment,
+                    isPreparingAttachment = state.isPreparingAttachment,
                         isSending = state.isSending,
+                    capabilities = state.capabilities,
                         notice = state.notice,
                         canSend = !showLocalModelCta,
+                    onOpenAttachments = { attachmentsVisible = true },
+                    onRemoveAttachment = onRemoveDraftAttachment,
                         onOpenControls = { controlsVisible = true },
                         onDraftChange = onMessageDraftChange,
                         onSend = onSendMessage,
@@ -308,6 +336,25 @@ private fun ChatTabContent(
                                 onUpdateAccelerator = onAcceleratorChange
                         )
                 }
+
+            if (attachmentsVisible) {
+                AttachmentActionsSheet(
+                    capabilities = state.capabilities,
+                    onDismiss = { attachmentsVisible = false },
+                    onTakePhoto = {
+                        attachmentsVisible = false
+                        onRequestCameraCapture()
+                    },
+                    onPickImage = {
+                        attachmentsVisible = false
+                        onRequestImagePicker()
+                    },
+                    onPickAudio = {
+                        attachmentsVisible = false
+                        onRequestAudioPicker()
+                    }
+                )
+            }
         }
 }
 
@@ -1064,15 +1111,26 @@ private fun MessageRow(
                                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.86f),
                                         tonalElevation = 1.dp
                                 ) {
-                                        MarkdownMessage(
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp, vertical = 11.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        MessageAttachmentParts(
+                                            parts = message.parts,
+                                            isUser = true
+                                        )
+                                        if (message.content.isNotBlank()) {
+                                            MarkdownMessage(
                                                 content = message.content,
-                                            textColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                textColor = MaterialTheme.colorScheme.onPrimaryContainer,
                                                 fontSizeSp = 15f,
                                                 lineSpacingMultiplier = 1.33f,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 14.dp, vertical = 11.dp)
-                                        )
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    }
                                 }
                         } else {
                                 Column(
@@ -1108,6 +1166,10 @@ private fun MessageRow(
                                                                 modifier = Modifier.fillMaxWidth()
                                                         )
                                                 }
+                                        MessageAttachmentParts(
+                                            parts = message.parts,
+                                            isUser = false
+                                        )
                                         }
                                 }
                         }
@@ -1136,6 +1198,91 @@ private fun MessageRow(
                         )
                 }
         }
+}
+
+@Composable
+private fun MessageAttachmentParts(
+    parts: List<MessagePart>,
+    isUser: Boolean
+) {
+    val nonTextParts = parts.filterNot { it is MessagePart.TextPart }
+    if (nonTextParts.isEmpty()) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        nonTextParts.forEach { part ->
+            when (part) {
+                is MessagePart.ImagePart -> {
+                    AsyncImage(
+                        model = File(part.absolutePath),
+                        contentDescription = stringResource(R.string.attachment_image_preview),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                    )
+                }
+
+                is MessagePart.AudioPart -> {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isUser) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHighest
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Audiotrack,
+                                contentDescription = null
+                            )
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = part.displayName
+                                        ?: stringResource(R.string.attach_choose_audio),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                part.durationMs?.let {
+                                    Text(
+                                        text = formatDuration(it),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                is MessagePart.TranscriptPart -> {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Text(
+                            text = part.label ?: stringResource(R.string.transcript_label),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+
+                is MessagePart.TextPart -> Unit
+            }
+        }
+    }
 }
 
 @Composable
@@ -1443,10 +1590,15 @@ private fun MarkdownMessage(
 @Composable
 private fun Composer(
         draft: String,
+        draftAttachment: ComposerAttachment?,
+        isPreparingAttachment: Boolean,
         isSending: Boolean,
+        capabilities: com.fcm.nanochat.inference.InferenceCapabilities,
         notice: String?,
         modifier: Modifier = Modifier,
         canSend: Boolean = true,
+        onOpenAttachments: () -> Unit,
+        onRemoveAttachment: () -> Unit,
         onOpenControls: () -> Unit,
         onDraftChange: (String) -> Unit,
         onSend: () -> Unit,
@@ -1454,7 +1606,12 @@ private fun Composer(
         onRetry: () -> Unit
 ) {
     val sendEnabled =
-        remember(canSend, draft, isSending) { canSend && draft.isNotBlank() && !isSending }
+        remember(canSend, draft, draftAttachment, isSending, isPreparingAttachment) {
+            canSend &&
+                    (draft.isNotBlank() || draftAttachment != null) &&
+                    !isSending &&
+                    !isPreparingAttachment
+        }
         val sendInteractionSource = remember { MutableInteractionSource() }
         val sendPressed by sendInteractionSource.collectIsPressedAsState()
         val haptics = LocalHapticFeedback.current
@@ -1492,11 +1649,42 @@ private fun Composer(
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    if (draftAttachment != null) {
+                        DraftAttachmentPreview(
+                            attachment = draftAttachment,
+                            onRemove = onRemoveAttachment,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    if (isPreparingAttachment) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+
                         Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(
+                                    alpha = 0.8f
+                                )
+                            ) {
+                                IconButton(
+                                    onClick = onOpenAttachments,
+                                    enabled = !isSending && !isPreparingAttachment,
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AttachFile,
+                                        contentDescription = stringResource(R.string.attach_media),
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+
                                 Surface(
                                         shape = RoundedCornerShape(14.dp),
                                     color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(
@@ -1521,7 +1709,11 @@ private fun Composer(
                                         modifier = Modifier.weight(1f),
                                         placeholder = {
                                                 Text(
-                                                    text = stringResource(id = R.string.composer_placeholder),
+                                                    text = if (capabilities.visionUnderstanding.supported) {
+                                                        stringResource(id = R.string.composer_placeholder_multimodal)
+                                                    } else {
+                                                        stringResource(id = R.string.composer_placeholder)
+                                                    },
                                                         style = MaterialTheme.typography.bodyMedium
                                                 )
                                         },
@@ -1569,9 +1761,11 @@ private fun Composer(
                                         ) {
                                                 Icon(
                                                     imageVector = if (isSending) Icons.Default.Stop else Icons.Default.ArrowUpward,
-                                                    contentDescription = if (isSending) "Stop generation" else stringResource(
-                                                        id = R.string.send_message
-                                                    ),
+                                                    contentDescription = if (isSending) {
+                                                        stringResource(id = R.string.stop_generation)
+                                                    } else {
+                                                        stringResource(id = R.string.send_message)
+                                                    },
                                                         tint = sendContentColor
                                                 )
                                         }
@@ -1599,6 +1793,178 @@ private fun Composer(
         }
 }
 
+@Composable
+private fun DraftAttachmentPreview(
+    attachment: ComposerAttachment,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            when (attachment.type) {
+                ComposerAttachmentType.IMAGE -> {
+                    AsyncImage(
+                        model = File(attachment.absolutePath),
+                        contentDescription = stringResource(R.string.attachment_image_preview),
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                    )
+                }
+
+                ComposerAttachmentType.AUDIO -> {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Audiotrack,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(14.dp)
+                        )
+                    }
+                }
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = attachment.displayName,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                val metadata = when (attachment.type) {
+                    ComposerAttachmentType.IMAGE -> listOfNotNull(
+                        attachment.widthPx?.let { width ->
+                            attachment.heightPx?.let { height -> "${width}x$height" }
+                        }
+                    ).joinToString(" · ")
+
+                    ComposerAttachmentType.AUDIO -> listOfNotNull(
+                        attachment.durationMs?.let { formatDuration(it) }
+                    ).joinToString(" · ")
+                }
+                if (metadata.isNotBlank()) {
+                    Text(
+                        text = metadata,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            IconButton(onClick = onRemove) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = stringResource(R.string.remove_attachment)
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AttachmentActionsSheet(
+    capabilities: com.fcm.nanochat.inference.InferenceCapabilities,
+    onDismiss: () -> Unit,
+    onTakePhoto: () -> Unit,
+    onPickImage: () -> Unit,
+    onPickAudio: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.attach_sheet_title),
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            AttachmentActionButton(
+                text = stringResource(R.string.attach_take_photo),
+                icon = Icons.Default.CameraAlt,
+                enabled = true,
+                reason = capabilities.visionUnderstanding.reasonIfUnsupported,
+                onClick = onTakePhoto
+            )
+            AttachmentActionButton(
+                text = stringResource(R.string.attach_choose_image),
+                icon = Icons.Default.Image,
+                enabled = true,
+                reason = capabilities.visionUnderstanding.reasonIfUnsupported,
+                onClick = onPickImage
+            )
+            AttachmentActionButton(
+                text = stringResource(R.string.attach_choose_audio),
+                icon = Icons.Default.Audiotrack,
+                enabled = true,
+                reason = capabilities.audioTranscription.reasonIfUnsupported,
+                onClick = onPickAudio
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun AttachmentActionButton(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean,
+    reason: String?,
+    onClick: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Surface(
+            onClick = onClick,
+            enabled = enabled,
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(imageVector = icon, contentDescription = null)
+                Text(text = text, style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+        if (!reason.isNullOrBlank()) {
+            Text(
+                text = reason,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
 private fun shareMessage(context: android.content.Context, content: String) {
         if (content.isBlank()) return
 
@@ -1611,6 +1977,13 @@ private fun shareMessage(context: android.content.Context, content: String) {
                 chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         runCatching { context.startActivity(chooser) }
+}
+
+private fun formatDuration(durationMs: Long): String {
+    val totalSeconds = (durationMs / 1000L).coerceAtLeast(0L)
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return "%d:%02d".format(minutes, seconds)
 }
 
 private fun normalizeLists(raw: String): String {
@@ -1671,6 +2044,10 @@ private fun ChatTabPreview() {
                         onSendMessage = {},
                         onStopGeneration = {},
                         onMessageDraftChange = {},
+                    onRequestCameraCapture = {},
+                    onRequestImagePicker = {},
+                    onRequestAudioPicker = {},
+                    onRemoveDraftAttachment = {},
                         onRetryLast = {},
                         onInferenceModeChange = {},
                         onOpenModelGallery = {},
@@ -1706,6 +2083,10 @@ private fun ChatTabDarkPreview() {
                         onSendMessage = {},
                         onStopGeneration = {},
                         onMessageDraftChange = {},
+                    onRequestCameraCapture = {},
+                    onRequestImagePicker = {},
+                    onRequestAudioPicker = {},
+                    onRemoveDraftAttachment = {},
                         onRetryLast = {},
                         onInferenceModeChange = {},
                         onOpenModelGallery = {},
@@ -1726,8 +2107,13 @@ private fun ComposerPreview() {
         NanoChatTheme {
                 Composer(
                         draft = "Hello, I have a question about...",
+                    draftAttachment = null,
+                    isPreparingAttachment = false,
                         isSending = false,
+                    capabilities = com.fcm.nanochat.inference.InferenceCapabilities.defaultTextOnly(),
                         notice = null,
+                    onOpenAttachments = {},
+                    onRemoveAttachment = {},
                         onOpenControls = {},
                         onDraftChange = {},
                         onSend = {},

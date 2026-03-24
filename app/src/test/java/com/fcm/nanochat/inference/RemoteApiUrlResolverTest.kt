@@ -19,4 +19,20 @@ class RemoteApiUrlResolverTest {
 
         assertEquals("https://example.com/custom/chat/completions", resolved)
     }
+
+    @Test
+    fun `audioTranscriptionsUrl appends endpoint when base url does not include it`() {
+        val resolved = RemoteApiUrlResolver.audioTranscriptionsUrl("https://api.openai.com/v1/")
+
+        assertEquals("https://api.openai.com/v1/audio/transcriptions", resolved)
+    }
+
+    @Test
+    fun `audioTranscriptionsUrl preserves endpoint when already included`() {
+        val resolved = RemoteApiUrlResolver.audioTranscriptionsUrl(
+            "https://example.com/custom/audio/transcriptions"
+        )
+
+        assertEquals("https://example.com/custom/audio/transcriptions", resolved)
+    }
 }

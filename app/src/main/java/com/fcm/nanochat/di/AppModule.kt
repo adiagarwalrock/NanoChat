@@ -4,6 +4,7 @@ import android.content.Context
 import com.fcm.nanochat.data.AppPreferences
 import com.fcm.nanochat.data.db.AppDatabase
 import com.fcm.nanochat.data.db.InstalledModelDao
+import com.fcm.nanochat.data.media.ChatMediaStore
 import com.fcm.nanochat.data.repository.ChatRepository
 import com.fcm.nanochat.data.repository.LocalModelRepository
 import com.fcm.nanochat.inference.DownloadedModelInferenceClient
@@ -48,6 +49,12 @@ object AppModule {
     @Singleton
     fun provideAppPreferences(@ApplicationContext context: Context): AppPreferences {
         return AppPreferences(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideChatMediaStore(@ApplicationContext context: Context): ChatMediaStore {
+        return ChatMediaStore(context)
     }
 
     @Provides
@@ -187,19 +194,24 @@ object AppModule {
     fun provideDownloadedModelInferenceClient(
         modelRegistry: ModelRegistry,
         runtimeManager: ModelRuntimeManager,
+        mediaStore: ChatMediaStore,
         telemetry: InMemoryLocalRuntimeTelemetry
     ): DownloadedModelInferenceClient {
         return DownloadedModelInferenceClient(
             modelRegistry = modelRegistry,
             runtimeManager = runtimeManager,
+            mediaStore = mediaStore,
             telemetry = telemetry
         )
     }
 
     @Provides
     @Singleton
-    fun provideRemoteInferenceClient(httpClient: OkHttpClient): RemoteInferenceClient {
-        return RemoteInferenceClient(httpClient)
+    fun provideRemoteInferenceClient(
+        httpClient: OkHttpClient,
+        mediaStore: ChatMediaStore
+    ): RemoteInferenceClient {
+        return RemoteInferenceClient(httpClient, mediaStore)
     }
 
     @Provides
@@ -207,6 +219,7 @@ object AppModule {
     fun provideChatRepository(
         database: AppDatabase,
         preferences: AppPreferences,
+        mediaStore: ChatMediaStore,
         localModelRepository: LocalModelRepository,
         localInferenceClient: LocalInferenceClient,
         downloadedInferenceClient: DownloadedModelInferenceClient,
@@ -215,6 +228,7 @@ object AppModule {
         return ChatRepository(
             database = database,
             preferences = preferences,
+            mediaStore = mediaStore,
             localModelRepository = localModelRepository,
             localInferenceClient = localInferenceClient,
             downloadedInferenceClient = downloadedInferenceClient,

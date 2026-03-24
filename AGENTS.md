@@ -63,7 +63,8 @@ Architecture Snapshot
   `di/`.
 - Data: Room entities `ChatSessionEntity`, `ChatMessageEntity`, `InstalledModelEntity`; DAOs for
   session/message/model install; explicit
-  migrations are in place (`1->2`, `2->3`, `3->4`).
+  migrations are in place (`1->2`, `2->3`, `3->4`, `4->5` for `chat_message_parts` multimodal
+  metadata).
 - Preferences: `AppPreferences` merges DataStore (non-secret) + EncryptedSharedPreferences (secrets) into `SettingsSnapshot` Flow.
 - Domain: `InferenceClient` interface with availability + streamChat; selector + formatter + assembler implement backend semantics.
 - UI: Compose Material 3 screens in `ui/`; state from `ChatScreenState` and `SettingsScreenState` flows.
@@ -164,6 +165,9 @@ Contribution & Hygiene
 - Respect user changes; no destructive git commands. Only stage/commit when explicitly asked.
 - Use small, reviewable PRs with clear what/why, focusing on user-facing impact and backend behavior.
 - If adding migrations/version bumps, add tests and document here.
+- Migration note (2026-03-22): DB version `5` introduces `chat_message_parts` for
+  image/audio/transcript
+  attachments with explicit `Migration4To5` and migration coverage in androidTest.
 - Fix (2025-03-18): LiteRtLmRuntime avoids blocking flow signals on native cleanup;
   ModelLifecycleCoord ignores non-critical memory trim level 20 (UI_HIDDEN) to prevent aggressive
   ejection on task switch.

@@ -34,7 +34,19 @@ class LocalInferenceClient : InferenceClient {
         }
     }
 
+    override suspend fun capabilities(settings: SettingsSnapshot): InferenceCapabilities {
+        return InferenceCapabilities.defaultTextOnly(
+            reason = "Gemini Nano in NanoChat currently supports text-only chat."
+        )
+    }
+
     override fun streamChat(request: InferenceRequest): Flow<String> = flow {
+        if (request.imageAttachment != null) {
+            throw InferenceException.UnsupportedModality(
+                "Gemini Nano currently does not support image input in NanoChat."
+            )
+        }
+
         when (val availability = availability(request.settings)) {
             is BackendAvailability.Unavailable -> throw InferenceException.BackendUnavailable(availability.message)
             BackendAvailability.Available -> Unit
@@ -199,7 +211,12 @@ class LocalInferenceClient : InferenceClient {
             is InferenceException.Busy,
             is InferenceException.BackendUnavailable,
             is InferenceException.Configuration,
-            is InferenceException.RemoteFailure -> mapped.message.orEmpty()
+            is InferenceException.RemoteFailure,
+            is InferenceException.UnsupportedModality,
+            is InferenceException.MissingPermission,
+            is InferenceException.MissingFile,
+            is InferenceException.TranscriptionFailure,
+            is InferenceException.UploadFailure -> mapped.message.orEmpty()
         }
     }
 

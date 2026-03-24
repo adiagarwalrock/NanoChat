@@ -14,8 +14,13 @@ import com.fcm.nanochat.models.registry.ModelInstallState
 import com.fcm.nanochat.models.registry.ModelStorageLocation
 
 @Database(
-    entities = [ChatSessionEntity::class, ChatMessageEntity::class, InstalledModelEntity::class],
-    version = 4,
+    entities = [
+        ChatSessionEntity::class,
+        ChatMessageEntity::class,
+        ChatMessagePartEntity::class,
+        InstalledModelEntity::class
+    ],
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(RoomConverters::class)
@@ -27,10 +32,10 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "nanochat.db")
-                .addMigrations(Migration1To2, Migration2To3, Migration3To4)
+                .addMigrations(*ALL_MIGRATIONS)
                 .build()
 
-        private val Migration1To2 = object : Migration(1, 2) {
+        internal val Migration1To2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "ALTER TABLE `chat_messages` " +
@@ -59,7 +64,7 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        private val Migration2To3 = object : Migration(2, 3) {
+        internal val Migration2To3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_chat_messages_sessionId_createdAt_id` " +
@@ -68,7 +73,7 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        private val Migration3To4 = object : Migration(3, 4) {
+        internal val Migration3To4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `installed_models` (" +
@@ -97,6 +102,54 @@ abstract class AppDatabase : RoomDatabase() {
                 )
             }
         }
+
+        internal val Migration4To5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `chat_message_parts` (" +
+                            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                            "`messageId` INTEGER NOT NULL, " +
+                            "`partIndex` INTEGER NOT NULL, " +
+                            "`partType` TEXT NOT NULL, " +
+                            "`relativePath` TEXT, " +
+                            "`mimeType` TEXT, " +
+                            "`displayName` TEXT, " +
+                            "`sizeBytes` INTEGER, " +
+                            "`widthPx` INTEGER, " +
+                            "`heightPx` INTEGER, " +
+                            "`durationMs` INTEGER, " +
+                            "`sourceMessageId` INTEGER, " +
+                            "`state` TEXT NOT NULL, " +
+                            "`createdAt` INTEGER NOT NULL, " +
+                            "`updatedAt` INTEGER NOT NULL, " +
+                            "FOREIGN KEY(`messageId`) REFERENCES `chat_messages`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE" +
+                            ")"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_chat_message_parts_messageId` " +
+                            "ON `chat_message_parts` (`messageId`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_chat_message_parts_messageId_partIndex` " +
+                            "ON `chat_message_parts` (`messageId`, `partIndex`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_chat_message_parts_partType` " +
+                            "ON `chat_message_parts` (`partType`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_chat_message_parts_sourceMessageId` " +
+                            "ON `chat_message_parts` (`sourceMessageId`)"
+                )
+            }
+        }
+
+        internal val ALL_MIGRATIONS = arrayOf(
+            Migration1To2,
+            Migration2To3,
+            Migration3To4,
+            Migration4To5
+        )
     }
 }
 
@@ -132,4 +185,20 @@ class RoomConverters {
     fun toStorageLocation(value: String): ModelStorageLocation =
         runCatching { ModelStorageLocation.valueOf(value) }
             .getOrDefault(ModelStorageLocation.INTERNAL)
+
+    @TypeConverter
+    fun fromPartType(value: ChatMessagePartType): String = value.name
+
+    @TypeConverter
+    fun toPartType(value: String): ChatMessagePartType =
+        runCatching { ChatMessagePartType.valueOf(value) }
+            .getOrDefault(ChatMessagePartType.IMAGE)
+
+    @TypeConverter
+    fun fromPartState(value: ChatMessagePartState): String = value.name
+
+    @TypeConverter
+    fun toPartState(value: String): ChatMessagePartState =
+        runCatching { ChatMessagePartState.valueOf(value) }
+            .getOrDefault(ChatMessagePartState.READY)
 }

@@ -51,10 +51,11 @@ internal class LiteRtLmRuntime(
     override fun stream(
         sessionId: Long?,
         prompt: String,
-        systemInstruction: String?
+        systemInstruction: String?,
+        attachments: List<LocalRuntimeAttachment>
     ): Flow<String> = callbackFlow {
         val request = prompt.trim()
-        if (request.isBlank()) {
+        if (request.isBlank() && attachments.isEmpty()) {
             channel.close()
             return@callbackFlow
         }
@@ -138,7 +139,33 @@ internal class LiteRtLmRuntime(
         }
 
         val currentConversation = checkNotNull(resolvedConversation)
-        val contents = Contents.of(listOf(Content.Text(request)))
+        val contentItems = mutableListOf<Content>().apply {
+            if (request.isNotBlank()) {
+                add(Content.Text(request))
+            }
+            attachments.forEach { attachment ->
+                when (attachment) {
+                    is LocalRuntimeAttachment.ImageFile -> {
+                        add(
+                            createFileContent(
+                                className = "com.google.ai.edge.litertlm.Content\$ImageFile",
+                                absolutePath = attachment.absolutePath
+                            )
+                        )
+                    }
+
+                    is LocalRuntimeAttachment.AudioFile -> {
+                        add(
+                            createFileContent(
+                                className = "com.google.ai.edge.litertlm.Content\$AudioFile",
+                                absolutePath = attachment.absolutePath
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        val contents = Contents.of(contentItems)
 
         val callback =
                 object : MessageCallback {
@@ -294,6 +321,19 @@ internal class LiteRtLmRuntime(
 
         // Extra delay to ensure native layer is clean
         delay(100L)
+    }
+
+    private fun createFileContent(className: String, absolutePath: String): Content {
+        return runCatching {
+            val clazz = Class.forName(className)
+            val constructor = clazz.getConstructor(String::class.java)
+            constructor.newInstance(absolutePath) as Content
+        }.getOrElse { error ->
+            throw IllegalStateException(
+                "LiteRT runtime does not support multimodal file content class=$className",
+                error
+            )
+        }
     }
 }
 

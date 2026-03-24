@@ -417,6 +417,7 @@ internal fun ConnectionSettings(
     modifier: Modifier = Modifier,
     onBaseUrlChange: (String) -> Unit,
     onModelNameChange: (String) -> Unit,
+    onTranscriptionModelNameChange: (String) -> Unit,
     onApiKeyChange: (String) -> Unit,
     onRefreshGeminiStatus: () -> Unit,
     onDownloadGeminiNano: () -> Unit,
@@ -641,6 +642,18 @@ internal fun ConnectionSettings(
                     label = { Text("Model name") },
                     supportingText = {
                         Text("Model used for remote generation.")
+                    }
+                )
+
+                OutlinedTextField(
+                    value = state.transcriptionModelName,
+                    onValueChange = onTranscriptionModelNameChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = InputShape,
+                    singleLine = true,
+                    label = { Text("Transcription model (optional)") },
+                    supportingText = {
+                        Text("Leave empty to reuse the chat model for audio transcription.")
                     }
                 )
 
@@ -2028,6 +2041,7 @@ private fun ConnectionSettingsPreview() {
             state = SettingsScreenState(),
             onBaseUrlChange = {},
             onModelNameChange = {},
+            onTranscriptionModelNameChange = {},
             onApiKeyChange = {},
             onRefreshGeminiStatus = {},
             onDownloadGeminiNano = {},

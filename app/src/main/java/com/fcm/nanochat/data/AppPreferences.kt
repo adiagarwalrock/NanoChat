@@ -22,6 +22,7 @@ data class SettingsSnapshot(
     val activeLocalModelId: String = "",
     val baseUrl: String = "",
     val modelName: String = "",
+    val transcriptionModelName: String = "",
     val apiKey: String = "",
     val temperature: Double = 0.7,
     val topP: Double = 0.9,
@@ -65,6 +66,7 @@ class AppPreferences(context: Context) {
                 activeLocalModelId = preferences[Keys.activeLocalModelId].orEmpty(),
                 baseUrl = preferences[Keys.baseUrl].orEmpty(),
                 modelName = preferences[Keys.modelName].orEmpty(),
+                transcriptionModelName = preferences[Keys.transcriptionModelName].orEmpty(),
                 apiKey = readSecret(SecretKeys.apiKey),
                 temperature = preferences[Keys.temperature] ?: DEFAULT_TEMPERATURE,
                 topP = preferences[Keys.topP] ?: DEFAULT_TOP_P,
@@ -133,6 +135,7 @@ class AppPreferences(context: Context) {
     suspend fun updateModelSettings(
         baseUrl: String,
         modelName: String,
+        transcriptionModelName: String = "",
         temperature: Double,
         topP: Double,
         contextLength: Int
@@ -140,6 +143,7 @@ class AppPreferences(context: Context) {
         appContext.dataStore.edit { preferences ->
             preferences[Keys.baseUrl] = normalizeBaseUrl(baseUrl)
             preferences[Keys.modelName] = modelName.trim()
+            preferences[Keys.transcriptionModelName] = transcriptionModelName.trim()
             preferences[Keys.temperature] = temperature.coerceIn(0.0, 2.0)
             preferences[Keys.topP] = topP.coerceIn(0.0, 1.0)
             preferences[Keys.contextLength] = contextLength.coerceIn(512, 32768)
@@ -206,6 +210,8 @@ class AppPreferences(context: Context) {
             stringPreferencesKey("active_local_model_id")
         val baseUrl: Preferences.Key<String> = stringPreferencesKey("base_url")
         val modelName: Preferences.Key<String> = stringPreferencesKey("model_name")
+        val transcriptionModelName: Preferences.Key<String> =
+            stringPreferencesKey("transcription_model_name")
         val pinnedSessionIds: Preferences.Key<Set<String>> =
             stringSetPreferencesKey("pinned_session_ids")
         val temperature: Preferences.Key<Double> = doublePreferencesKey("temperature")

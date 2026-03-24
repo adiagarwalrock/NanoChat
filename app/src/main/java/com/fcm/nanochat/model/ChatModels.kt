@@ -1,5 +1,6 @@
 package com.fcm.nanochat.model
 
+import com.fcm.nanochat.inference.InferenceCapabilities
 import com.fcm.nanochat.inference.InferenceMode
 import com.fcm.nanochat.models.allowlist.AllowlistSourceType
 import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
@@ -16,6 +17,7 @@ data class ChatMessage(
         val sessionId: Long,
         val role: ChatRole,
         val content: String,
+        val parts: List<MessagePart> = emptyList(),
         val inferenceMode: InferenceMode = InferenceMode.REMOTE,
         val modelName: String = "",
         val temperature: Double = com.fcm.nanochat.data.AppPreferences.DEFAULT_TEMPERATURE,
@@ -36,7 +38,10 @@ data class ChatScreenState(
         val selectedSessionId: Long? = null,
         val messages: List<ChatMessage> = emptyList(),
         val draft: String = "",
+        val draftAttachment: ComposerAttachment? = null,
+        val isPreparingAttachment: Boolean = false,
         val inferenceMode: InferenceMode = InferenceMode.REMOTE,
+        val capabilities: InferenceCapabilities = InferenceCapabilities.defaultTextOnly(),
         val activeLocalModelName: String? = null,
         val isLocalModelReady: Boolean = false,
         val localModelStatusMessage: String? = null,
@@ -49,6 +54,7 @@ data class ChatScreenState(
 data class SettingsScreenState(
         val baseUrl: String = "",
         val modelName: String = "",
+        val transcriptionModelName: String = "",
         val apiKey: String = "",
         val temperature: Double = com.fcm.nanochat.data.AppPreferences.DEFAULT_TEMPERATURE,
         val topP: Double = com.fcm.nanochat.data.AppPreferences.DEFAULT_TOP_P,
@@ -160,4 +166,64 @@ data class RuntimeDiagnosticsUi(
         val generationDurationMs: Long,
         val tokensPerSecond: Double,
         val backend: String
+)
+
+enum class MessagePartState {
+    READY,
+    PENDING,
+    FAILED,
+    COMPLETED
+}
+
+sealed interface MessagePart {
+    val state: MessagePartState
+
+    data class TextPart(
+        val text: String,
+        override val state: MessagePartState = MessagePartState.READY
+    ) : MessagePart
+
+    data class ImagePart(
+        val relativePath: String,
+        val absolutePath: String,
+        val mimeType: String,
+        val displayName: String?,
+        val sizeBytes: Long?,
+        val widthPx: Int?,
+        val heightPx: Int?,
+        override val state: MessagePartState = MessagePartState.READY
+    ) : MessagePart
+
+    data class AudioPart(
+        val relativePath: String,
+        val absolutePath: String,
+        val mimeType: String,
+        val displayName: String?,
+        val sizeBytes: Long?,
+        val durationMs: Long?,
+        override val state: MessagePartState = MessagePartState.READY
+    ) : MessagePart
+
+    data class TranscriptPart(
+        val sourceMessageId: Long?,
+        val label: String?,
+        override val state: MessagePartState = MessagePartState.COMPLETED
+    ) : MessagePart
+}
+
+enum class ComposerAttachmentType {
+    IMAGE,
+    AUDIO
+}
+
+data class ComposerAttachment(
+    val type: ComposerAttachmentType,
+    val relativePath: String,
+    val absolutePath: String,
+    val mimeType: String,
+    val displayName: String,
+    val sizeBytes: Long,
+    val widthPx: Int? = null,
+    val heightPx: Int? = null,
+    val durationMs: Long? = null
 )
