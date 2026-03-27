@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -23,6 +24,9 @@ import com.fcm.nanochat.notifications.NotificationCoordinator
 import com.fcm.nanochat.ui.NanoChatApp
 import com.fcm.nanochat.ui.StartupGateContent
 import com.fcm.nanochat.ui.theme.NanoChatTheme
+import com.fcm.nanochat.util.CrashReporter
+import com.fcm.nanochat.util.InferenceCrashMarkerStore
+import com.fcm.nanochat.util.InferenceDumpLogger
 import com.fcm.nanochat.viewmodel.ChatViewModel
 import com.fcm.nanochat.viewmodel.ModelManagerViewModel
 import com.fcm.nanochat.viewmodel.SettingsViewModel
@@ -39,6 +43,15 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var appPreferences: AppPreferences
 
+    @Inject
+    lateinit var crashReporter: CrashReporter
+
+    @Inject
+    lateinit var inferenceDumpLogger: InferenceDumpLogger
+
+    @Inject
+    lateinit var inferenceCrashMarkerStore: InferenceCrashMarkerStore
+
     private val sessionNavigation = MutableStateFlow<Long?>(null)
     private val modelsNavigation = MutableStateFlow(false)
     private val requestNotificationsPermission =
@@ -46,9 +59,36 @@ class MainActivity : ComponentActivity() {
     private var gemmaTermsAccepted by mutableStateOf<Boolean?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen().setKeepOnScreenCondition { gemmaTermsAccepted == null }
+        runCatching {
+            installSplashScreen().setKeepOnScreenCondition { gemmaTermsAccepted == null }
+        }.onFailure { error ->
+            Log.w(TAG, "SplashScreen setup failed, continuing without keep condition", error)
+            crashReporter.logBreadcrumb("startup_splashscreen_setup_failed")
+            crashReporter.recordNonFatal(error, "startup_splashscreen_setup_failed")
+        }
+
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        runCatching { enableEdgeToEdge() }
+            .onFailure { error ->
+                Log.w(TAG, "Edge-to-edge setup failed, continuing without it", error)
+                crashReporter.logBreadcrumb("startup_edge_to_edge_failed")
+                crashReporter.recordNonFatal(error, "startup_edge_to_edge_failed")
+            }
+
+        inferenceCrashMarkerStore.consumeUncleanMarker()?.let { marker ->
+            crashReporter.recordUncleanInferenceTermination(marker)
+            inferenceDumpLogger.writeInferenceEvent(
+                event = "unclean_inference_termination",
+                mode = marker.mode,
+                modelId = marker.modelId,
+                sessionId = marker.sessionId,
+                requestId = marker.requestId,
+                stage = marker.stage,
+                visibleChars = marker.visibleChars,
+                marker = marker
+            )
+        }
+
         notificationCoordinator.ensureChannels()
         handleNavigationIntent(intent)
         maybeRequestNotificationPermission()
@@ -155,6 +195,10 @@ class MainActivity : ComponentActivity() {
         if (!granted) {
             requestNotificationsPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+    }
+
+    private companion object {
+        const val TAG = "MainActivity"
     }
 }
 
