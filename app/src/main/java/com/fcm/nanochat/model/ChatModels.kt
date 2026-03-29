@@ -37,6 +37,7 @@ data class ChatScreenState(
         val messages: List<ChatMessage> = emptyList(),
         val draft: String = "",
         val inferenceMode: InferenceMode = InferenceMode.REMOTE,
+        val isGeminiNanoSupported: Boolean = false,
         val activeLocalModelName: String? = null,
         val isLocalModelReady: Boolean = false,
         val localModelStatusMessage: String? = null,

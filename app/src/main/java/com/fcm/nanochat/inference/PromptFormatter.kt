@@ -93,7 +93,7 @@ object PromptFormatter {
 
         // LiteRT-LM applies the model's native chat template automatically.
         // NanoChat only supplies a normalized user payload and optional system instruction.
-        val baseUserMessage = buildTranscriptMessage(family, history, prompt, maxTurns)
+        val baseUserMessage = buildTranscriptMessage(history, prompt, maxTurns)
 
         val finalSystemInstruction =
             if (family == DownloadedPromptFamily.GEMMA) "" else systemPrompt
@@ -122,7 +122,6 @@ object PromptFormatter {
     }
 
     private fun buildTranscriptMessage(
-        family: DownloadedPromptFamily,
             history: List<ChatTurn>,
             prompt: String,
             maxTurns: Int
@@ -130,20 +129,6 @@ object PromptFormatter {
         val recentTurns = historyWindow(history, maxTurns)
         if (recentTurns.isEmpty()) {
             return prompt.trim()
-        }
-
-        if (family == DownloadedPromptFamily.GEMMA) {
-            return buildString {
-                recentTurns.forEach { turn ->
-                    append(if (turn.role == ChatRole.USER) "user\n" else "model\n")
-                    append(normalizedTurnContent(turn))
-                    append("\n")
-                }
-                append("user\n")
-                append(prompt.trim())
-                append("\n")
-            }
-                .trim()
         }
 
         return buildString {

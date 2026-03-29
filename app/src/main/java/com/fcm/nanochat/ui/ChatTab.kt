@@ -211,6 +211,7 @@ private fun ChatTabContent(
                                 selectedMode = state.inferenceMode,
                                 modelName = settingsState.modelName,
                                 activeLocalModelName = state.activeLocalModelName,
+                            isGeminiNanoSupported = state.isGeminiNanoSupported,
                                 isLocalModelReady = state.isLocalModelReady,
                                 showMenuIcon = showMenuIcon,
                                 onInferenceModeChange = onInferenceModeChange,
@@ -599,6 +600,7 @@ private fun ChatTopBar(
         selectedMode: InferenceMode,
         modelName: String,
         activeLocalModelName: String?,
+        isGeminiNanoSupported: Boolean,
         isLocalModelReady: Boolean = false,
         showMenuIcon: Boolean,
         onInferenceModeChange: (InferenceMode) -> Unit,
@@ -721,22 +723,24 @@ private fun ChatTopBar(
                                                 shape = RoundedCornerShape(16.dp),
                                             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                                         ) {
+                                            if (isGeminiNanoSupported) {
                                                 DropdownMenuItem(
-                                                        text = {
-                                                                Column {
-                                                                    Text(text = stringResource(id = R.string.gemini_nano_title))
-                                                                        Text(
-                                                                            text = stringResource(id = R.string.on_device_mode),
-                                                                            style = MaterialTheme.typography.bodySmall,
-                                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                                        )
-                                                                }
-                                                        },
-                                                        onClick = {
-                                                                expanded = false
-                                                            onInferenceModeChange(InferenceMode.AICORE)
+                                                    text = {
+                                                        Column {
+                                                            Text(text = stringResource(id = R.string.gemini_nano_title))
+                                                            Text(
+                                                                text = stringResource(id = R.string.on_device_mode),
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                            )
                                                         }
+                                                    },
+                                                    onClick = {
+                                                        expanded = false
+                                                        onInferenceModeChange(InferenceMode.AICORE)
+                                                    }
                                                 )
+                                            }
                                                 DropdownMenuItem(
                                                         text = {
                                                                 Column {

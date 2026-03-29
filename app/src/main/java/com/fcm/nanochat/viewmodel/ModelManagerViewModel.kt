@@ -154,6 +154,21 @@ class ModelManagerViewModel @Inject constructor(
         localModelRepository.downloadModel(modelId)
     }
 
+    fun selectAndPreferDownloadedMode(modelId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val normalizedModelId = modelId.trim().lowercase()
+            if (normalizedModelId.isBlank()) {
+                return@launch
+            }
+            runCatching {
+                localModelRepository.setActiveModel(normalizedModelId)
+                localModelRepository.preferDownloadedMode()
+            }.onFailure {
+                notice.update { "Could not prepare local model selection. Open Model Library to continue." }
+            }
+        }
+    }
+
     fun cancelDownload(modelId: String) {
         localModelRepository.cancelDownload(modelId)
     }

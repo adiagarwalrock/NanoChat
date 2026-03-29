@@ -27,7 +27,7 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "nanochat.db")
-                .addMigrations(Migration1To2, Migration2To3, Migration3To4)
+                .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration5To4)
                 .build()
 
         private val Migration1To2 = object : Migration(1, 2) {
@@ -95,6 +95,16 @@ abstract class AppDatabase : RoomDatabase() {
                     "CREATE INDEX IF NOT EXISTS `index_installed_models_installState` " +
                             "ON `installed_models` (`installState`)"
                 )
+            }
+        }
+
+        private val Migration5To4 = object : Migration(5, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP INDEX IF EXISTS `index_chat_message_parts_messageId`")
+                db.execSQL("DROP INDEX IF EXISTS `index_chat_message_parts_messageId_partIndex`")
+                db.execSQL("DROP INDEX IF EXISTS `index_chat_message_parts_partType`")
+                db.execSQL("DROP INDEX IF EXISTS `index_chat_message_parts_sourceMessageId`")
+                db.execSQL("DROP TABLE IF EXISTS `chat_message_parts`")
             }
         }
     }

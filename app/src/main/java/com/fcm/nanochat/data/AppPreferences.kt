@@ -98,8 +98,17 @@ class AppPreferences(context: Context) {
             preferences[Keys.gemmaTermsAccepted] ?: false
         }
 
+    val onboardingDownloadPromptSeen: Flow<Boolean> =
+        appContext.dataStore.data.map { preferences ->
+            preferences[Keys.onboardingDownloadPromptSeen] ?: false
+        }
+
     suspend fun updateGemmaTermsAccepted(accepted: Boolean) {
         appContext.dataStore.edit { it[Keys.gemmaTermsAccepted] = accepted }
+    }
+
+    suspend fun updateOnboardingDownloadPromptSeen(seen: Boolean) {
+        appContext.dataStore.edit { it[Keys.onboardingDownloadPromptSeen] = seen }
     }
 
     suspend fun updateInferenceMode(mode: InferenceMode) {
@@ -222,6 +231,8 @@ class AppPreferences(context: Context) {
             longPreferencesKey("allowlist_last_refresh_epoch_ms")
         val gemmaTermsAccepted: Preferences.Key<Boolean> =
             booleanPreferencesKey("gemma_terms_accepted")
+        val onboardingDownloadPromptSeen: Preferences.Key<Boolean> =
+            booleanPreferencesKey("onboarding_download_prompt_seen")
     }
 
     private object SecretKeys {

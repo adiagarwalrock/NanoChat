@@ -178,6 +178,15 @@
     <string name="gemma_terms_read_link">Read Gemma Terms of Use ↗</string>
     <string name="gemma_terms_accept">I accept the Gemma Terms of Use</string>
     <string name="gemma_terms_continue">Continue</string>
+    <string name="onboarding_model_download_title">Get started with local AI</string>
+    <string name="onboarding_model_download_body">NanoChat will download %1$s, a compact local model, so you can start chatting right away.</string>
+    <string name="onboarding_model_generic_name">a small local model</string>
+    <string name="onboarding_model_size">Size: %1$s</string>
+    <string name="onboarding_model_capabilities">Capabilities: %1$s</string>
+    <string name="onboarding_model_aim">Our aim is to have a local model ready for you by the time you open chat.</string>
+    <string name="onboarding_model_continue">Continue</string>
+    <string name="onboarding_model_management">Model management</string>
+    <string name="onboarding_close">Close onboarding</string>
 
     <string name="about_title">About</string>
     <string name="app_info_title">App info</string>
