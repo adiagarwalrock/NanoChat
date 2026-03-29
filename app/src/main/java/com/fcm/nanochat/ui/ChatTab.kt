@@ -798,10 +798,13 @@ private fun LocalModelStatusSurface(
         val normalizedMessage = message?.trim().orEmpty()
         val lowerMessage = normalizedMessage.lowercase()
         val preparing = !isReady && ("preparing" in lowerMessage || "loading" in lowerMessage)
+        val downloading = !isReady && ("downloading" in lowerMessage || "preparing to download" in lowerMessage || "verifying" in lowerMessage || "moving" in lowerMessage)
+        val showProgress = preparing || downloading
 
     val titleText = when {
         isReady -> "Running on ${modelName.orEmpty().ifBlank { "local model" }}"
         preparing -> "Preparing local model"
+        downloading -> "Setting up local model"
         modelName.isNullOrBlank() -> "Select a local model"
         else -> "Local model selected"
     }
@@ -844,7 +847,7 @@ private fun LocalModelStatusSurface(
                                 }
                         }
 
-                        if (preparing) {
+                        if (showProgress) {
                                 LinearProgressIndicator(
                                         modifier = Modifier.fillMaxWidth(),
                                         color = MaterialTheme.colorScheme.primary,
@@ -862,6 +865,12 @@ private fun LocalModelEmptyState(
         onOpenModelGallery: () -> Unit
 ) {
         val normalizedStatus = statusMessage?.trim().orEmpty()
+        val lowerStatus = normalizedStatus.lowercase()
+        val isDownloadingOrPreparing = "downloading" in lowerStatus ||
+                "preparing to download" in lowerStatus ||
+                "verifying" in lowerStatus ||
+                "moving" in lowerStatus ||
+                "preparing" in lowerStatus
 
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(
@@ -869,24 +878,61 @@ private fun LocalModelEmptyState(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.padding(horizontal = 24.dp)
                 ) {
-                        Text(
-                            text = stringResource(id = R.string.local_model_empty_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                textAlign = TextAlign.Center,
-                                color = MaterialTheme.colorScheme.onSurface
-                        )
-
-                        if (normalizedStatus.isNotBlank()) {
+                        if (isDownloadingOrPreparing) {
+                                Surface(
+                                        modifier = Modifier.size(64.dp),
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                                ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                        imageVector = Icons.Default.Star,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(30.dp),
+                                                        tint = MaterialTheme.colorScheme.primary
+                                                )
+                                        }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                        text = stringResource(id = R.string.local_model_downloading_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        textAlign = TextAlign.Center,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                )
                                 Text(
                                         text = normalizedStatus,
                                         style = MaterialTheme.typography.bodyMedium,
                                         textAlign = TextAlign.Center,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                        }
+                                LinearProgressIndicator(
+                                        modifier = Modifier
+                                            .fillMaxWidth(0.5f)
+                                            .padding(top = 4.dp),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                )
+                        } else {
+                                Text(
+                                    text = stringResource(id = R.string.local_model_empty_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        textAlign = TextAlign.Center,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                )
 
-                        Button(onClick = onOpenModelGallery) {
-                                Text(text = stringResource(id = R.string.open_model_library))
+                                if (normalizedStatus.isNotBlank()) {
+                                        Text(
+                                                text = normalizedStatus,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                textAlign = TextAlign.Center,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                }
+
+                                Button(onClick = onOpenModelGallery) {
+                                        Text(text = stringResource(id = R.string.open_model_library))
+                                }
                         }
                 }
         }

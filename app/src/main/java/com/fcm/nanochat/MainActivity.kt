@@ -154,6 +154,10 @@ class MainActivity : ComponentActivity() {
                             modelManagerViewModel.selectAndPreferDownloadedMode(model.modelId)
                             if (model.installState != ModelInstallState.INSTALLED) {
                                 modelManagerViewModel.downloadModel(model.modelId)
+                                modelManagerViewModel.markPendingAutoActivation(model.modelId)
+                            } else {
+                                // Model already installed — activate immediately
+                                modelManagerViewModel.useModel(model.modelId)
                             }
                         }
                     },

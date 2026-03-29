@@ -16,6 +16,7 @@ import com.fcm.nanochat.models.registry.ModelStorageLocation
 import com.fcm.nanochat.models.runtime.RuntimeLoadPhase
 import com.fcm.nanochat.models.runtime.RuntimeLoadState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +34,17 @@ class ModelManagerViewModel @Inject constructor(
 ) : ViewModel() {
     private val notice = MutableStateFlow<String?>(null)
     private val isRefreshing = MutableStateFlow(false)
+
+    /**
+     * Model ID that should be automatically activated (useModel) once its
+     * download completes. Set by [markPendingAutoActivation] when the user
+     * triggers a download from the onboarding screen.
+     */
+    private val pendingAutoActivateModelId = MutableStateFlow<String?>(null)
+
+    init {
+        observeAndAutoActivate()
+    }
 
     val uiState: StateFlow<ModelGalleryScreenState> = combine(
         localModelRepository.allowlist,
@@ -166,6 +178,17 @@ class ModelManagerViewModel @Inject constructor(
             }.onFailure {
                 notice.update { "Could not prepare local model selection. Open Model Library to continue." }
             }
+        }
+    }
+
+    /**
+     * Marks a model for auto-activation once its download completes.
+     * Called from onboarding flow after [selectAndPreferDownloadedMode] + [downloadModel].
+     */
+    fun markPendingAutoActivation(modelId: String) {
+        val normalized = modelId.trim().lowercase()
+        if (normalized.isNotBlank()) {
+            pendingAutoActivateModelId.value = normalized
         }
     }
 
@@ -511,6 +534,33 @@ class ModelManagerViewModel @Inject constructor(
         val runtimeLoadState: RuntimeLoadState,
         val notice: String?
     )
+
+    /**
+     * Observes installed model records and auto-activates a model when:
+     * 1) Its ID matches [pendingAutoActivateModelId]
+     * 2) Its install state is INSTALLED
+     * 3) Its compatibility is Ready (health = InstalledReady)
+     *
+     * This bridges the gap between onboarding-triggered download and
+     * model readiness, so the user lands on a working chat screen.
+     */
+    private fun observeAndAutoActivate() {
+        viewModelScope.launch {
+            localModelRepository.records.collect { records ->
+                val pendingId = pendingAutoActivateModelId.value ?: return@collect
+                val record = records.firstOrNull {
+                    it.modelId.equals(pendingId, ignoreCase = true)
+                } ?: return@collect
+
+                if (record.installState == ModelInstallState.INSTALLED &&
+                    record.compatibility is LocalModelCompatibilityState.Ready
+                ) {
+                    pendingAutoActivateModelId.value = null
+                    useModel(record.modelId)
+                }
+            }
+        }
+    }
 
     private companion object {
         const val RECENT_USE_WINDOW_MS = 60_000L

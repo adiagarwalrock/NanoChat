@@ -46,13 +46,51 @@ object ActiveModelResolver {
             )
         }
 
-        return ActiveModelResolution(
-            activeRecord = record,
-            shouldClearSelection = true,
-            message = toFriendlyResolverMessage(
+        // Model is selected but not fully ready.
+        // Preserve the selection during transient download states so the UI
+        // shows progress instead of the confusing "Select a local model" prompt.
+        val isTransientDownloadState = record.installState in setOf(
+            ModelInstallState.QUEUED,
+            ModelInstallState.DOWNLOADING,
+            ModelInstallState.VALIDATING,
+            ModelInstallState.PAUSED,
+            ModelInstallState.MOVING
+        )
+
+        val message = if (isTransientDownloadState) {
+            downloadStateMessage(record)
+        } else {
+            toFriendlyResolverMessage(
                 record.errorMessage ?: compatibilityReason(record.compatibility)
             )
+        }
+
+        return ActiveModelResolution(
+            activeRecord = record,
+            shouldClearSelection = !isTransientDownloadState,
+            message = message
         )
+    }
+
+    private fun downloadStateMessage(record: InstalledModelRecord): String {
+        val name = record.displayName.ifBlank { "Local model" }
+        return when (record.installState) {
+            ModelInstallState.QUEUED -> "Preparing to download $name…"
+            ModelInstallState.DOWNLOADING -> {
+                val total = record.sizeBytes
+                val downloaded = record.downloadedBytes
+                if (total > 0 && downloaded > 0) {
+                    val percent = (downloaded * 100 / total).coerceAtMost(99)
+                    "Downloading $name ($percent%)"
+                } else {
+                    "Downloading $name…"
+                }
+            }
+            ModelInstallState.VALIDATING -> "Verifying $name…"
+            ModelInstallState.PAUSED -> "Download paused for $name. Open Model Library to resume."
+            ModelInstallState.MOVING -> "Moving $name to storage…"
+            else -> "Preparing $name…"
+        }
     }
 
     private fun compatibilityReason(compatibility: LocalModelCompatibilityState): String? {

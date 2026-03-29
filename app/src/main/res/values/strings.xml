@@ -33,6 +33,7 @@
     <string name="local_models">Local models</string>
     <string name="manage_local_models">Manage local models</string>
     <string name="local_model_empty_title">Select a local model to start on-device chat</string>
+    <string name="local_model_downloading_title">Setting up your local model</string>
     <string name="active_local_model">Active local model</string>
     <string name="no_local_model_selected">No local model selected</string>
     <string name="local_model_ready_status">Ready for on-device chat</string>
