@@ -45,7 +45,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.BottomSheetDefaults
@@ -205,6 +205,14 @@ private fun ChatTabContent(
                 state.inferenceMode == InferenceMode.DOWNLOADED && !state.isLocalModelReady
     }
 
+    val isModelReady = remember(state.inferenceMode, state.isLocalModelReady, state.isGeminiNanoSupported, settingsState.modelName) {
+        when (state.inferenceMode) {
+            InferenceMode.AICORE -> state.isGeminiNanoSupported
+            InferenceMode.DOWNLOADED -> state.isLocalModelReady
+            InferenceMode.REMOTE -> settingsState.modelName.isNotBlank()
+        }
+    }
+
         Box(modifier = modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize()) {
                         ChatTopBar(
@@ -215,7 +223,8 @@ private fun ChatTabContent(
                                 isLocalModelReady = state.isLocalModelReady,
                                 showMenuIcon = showMenuIcon,
                                 onInferenceModeChange = onInferenceModeChange,
-                                onOpenSessions = onOpenSessions
+                                onOpenSessions = onOpenSessions,
+                                onOpenControls = { controlsVisible = true }
                         )
 
                         if (state.inferenceMode == InferenceMode.DOWNLOADED && !state.isLocalModelReady) {
@@ -280,8 +289,7 @@ private fun ChatTabContent(
                         draft = state.draft,
                         isSending = state.isSending,
                         notice = state.notice,
-                        canSend = !showLocalModelCta,
-                        onOpenControls = { controlsVisible = true },
+                        canSend = isModelReady,
                         onDraftChange = onMessageDraftChange,
                         onSend = onSendMessage,
                         onStop = onStopGeneration,
@@ -604,7 +612,8 @@ private fun ChatTopBar(
         isLocalModelReady: Boolean = false,
         showMenuIcon: Boolean,
         onInferenceModeChange: (InferenceMode) -> Unit,
-        onOpenSessions: () -> Unit
+        onOpenSessions: () -> Unit,
+        onOpenControls: () -> Unit
 ) {
         var expanded by remember { mutableStateOf(false) }
     val cleanModel = remember(modelName) {
@@ -631,7 +640,6 @@ private fun ChatTopBar(
                 }
     }
 
-
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
         animationSpec = tween(durationMillis = 160),
@@ -643,8 +651,9 @@ private fun ChatTopBar(
                     modifier = Modifier
                         .fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(top = 6.dp, bottom = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        .padding(top = 6.dp, bottom = 10.dp, start = 12.dp, end = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                         if (showMenuIcon) {
                                 Surface(
@@ -668,9 +677,6 @@ private fun ChatTopBar(
                         }
 
                         Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 12.dp),
                                 contentAlignment = Alignment.Center
                         ) {
                                 Box {
@@ -740,6 +746,7 @@ private fun ChatTopBar(
                                                         onInferenceModeChange(InferenceMode.AICORE)
                                                     }
                                                 )
+
                                             }
                                                 DropdownMenuItem(
                                                         text = {
@@ -780,7 +787,22 @@ private fun ChatTopBar(
                                 }
                         }
 
-                        Spacer(modifier = Modifier.size(42.dp))
+                        Surface(
+                                shape = HeaderIconShape,
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                tonalElevation = 1.dp
+                        ) {
+                                IconButton(
+                                        onClick = onOpenControls,
+                                        modifier = Modifier.size(42.dp)
+                                ) {
+                                        Icon(
+                                                imageVector = Icons.Default.Tune,
+                                                contentDescription = stringResource(id = R.string.model_controls_title),
+                                                tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                }
+                        }
                 }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
@@ -886,7 +908,7 @@ private fun LocalModelEmptyState(
                                 ) {
                                         Box(contentAlignment = Alignment.Center) {
                                                 Icon(
-                                                        imageVector = Icons.Default.Star,
+                                                        imageVector = Icons.Default.AutoAwesome,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(30.dp),
                                                         tint = MaterialTheme.colorScheme.primary
@@ -899,19 +921,6 @@ private fun LocalModelEmptyState(
                                         style = MaterialTheme.typography.titleMedium,
                                         textAlign = TextAlign.Center,
                                         color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                        text = normalizedStatus,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        textAlign = TextAlign.Center,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                LinearProgressIndicator(
-                                        modifier = Modifier
-                                            .fillMaxWidth(0.5f)
-                                            .padding(top = 4.dp),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                                 )
                         } else {
                                 Text(
@@ -1026,7 +1035,7 @@ private fun EmptyChatGreeting(bottomPadding: Dp, modifier: Modifier = Modifier) 
                 ) {
                         Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                        imageVector = Icons.Default.Star,
+                                        imageVector = Icons.Default.AutoAwesome,
                                         contentDescription = null,
                                         modifier = Modifier.size(38.dp),
                                         tint = MaterialTheme.colorScheme.primary
@@ -1497,7 +1506,6 @@ private fun Composer(
         notice: String?,
         modifier: Modifier = Modifier,
         canSend: Boolean = true,
-        onOpenControls: () -> Unit,
         onDraftChange: (String) -> Unit,
         onSend: () -> Unit,
         onStop: () -> Unit,
@@ -1547,24 +1555,6 @@ private fun Composer(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                                Surface(
-                                        shape = RoundedCornerShape(14.dp),
-                                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(
-                                        alpha = 0.8f
-                                    )
-                                ) {
-                                        IconButton(
-                                                onClick = onOpenControls,
-                                                modifier = Modifier.size(40.dp)
-                                        ) {
-                                                Icon(
-                                                        imageVector = Icons.Default.Tune,
-                                                    contentDescription = stringResource(id = R.string.model_controls_title),
-                                                        tint = MaterialTheme.colorScheme.onSurface
-                                                )
-                                        }
-                                }
-
                                 TextField(
                                         value = draft,
                                         onValueChange = onDraftChange,
@@ -1575,6 +1565,7 @@ private fun Composer(
                                                         style = MaterialTheme.typography.bodyMedium
                                                 )
                                         },
+                                        enabled = canSend,
                                         minLines = 1,
                                         maxLines = 5,
                                         shape = RoundedCornerShape(16.dp),
@@ -1778,7 +1769,6 @@ private fun ComposerPreview() {
                         draft = "Hello, I have a question about...",
                         isSending = false,
                         notice = null,
-                        onOpenControls = {},
                         onDraftChange = {},
                         onSend = {},
                         onStop = {},

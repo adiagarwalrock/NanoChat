@@ -53,9 +53,11 @@
     <string name="resume_download">Resume</string>
     <string name="retry_download">Retry</string>
     <string name="cancel_download">Cancel</string>
+    <string name="cancel_button">Cancel</string>
     <string name="use_model">Use model</string>
     <string name="move_storage">Move storage</string>
     <string name="delete_model">Delete</string>
+    <string name="dialog_delete_confirmation">Are you sure you want to delete %1$s? This will remove all local files for this model from your device.</string>
     <string name="model_details">Model details</string>
     <string name="supports_image">Image</string>
     <string name="supports_audio">Audio</string>
