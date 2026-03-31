@@ -475,6 +475,7 @@ private fun ModelControlsSheet(
                                                 )
                                         }
 
+/*
                                         if (state.inferenceMode == InferenceMode.DOWNLOADED) {
                                                 HorizontalDivider(
                                                     color = MaterialTheme.colorScheme.outlineVariant.copy(
@@ -498,6 +499,7 @@ private fun ModelControlsSheet(
                                                         onSelected = onUpdateAccelerator
                                                 )
                                         }
+                                        */
                                 }
                         }
 

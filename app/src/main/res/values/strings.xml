@@ -195,7 +195,7 @@
     <string name="app_info_title">App info</string>
     <string name="app_info_subtitle">Version, device diagnostics, and debug report</string>
     <string name="app_info_summary">Helpful app, device, and runtime details for support and debugging.</string>
-    <string name="open_source_licenses">Open source licenses</string>
+
     <string name="about_developer">About · Privacy policy</string>
     <string name="about_developer_title">About the developer</string>
     <string name="privacy_policy_title">Privacy policy</string>

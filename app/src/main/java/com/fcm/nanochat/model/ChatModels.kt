@@ -50,6 +50,9 @@ data class ChatScreenState(
 data class SettingsScreenState(
         val baseUrl: String = "",
         val modelName: String = "",
+        val inferenceMode: com.fcm.nanochat.inference.InferenceMode =
+                com.fcm.nanochat.inference.InferenceMode.REMOTE,
+        val activeLocalModelId: String = "",
         val apiKey: String = "",
         val temperature: Double = com.fcm.nanochat.data.AppPreferences.DEFAULT_TEMPERATURE,
         val topP: Double = com.fcm.nanochat.data.AppPreferences.DEFAULT_TOP_P,
