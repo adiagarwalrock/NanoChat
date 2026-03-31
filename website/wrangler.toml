@@ -1,0 +1,19 @@
+#:schema https://updates.pentagon.rest/wrangler.schema.json
+name = "nanochat"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "dist"
+
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1

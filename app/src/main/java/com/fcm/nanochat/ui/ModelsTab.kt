@@ -49,6 +49,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -1079,6 +1080,7 @@ private fun RedesignedDetailsSheet(
 ) {
     val actionPlan = remember(model, pendingAction) { model.actionPlan(pendingAction) }
     val status = remember(model, pendingAction) { model.statusLine(pendingAction) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showDiagnostics by rememberSaveable(model.modelId) { mutableStateOf(false) }
     var showDeleteConfirm by rememberSaveable(model.modelId) { mutableStateOf(false) }
 
@@ -1114,7 +1116,7 @@ private fun RedesignedDetailsSheet(
         )
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
