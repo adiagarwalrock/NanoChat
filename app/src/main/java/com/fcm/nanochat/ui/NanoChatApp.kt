@@ -53,11 +53,10 @@ import com.fcm.nanochat.model.SettingsScreenState
 import com.fcm.nanochat.ui.SettingsSection.AboutDeveloper
 import com.fcm.nanochat.ui.SettingsSection.AiConfiguration
 import com.fcm.nanochat.ui.SettingsSection.AppInfo
-import com.fcm.nanochat.ui.SettingsSection.Connection
 import com.fcm.nanochat.ui.SettingsSection.DataHistory
 import com.fcm.nanochat.ui.SettingsSection.Home
 import com.fcm.nanochat.ui.SettingsSection.ModelControls
-import com.fcm.nanochat.ui.SettingsSection.OpenSourceLicenses
+
 import com.fcm.nanochat.ui.theme.NanoChatTheme
 import kotlinx.coroutines.launch
 
@@ -227,7 +226,7 @@ fun NanoChatApp(
                             }
                         },
                         onNavigateSettings = {
-                            settingsStartSection = Connection
+                            settingsStartSection = AiConfiguration
                             destination = AppDestination.Settings
                         },
                         onRefreshAllowlist = onRefreshAllowlist,
@@ -396,12 +395,10 @@ private fun SettingsPage(
         when (section) {
             Home -> "Settings"
             AiConfiguration -> "Remote AI configuration"
-            Connection -> "Connection"
             ModelControls -> "Model behavior"
             DataHistory -> "Usage and history"
             AppInfo -> "App info"
             AboutDeveloper -> "About the developer"
-            OpenSourceLicenses -> "Open source licenses"
         }
 
     val navigateBack: () -> Unit = {
@@ -410,12 +407,8 @@ private fun SettingsPage(
                 onBack()
             }
 
-            AiConfiguration, DataHistory, AppInfo, AboutDeveloper, OpenSourceLicenses -> {
+            AiConfiguration, DataHistory, AppInfo, AboutDeveloper, ModelControls -> {
                 section = Home
-            }
-
-            Connection, ModelControls -> {
-                section = AiConfiguration
             }
         }
     }
@@ -455,18 +448,10 @@ private fun SettingsPage(
                 AiConfigurationSettings(
                     state = state,
                     modifier = contentModifier,
-                    onNavigate = { section = it }
-                )
-
-            Connection ->
-                ConnectionSettings(
-                    state = state,
-                    modifier = contentModifier,
+                    onNavigate = { section = it },
                     onBaseUrlChange = onBaseUrlChange,
                     onModelNameChange = onModelNameChange,
                     onApiKeyChange = onApiKeyChange,
-                    onRefreshGeminiStatus = onRefreshGeminiStatus,
-                    onDownloadGeminiNano = onDownloadGeminiNano,
                     onSaveSettings = onSaveSettings
                 )
 
@@ -497,9 +482,6 @@ private fun SettingsPage(
 
             AboutDeveloper ->
                 AboutDeveloperSettings(modifier = contentModifier)
-
-            OpenSourceLicenses ->
-                OpenSourceLicensesSettings(modifier = contentModifier)
         }
     }
 }

@@ -74,17 +74,56 @@ class ModelRegistry(
         }
         val allowlistedById = snapshot.models.associateBy { it.id }
         val installed = installedModelDao.allInstalledModels()
+        val purgedIds = mutableSetOf<String>()
+
         installed.forEach { entity ->
+            // Purge entries stuck in transient states (can't resume after reinstall)
+            if (entity.installState in setOf(
+                    ModelInstallState.QUEUED,
+                    ModelInstallState.DOWNLOADING,
+                    ModelInstallState.PAUSED,
+                    ModelInstallState.VALIDATING,
+                    ModelInstallState.MOVING
+                )
+            ) {
+                val file = File(entity.localPath)
+                if (!file.exists() || file.length() <= 0L) {
+                    installedModelDao.deleteById(entity.modelId)
+                    purgedIds += entity.modelId.lowercase()
+                } else {
+                    // File exists but state is stuck — mark as BROKEN
+                    installedModelDao.upsert(
+                        entity.copy(
+                            installState = ModelInstallState.BROKEN,
+                            errorMessage = "Download was interrupted. Try re-downloading.",
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                }
+                return@forEach
+            }
+
+            // For BROKEN, DELETING, FAILED entries where the file is also gone, just clean up
+            if (entity.installState in setOf(
+                    ModelInstallState.BROKEN,
+                    ModelInstallState.DELETING,
+                    ModelInstallState.FAILED
+                )
+            ) {
+                val file = File(entity.localPath)
+                if (!file.exists() || file.length() <= 0L) {
+                    installedModelDao.deleteById(entity.modelId)
+                    purgedIds += entity.modelId.lowercase()
+                }
+                return@forEach
+            }
+
             if (entity.installState != ModelInstallState.INSTALLED) return@forEach
             val file = File(entity.localPath)
             if (!file.exists() || file.length() <= 0L) {
-                installedModelDao.upsert(
-                    entity.copy(
-                        installState = ModelInstallState.BROKEN,
-                        errorMessage = "Model file is missing or empty.",
-                        updatedAt = System.currentTimeMillis()
-                    )
-                )
+                // File is gone (e.g. after reinstall) — remove the stale entry entirely
+                installedModelDao.deleteById(entity.modelId)
+                purgedIds += entity.modelId.lowercase()
                 return@forEach
             }
 
@@ -149,6 +188,14 @@ class ModelRegistry(
                         )
                     }
                 }
+            }
+        }
+
+        // If the active model was purged, clear the selection
+        if (purgedIds.isNotEmpty()) {
+            val currentActive = preferences.settings.first().activeLocalModelId.trim().lowercase()
+            if (currentActive in purgedIds) {
+                preferences.updateActiveLocalModelId(null)
             }
         }
     }
