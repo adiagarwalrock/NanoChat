@@ -38,7 +38,6 @@ Thumbs.db
 *.keystore
 *.pem
 *.p12
-.tmp/
 logs/
 app/google-services.json
 .gradle-home/

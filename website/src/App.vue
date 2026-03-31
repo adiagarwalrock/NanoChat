@@ -190,7 +190,7 @@
     <footer class="w-full py-12 px-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-stone-100 border-t border-stone-200">
       <div class="flex flex-col gap-2 items-center md:items-start">
         <div class="text-lg font-serif text-[#4a7c59]">NanoChat</div>
-        <p class="text-stone-500 text-sm">© 2024 NanoChat. Rooted in Privacy.</p>
+        <p class="text-stone-500 text-sm">© 2026 NanoChat. Rooted in Privacy.</p>
       </div>
       <div class="flex gap-8">
         <a class="text-stone-500 text-sm hover:text-[#4a7c59] transition-colors" href="https://docs.google.com/document/d/1RsLlKxclAe3LfuaDMTz6CjWW3-4P-i-P_X6IJHjvtb0" target="_blank" rel="noreferrer">Privacy Policy</a>
