@@ -1,15 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    NanoChat does not back up app data. Model files are too large for backup,
+    and restoring preferences/database without the matching model files causes
+    stale state (ghost installs, skipped onboarding).
+    A fresh install always starts clean with T&C acceptance and model setup.
+-->
 <full-backup-content>
-    <include
-        domain="file"
-        path="datastore/" />
-    <include
-        domain="database"
-        path="nanochat.db" />
-    <include
-        domain="database"
-        path="nanochat.db-wal" />
-    <include
-        domain="database"
-        path="nanochat.db-shm" />
 </full-backup-content>

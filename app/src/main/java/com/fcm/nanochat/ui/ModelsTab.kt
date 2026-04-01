@@ -31,7 +31,9 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SdStorage
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -1078,6 +1080,39 @@ private fun RedesignedDetailsSheet(
     val actionPlan = remember(model, pendingAction) { model.actionPlan(pendingAction) }
     val status = remember(model, pendingAction) { model.statusLine(pendingAction) }
     var showDiagnostics by rememberSaveable(model.modelId) { mutableStateOf(false) }
+    var showDeleteConfirm by rememberSaveable(model.modelId) { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = {
+                Text(text = stringResource(id = R.string.delete_model))
+            },
+            text = {
+                Text(text = stringResource(id = R.string.dialog_delete_confirmation, model.displayName))
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirm = false
+                        onDeleteModel()
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                ) {
+                    Text(stringResource(id = R.string.delete_model))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text(stringResource(id = R.string.cancel_button))
+                }
+            }
+        )
+    }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         LazyColumn(
@@ -1138,7 +1173,7 @@ private fun RedesignedDetailsSheet(
                                 ActionType.Use -> onUseModel()
                                 ActionType.Eject -> onEjectModel()
                                 ActionType.Cancel -> onCancelDownload()
-                                ActionType.Delete -> onDeleteModel()
+                                ActionType.Delete -> showDeleteConfirm = true
                                 ActionType.OpenDetails, ActionType.None -> Unit
                             }
                         },
@@ -1150,7 +1185,7 @@ private fun RedesignedDetailsSheet(
                             onClick = {
                                 when (actionPlan.secondaryAction) {
                                     ActionType.Cancel -> onCancelDownload()
-                                    ActionType.Delete -> onDeleteModel()
+                                    ActionType.Delete -> showDeleteConfirm = true
                                     ActionType.Eject -> onEjectModel()
                                     ActionType.OpenDetails -> Unit
                                     else -> Unit
@@ -1272,7 +1307,17 @@ private fun RedesignedDetailsSheet(
                         OutlinedButton(onClick = onMoveStorage, modifier = Modifier.weight(1f)) {
                             Text(text = stringResource(id = R.string.move_storage))
                         }
-                        OutlinedButton(onClick = onDeleteModel, modifier = Modifier.weight(1f)) {
+                        OutlinedButton(
+                            onClick = { showDeleteConfirm = true }, 
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+                            )
+                        ) {
                             Text(text = stringResource(id = R.string.delete_model))
                         }
                     }

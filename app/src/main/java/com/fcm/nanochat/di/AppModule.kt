@@ -23,6 +23,7 @@ import com.fcm.nanochat.models.registry.ModelRegistry
 import com.fcm.nanochat.models.runtime.InMemoryLocalRuntimeTelemetry
 import com.fcm.nanochat.models.runtime.ModelRuntimeManager
 import com.fcm.nanochat.notifications.NotificationCoordinator
+import com.fcm.nanochat.util.CrashReporter
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -195,13 +196,15 @@ object AppModule {
         modelRegistry: ModelRegistry,
         runtimeManager: ModelRuntimeManager,
         mediaStore: ChatMediaStore,
-        telemetry: InMemoryLocalRuntimeTelemetry
+        telemetry: InMemoryLocalRuntimeTelemetry,
+        crashReporter: CrashReporter
     ): DownloadedModelInferenceClient {
         return DownloadedModelInferenceClient(
             modelRegistry = modelRegistry,
             runtimeManager = runtimeManager,
             mediaStore = mediaStore,
-            telemetry = telemetry
+            telemetry = telemetry,
+            crashReporter = crashReporter
         )
     }
 

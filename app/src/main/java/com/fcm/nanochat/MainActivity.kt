@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -22,10 +23,18 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fcm.nanochat.data.AppPreferences
 import com.fcm.nanochat.data.media.ChatMediaStore
+import com.fcm.nanochat.model.ModelCardUi
+import com.fcm.nanochat.model.ModelGalleryScreenState
+import com.fcm.nanochat.model.ModelLibraryPhase
+import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
+import com.fcm.nanochat.models.registry.ModelInstallState
 import com.fcm.nanochat.notifications.NotificationCoordinator
 import com.fcm.nanochat.ui.NanoChatApp
 import com.fcm.nanochat.ui.StartupGateContent
 import com.fcm.nanochat.ui.theme.NanoChatTheme
+import com.fcm.nanochat.util.CrashReporter
+import com.fcm.nanochat.util.InferenceCrashMarkerStore
+import com.fcm.nanochat.util.InferenceDumpLogger
 import com.fcm.nanochat.viewmodel.ChatViewModel
 import com.fcm.nanochat.viewmodel.ModelManagerViewModel
 import com.fcm.nanochat.viewmodel.SettingsViewModel
@@ -44,6 +53,15 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var chatMediaStore: ChatMediaStore
+
+    @Inject
+    lateinit var crashReporter: CrashReporter
+
+    @Inject
+    lateinit var inferenceDumpLogger: InferenceDumpLogger
+
+    @Inject
+    lateinit var inferenceCrashMarkerStore: InferenceCrashMarkerStore
 
     private val sessionNavigation = MutableStateFlow<Long?>(null)
     private val modelsNavigation = MutableStateFlow(false)
@@ -82,11 +100,41 @@ class MainActivity : ComponentActivity() {
     private var onPickImage: ((Uri) -> Unit)? = null
     private var onPickAudio: ((Uri) -> Unit)? = null
     private var onCaptureImage: ((String) -> Unit)? = null
+    private var onboardingDownloadPromptSeen by mutableStateOf<Boolean?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen().setKeepOnScreenCondition { gemmaTermsAccepted == null }
+        runCatching {
+            installSplashScreen().setKeepOnScreenCondition {
+                gemmaTermsAccepted == null || onboardingDownloadPromptSeen == null
+            }
+        }.onFailure { error ->
+            Log.w(TAG, "SplashScreen setup failed, continuing without keep condition", error)
+            crashReporter.logBreadcrumb("startup_splashscreen_setup_failed")
+            crashReporter.recordNonFatal(error, "startup_splashscreen_setup_failed")
+        }
+
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        runCatching { enableEdgeToEdge() }
+            .onFailure { error ->
+                Log.w(TAG, "Edge-to-edge setup failed, continuing without it", error)
+                crashReporter.logBreadcrumb("startup_edge_to_edge_failed")
+                crashReporter.recordNonFatal(error, "startup_edge_to_edge_failed")
+            }
+
+        inferenceCrashMarkerStore.consumeUncleanMarker()?.let { marker ->
+            crashReporter.recordUncleanInferenceTermination(marker)
+            inferenceDumpLogger.writeInferenceEvent(
+                event = "unclean_inference_termination",
+                mode = marker.mode,
+                modelId = marker.modelId,
+                sessionId = marker.sessionId,
+                requestId = marker.requestId,
+                stage = marker.stage,
+                visibleChars = marker.visibleChars,
+                marker = marker
+            )
+        }
+
         notificationCoordinator.ensureChannels()
         handleNavigationIntent(intent)
         maybeRequestNotificationPermission()
@@ -94,6 +142,11 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             appPreferences.gemmaTermsAccepted.collect { accepted ->
                 gemmaTermsAccepted = accepted
+            }
+        }
+        lifecycleScope.launch {
+            appPreferences.onboardingDownloadPromptSeen.collect { seen ->
+                onboardingDownloadPromptSeen = seen
             }
         }
 
@@ -108,6 +161,15 @@ class MainActivity : ComponentActivity() {
                 val modelState by modelManagerViewModel.uiState.collectAsStateWithLifecycle()
                 val targetSessionId by sessionNavigation.collectAsStateWithLifecycle()
                 val navigateToModels by modelsNavigation.collectAsStateWithLifecycle()
+                val isModelLibraryLoaded = modelState.phase != ModelLibraryPhase.Loading
+                val hasInstalledModels =
+                    modelState.models.any { it.installState == ModelInstallState.INSTALLED }
+                val onboardingModel =
+                    if (isModelLibraryLoaded && !hasInstalledModels) {
+                        onboardingCandidateModel(modelState)
+                    } else {
+                        null
+                    }
 
                 onPickImage = chatViewModel::importImageAttachment
                 onPickAudio = chatViewModel::importAudioAttachment
@@ -115,10 +177,43 @@ class MainActivity : ComponentActivity() {
 
                 StartupGateContent(
                     gemmaTermsAccepted = gemmaTermsAccepted,
+                    onboardingDownloadPromptSeen = onboardingDownloadPromptSeen,
+                    isModelLibraryLoaded = isModelLibraryLoaded,
+                    hasInstalledModels = hasInstalledModels,
+                    onboardingModel = onboardingModel,
                     onAccepted = {
                         gemmaTermsAccepted = true
                         lifecycleScope.launch {
                             appPreferences.updateGemmaTermsAccepted(true)
+                        }
+                    },
+                    onContinueOnboarding = {
+                        onboardingDownloadPromptSeen = true
+                        lifecycleScope.launch {
+                            appPreferences.updateOnboardingDownloadPromptSeen(true)
+                        }
+                        onboardingModel?.let { model ->
+                            modelManagerViewModel.selectAndPreferDownloadedMode(model.modelId)
+                            if (model.installState != ModelInstallState.INSTALLED) {
+                                modelManagerViewModel.downloadModel(model.modelId)
+                                modelManagerViewModel.markPendingAutoActivation(model.modelId)
+                            } else {
+                                // Model already installed — activate immediately
+                                modelManagerViewModel.useModel(model.modelId)
+                            }
+                        }
+                    },
+                    onOpenModelManagement = {
+                        onboardingDownloadPromptSeen = true
+                        modelsNavigation.value = true
+                        lifecycleScope.launch {
+                            appPreferences.updateOnboardingDownloadPromptSeen(true)
+                        }
+                    },
+                    onDismissOnboarding = {
+                        onboardingDownloadPromptSeen = true
+                        lifecycleScope.launch {
+                            appPreferences.updateOnboardingDownloadPromptSeen(true)
                         }
                     }
                 ) {
@@ -221,6 +316,32 @@ class MainActivity : ComponentActivity() {
             requestNotificationsPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
+
+    private companion object {
+        const val TAG = "MainActivity"
+    }
+}
+
+private fun onboardingCandidateModel(state: ModelGalleryScreenState): ModelCardUi? {
+    val candidates = state.models.filter { card ->
+        if (card.isLegacy || !card.recommendedForChat) {
+            return@filter false
+        }
+        when (card.compatibility) {
+            LocalModelCompatibilityState.Ready,
+            LocalModelCompatibilityState.Downloadable -> true
+
+            else -> card.installState == ModelInstallState.INSTALLED
+        }
+    }
+
+    if (candidates.isEmpty()) {
+        return state.models
+            .filter { !it.isLegacy && it.recommendedForChat }
+            .minByOrNull { it.sizeInBytes }
+    }
+
+    return candidates.minByOrNull { it.sizeInBytes }
 }
 
 @Preview(showBackground = true)

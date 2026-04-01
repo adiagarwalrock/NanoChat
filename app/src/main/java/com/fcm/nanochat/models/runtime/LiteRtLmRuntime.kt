@@ -16,12 +16,14 @@ import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
 import java.util.Locale
@@ -54,7 +56,7 @@ internal class LiteRtLmRuntime(
         systemInstruction: String?,
         attachments: List<LocalRuntimeAttachment>
     ): Flow<String> = callbackFlow {
-        val request = prompt.trim()
+        val request = sanitizeForNative(prompt.trim())
         if (request.isBlank() && attachments.isEmpty()) {
             channel.close()
             return@callbackFlow
@@ -63,7 +65,7 @@ internal class LiteRtLmRuntime(
         val generationId = generationCounter.incrementAndGet()
         val gate = StreamLifecycleGate()
         val normalizedSystemInstruction =
-            systemInstruction?.trim()?.takeIf { it.isNotBlank() }
+            systemInstruction?.trim()?.takeIf { it.isNotBlank() }?.let { sanitizeForNative(it) }
 
         var resolvedConversation: Conversation? = null
 
@@ -72,7 +74,8 @@ internal class LiteRtLmRuntime(
             val canReuse = sessionId != null &&
                     active != null &&
                     active.sessionId == sessionId &&
-                    active.systemInstruction == normalizedSystemInstruction
+                    active.systemInstruction == normalizedSystemInstruction &&
+                    !active.gate.isCancelled()
 
             if (canReuse) {
                 Log.d(
@@ -94,12 +97,16 @@ internal class LiteRtLmRuntime(
 
                 repeat(SESSION_RETRY_ATTEMPTS) { attempt ->
                     try {
-                        conversation = engine.createConversation(
-                            ConversationConfig(
-                                samplerConfig = samplerConfig,
-                                systemInstruction = systemContents
+                        // Force conversation creation onto a background thread
+                        // to avoid JNI abort on main thread Looper.
+                        conversation = withContext(Dispatchers.IO) {
+                            engine.createConversation(
+                                ConversationConfig(
+                                    samplerConfig = samplerConfig,
+                                    systemInstruction = systemContents
+                                )
                             )
-                        )
+                        }
                     } catch (e: Throwable) {
                         lastError = e
                         val message = e.message.orEmpty()
@@ -237,9 +244,36 @@ internal class LiteRtLmRuntime(
     private companion object {
         const val TAG = "LiteRtLmRuntime"
         const val SUPERSEDE_DRAIN_POLL_MS = 60L
-        const val SUPERSEDE_DRAIN_ATTEMPTS = 25
+        const val SUPERSEDE_DRAIN_ATTEMPTS = 50
         const val SESSION_RETRY_ATTEMPTS = 8
         const val SESSION_RETRY_DELAY_MS = 200L
+
+        /**
+         * Strips characters known to crash the LiteRT-LM native tokenizer:
+         * null chars, isolated surrogates, and other problematic code points.
+         */
+        fun sanitizeForNative(text: String): String {
+            val sb = StringBuilder(text.length)
+            var i = 0
+            while (i < text.length) {
+                val c = text[i]
+                when {
+                    c == '\u0000' -> { /* skip null chars */ }
+                    c.isHighSurrogate() -> {
+                        if (i + 1 < text.length && text[i + 1].isLowSurrogate()) {
+                            sb.append(c)
+                            sb.append(text[i + 1])
+                            i++
+                        }
+                        // else: lone high surrogate — skip
+                    }
+                    c.isLowSurrogate() -> { /* lone low surrogate — skip */ }
+                    else -> sb.append(c)
+                }
+                i++
+            }
+            return sb.toString()
+        }
     }
 
     private data class ActiveConversation(
@@ -308,7 +342,7 @@ internal class LiteRtLmRuntime(
 
         // Wait for the conversation to be fully closed to avoid "session already exists"
         runCatching {
-            val result = kotlinx.coroutines.withTimeoutOrNull(2000L) {
+            val result = kotlinx.coroutines.withTimeoutOrNull(4000L) {
                 deferred.await()
             }
             if (result == null) {
@@ -320,7 +354,7 @@ internal class LiteRtLmRuntime(
         }
 
         // Extra delay to ensure native layer is clean
-        delay(100L)
+        delay(250L)
     }
 
     private fun createFileContent(className: String, absolutePath: String): Content {
@@ -344,6 +378,8 @@ internal class StreamLifecycleGate {
     fun tryCancel(): Boolean = cancelled.compareAndSet(false, true)
 
     fun tryFinalize(): Boolean = finalized.compareAndSet(false, true)
+
+    fun isCancelled(): Boolean = cancelled.get()
 
     fun isFinalized(): Boolean = finalized.get()
 }

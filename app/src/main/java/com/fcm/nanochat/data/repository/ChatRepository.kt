@@ -72,7 +72,6 @@ class ChatRepository(
                         else notReadyYetMessage(displayName)
                     )
                 }
-
                 RuntimeLoadPhase.LOADED -> {
                     if (sameModel) {
                         baseStatus.copy(ready = true, message = "Ready for local chat")
@@ -80,11 +79,20 @@ class ChatRepository(
                         baseStatus.unready(willPrepareOnStartMessage(displayName))
                     }
                 }
-
                 RuntimeLoadPhase.EJECTED, RuntimeLoadPhase.IDLE -> {
-                    baseStatus.unready(notLoadedMessage(displayName))
+                    // If the registry already provides a download-progress message
+                    // (e.g. "Downloading Gemma3-1B-IT (45%)"), preserve it.
+                    // Only fall back to the generic "not loaded" message when no
+                    // download-stage context is available from the registry.
+                    val registryMessage = baseStatus.message?.trim().orEmpty()
+                    val hasDownloadContext = registryMessage.isNotBlank() &&
+                            !registryMessage.contains("not loaded", ignoreCase = true) &&
+                            !registryMessage.contains("Choose a local model", ignoreCase = true)
+                    baseStatus.unready(
+                        if (hasDownloadContext) registryMessage
+                        else notLoadedMessage(displayName)
+                    )
                 }
-
                 RuntimeLoadPhase.FAILED -> {
                     baseStatus.unready(
                         if (runtimeModelId.isBlank() || sameModel)

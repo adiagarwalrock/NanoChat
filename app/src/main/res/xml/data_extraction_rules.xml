@@ -1,31 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    NanoChat does not back up or transfer app data. Model files are too large,
+    and restoring preferences/database without matching files causes stale state.
+    A fresh install always starts clean with T&C acceptance and model setup.
+-->
 <data-extraction-rules>
     <cloud-backup>
-        <include
-            domain="file"
-            path="datastore/" />
-        <include
-            domain="database"
-            path="nanochat.db" />
-        <include
-            domain="database"
-            path="nanochat.db-wal" />
-        <include
-            domain="database"
-            path="nanochat.db-shm" />
     </cloud-backup>
     <device-transfer>
-        <include
-            domain="file"
-            path="datastore/" />
-        <include
-            domain="database"
-            path="nanochat.db" />
-        <include
-            domain="database"
-            path="nanochat.db-wal" />
-        <include
-            domain="database"
-            path="nanochat.db-shm" />
     </device-transfer>
 </data-extraction-rules>

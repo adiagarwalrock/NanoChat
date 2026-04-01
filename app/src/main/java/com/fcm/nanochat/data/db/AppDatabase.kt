@@ -144,11 +144,22 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val Migration5To4 = object : Migration(5, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP INDEX IF EXISTS `index_chat_message_parts_messageId`")
+                db.execSQL("DROP INDEX IF EXISTS `index_chat_message_parts_messageId_partIndex`")
+                db.execSQL("DROP INDEX IF EXISTS `index_chat_message_parts_partType`")
+                db.execSQL("DROP INDEX IF EXISTS `index_chat_message_parts_sourceMessageId`")
+                db.execSQL("DROP TABLE IF EXISTS `chat_message_parts`")
+            }
+        }
+
         internal val ALL_MIGRATIONS = arrayOf(
             Migration1To2,
             Migration2To3,
             Migration3To4,
-            Migration4To5
+            Migration4To5,
+            Migration5To4
         )
     }
 }

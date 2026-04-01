@@ -44,6 +44,7 @@
     <string name="local_models">Local models</string>
     <string name="manage_local_models">Manage local models</string>
     <string name="local_model_empty_title">Select a local model to start on-device chat</string>
+    <string name="local_model_downloading_title">Setting up your local model</string>
     <string name="active_local_model">Active local model</string>
     <string name="no_local_model_selected">No local model selected</string>
     <string name="local_model_ready_status">Ready for on-device chat</string>
@@ -63,9 +64,11 @@
     <string name="resume_download">Resume</string>
     <string name="retry_download">Retry</string>
     <string name="cancel_download">Cancel</string>
+    <string name="cancel_button">Cancel</string>
     <string name="use_model">Use model</string>
     <string name="move_storage">Move storage</string>
     <string name="delete_model">Delete</string>
+    <string name="dialog_delete_confirmation">Are you sure you want to delete %1$s? This will remove all local files for this model from your device.</string>
     <string name="model_details">Model details</string>
     <string name="supports_image">Image</string>
     <string name="supports_audio">Audio</string>
@@ -189,12 +192,21 @@
     <string name="gemma_terms_read_link">Read Gemma Terms of Use ↗</string>
     <string name="gemma_terms_accept">I accept the Gemma Terms of Use</string>
     <string name="gemma_terms_continue">Continue</string>
+    <string name="onboarding_model_download_title">Get started with local AI</string>
+    <string name="onboarding_model_download_body">NanoChat will download %1$s, a compact local model, so you can start chatting right away.</string>
+    <string name="onboarding_model_generic_name">a small local model</string>
+    <string name="onboarding_model_size">Size: %1$s</string>
+    <string name="onboarding_model_capabilities">Capabilities: %1$s</string>
+    <string name="onboarding_model_aim">Our aim is to have a local model ready for you by the time you open chat.</string>
+    <string name="onboarding_model_continue">Continue</string>
+    <string name="onboarding_model_management">Model management</string>
+    <string name="onboarding_close">Close onboarding</string>
 
     <string name="about_title">About</string>
     <string name="app_info_title">App info</string>
     <string name="app_info_subtitle">Version, device diagnostics, and debug report</string>
     <string name="app_info_summary">Helpful app, device, and runtime details for support and debugging.</string>
-    <string name="open_source_licenses">Open source licenses</string>
+
     <string name="about_developer">About · Privacy policy</string>
     <string name="about_developer_title">About the developer</string>
     <string name="privacy_policy_title">Privacy policy</string>

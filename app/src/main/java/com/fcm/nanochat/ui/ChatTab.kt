@@ -50,7 +50,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.BottomSheetDefaults
@@ -228,16 +228,26 @@ private fun ChatTabContent(
                 state.inferenceMode == InferenceMode.DOWNLOADED && !state.isLocalModelReady
     }
 
+    val isModelReady = remember(state.inferenceMode, state.isLocalModelReady, state.isGeminiNanoSupported, settingsState.modelName) {
+        when (state.inferenceMode) {
+            InferenceMode.AICORE -> state.isGeminiNanoSupported
+            InferenceMode.DOWNLOADED -> state.isLocalModelReady
+            InferenceMode.REMOTE -> settingsState.modelName.isNotBlank()
+        }
+    }
+
         Box(modifier = modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize()) {
                         ChatTopBar(
                                 selectedMode = state.inferenceMode,
                                 modelName = settingsState.modelName,
                                 activeLocalModelName = state.activeLocalModelName,
+                            isGeminiNanoSupported = state.isGeminiNanoSupported,
                                 isLocalModelReady = state.isLocalModelReady,
                                 showMenuIcon = showMenuIcon,
                                 onInferenceModeChange = onInferenceModeChange,
-                                onOpenSessions = onOpenSessions
+                                onOpenSessions = onOpenSessions,
+                                onOpenControls = { controlsVisible = true }
                         )
 
                         if (state.inferenceMode == InferenceMode.DOWNLOADED && !state.isLocalModelReady) {
@@ -513,6 +523,7 @@ private fun ModelControlsSheet(
                                                 )
                                         }
 
+/*
                                         if (state.inferenceMode == InferenceMode.DOWNLOADED) {
                                                 HorizontalDivider(
                                                     color = MaterialTheme.colorScheme.outlineVariant.copy(
@@ -536,6 +547,7 @@ private fun ModelControlsSheet(
                                                         onSelected = onUpdateAccelerator
                                                 )
                                         }
+                                        */
                                 }
                         }
 
@@ -646,10 +658,12 @@ private fun ChatTopBar(
         selectedMode: InferenceMode,
         modelName: String,
         activeLocalModelName: String?,
+        isGeminiNanoSupported: Boolean,
         isLocalModelReady: Boolean = false,
         showMenuIcon: Boolean,
         onInferenceModeChange: (InferenceMode) -> Unit,
-        onOpenSessions: () -> Unit
+        onOpenSessions: () -> Unit,
+        onOpenControls: () -> Unit
 ) {
         var expanded by remember { mutableStateOf(false) }
     val cleanModel = remember(modelName) {
@@ -676,7 +690,6 @@ private fun ChatTopBar(
                 }
     }
 
-
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
         animationSpec = tween(durationMillis = 160),
@@ -688,8 +701,9 @@ private fun ChatTopBar(
                     modifier = Modifier
                         .fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(top = 6.dp, bottom = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        .padding(top = 6.dp, bottom = 10.dp, start = 12.dp, end = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                         if (showMenuIcon) {
                                 Surface(
@@ -713,9 +727,6 @@ private fun ChatTopBar(
                         }
 
                         Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 12.dp),
                                 contentAlignment = Alignment.Center
                         ) {
                                 Box {
@@ -768,22 +779,25 @@ private fun ChatTopBar(
                                                 shape = RoundedCornerShape(16.dp),
                                             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                                         ) {
+                                            if (isGeminiNanoSupported) {
                                                 DropdownMenuItem(
-                                                        text = {
-                                                                Column {
-                                                                    Text(text = stringResource(id = R.string.gemini_nano_title))
-                                                                        Text(
-                                                                            text = stringResource(id = R.string.on_device_mode),
-                                                                            style = MaterialTheme.typography.bodySmall,
-                                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                                        )
-                                                                }
-                                                        },
-                                                        onClick = {
-                                                                expanded = false
-                                                            onInferenceModeChange(InferenceMode.AICORE)
+                                                    text = {
+                                                        Column {
+                                                            Text(text = stringResource(id = R.string.gemini_nano_title))
+                                                            Text(
+                                                                text = stringResource(id = R.string.on_device_mode),
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                            )
                                                         }
+                                                    },
+                                                    onClick = {
+                                                        expanded = false
+                                                        onInferenceModeChange(InferenceMode.AICORE)
+                                                    }
                                                 )
+
+                                            }
                                                 DropdownMenuItem(
                                                         text = {
                                                                 Column {
@@ -823,7 +837,22 @@ private fun ChatTopBar(
                                 }
                         }
 
-                        Spacer(modifier = Modifier.size(42.dp))
+                        Surface(
+                                shape = HeaderIconShape,
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                tonalElevation = 1.dp
+                        ) {
+                                IconButton(
+                                        onClick = onOpenControls,
+                                        modifier = Modifier.size(42.dp)
+                                ) {
+                                        Icon(
+                                                imageVector = Icons.Default.Tune,
+                                                contentDescription = stringResource(id = R.string.model_controls_title),
+                                                tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                }
+                        }
                 }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
@@ -841,10 +870,13 @@ private fun LocalModelStatusSurface(
         val normalizedMessage = message?.trim().orEmpty()
         val lowerMessage = normalizedMessage.lowercase()
         val preparing = !isReady && ("preparing" in lowerMessage || "loading" in lowerMessage)
+        val downloading = !isReady && ("downloading" in lowerMessage || "preparing to download" in lowerMessage || "verifying" in lowerMessage || "moving" in lowerMessage)
+        val showProgress = preparing || downloading
 
     val titleText = when {
         isReady -> "Running on ${modelName.orEmpty().ifBlank { "local model" }}"
         preparing -> "Preparing local model"
+        downloading -> "Setting up local model"
         modelName.isNullOrBlank() -> "Select a local model"
         else -> "Local model selected"
     }
@@ -887,7 +919,7 @@ private fun LocalModelStatusSurface(
                                 }
                         }
 
-                        if (preparing) {
+                        if (showProgress) {
                                 LinearProgressIndicator(
                                         modifier = Modifier.fillMaxWidth(),
                                         color = MaterialTheme.colorScheme.primary,
@@ -905,6 +937,12 @@ private fun LocalModelEmptyState(
         onOpenModelGallery: () -> Unit
 ) {
         val normalizedStatus = statusMessage?.trim().orEmpty()
+        val lowerStatus = normalizedStatus.lowercase()
+        val isDownloadingOrPreparing = "downloading" in lowerStatus ||
+                "preparing to download" in lowerStatus ||
+                "verifying" in lowerStatus ||
+                "moving" in lowerStatus ||
+                "preparing" in lowerStatus
 
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(
@@ -912,24 +950,48 @@ private fun LocalModelEmptyState(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.padding(horizontal = 24.dp)
                 ) {
-                        Text(
-                            text = stringResource(id = R.string.local_model_empty_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                textAlign = TextAlign.Center,
-                                color = MaterialTheme.colorScheme.onSurface
-                        )
-
-                        if (normalizedStatus.isNotBlank()) {
+                        if (isDownloadingOrPreparing) {
+                                Surface(
+                                        modifier = Modifier.size(64.dp),
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                                ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                        imageVector = Icons.Default.AutoAwesome,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(30.dp),
+                                                        tint = MaterialTheme.colorScheme.primary
+                                                )
+                                        }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                        text = normalizedStatus,
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        text = stringResource(id = R.string.local_model_downloading_title),
+                                        style = MaterialTheme.typography.titleMedium,
                                         textAlign = TextAlign.Center,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurface
                                 )
-                        }
+                        } else {
+                                Text(
+                                    text = stringResource(id = R.string.local_model_empty_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        textAlign = TextAlign.Center,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                )
 
-                        Button(onClick = onOpenModelGallery) {
-                                Text(text = stringResource(id = R.string.open_model_library))
+                                if (normalizedStatus.isNotBlank()) {
+                                        Text(
+                                                text = normalizedStatus,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                textAlign = TextAlign.Center,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                }
+
+                                Button(onClick = onOpenModelGallery) {
+                                        Text(text = stringResource(id = R.string.open_model_library))
+                                }
                         }
                 }
         }
@@ -1023,7 +1085,7 @@ private fun EmptyChatGreeting(bottomPadding: Dp, modifier: Modifier = Modifier) 
                 ) {
                         Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                        imageVector = Icons.Default.Star,
+                                        imageVector = Icons.Default.AutoAwesome,
                                         contentDescription = null,
                                         modifier = Modifier.size(38.dp),
                                         tint = MaterialTheme.colorScheme.primary
@@ -1717,6 +1779,7 @@ private fun Composer(
                                                         style = MaterialTheme.typography.bodyMedium
                                                 )
                                         },
+                                        enabled = canSend,
                                         minLines = 1,
                                         maxLines = 5,
                                         shape = RoundedCornerShape(16.dp),

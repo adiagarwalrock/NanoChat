@@ -42,7 +42,9 @@ class StreamLifecycleGateTest {
     fun `tryCancel only succeeds once`() {
         val gate = StreamLifecycleGate()
 
+        assertFalse(gate.isCancelled())
         assertTrue(gate.tryCancel())
+        assertTrue(gate.isCancelled())
         assertFalse(gate.tryCancel())
     }
 }

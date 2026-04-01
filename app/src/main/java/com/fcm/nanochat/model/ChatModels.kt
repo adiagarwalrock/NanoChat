@@ -42,6 +42,7 @@ data class ChatScreenState(
         val isPreparingAttachment: Boolean = false,
         val inferenceMode: InferenceMode = InferenceMode.REMOTE,
         val capabilities: InferenceCapabilities = InferenceCapabilities.defaultTextOnly(),
+        val isGeminiNanoSupported: Boolean = false,
         val activeLocalModelName: String? = null,
         val isLocalModelReady: Boolean = false,
         val localModelStatusMessage: String? = null,
@@ -55,6 +56,9 @@ data class SettingsScreenState(
         val baseUrl: String = "",
         val modelName: String = "",
         val transcriptionModelName: String = "",
+        val inferenceMode: com.fcm.nanochat.inference.InferenceMode =
+                com.fcm.nanochat.inference.InferenceMode.REMOTE,
+        val activeLocalModelId: String = "",
         val apiKey: String = "",
         val temperature: Double = com.fcm.nanochat.data.AppPreferences.DEFAULT_TEMPERATURE,
         val topP: Double = com.fcm.nanochat.data.AppPreferences.DEFAULT_TOP_P,

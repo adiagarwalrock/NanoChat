@@ -12,6 +12,7 @@ import com.fcm.nanochat.models.registry.ModelRegistry
 import com.fcm.nanochat.models.runtime.LocalRuntimeAttachment
 import com.fcm.nanochat.models.runtime.LocalRuntimeTelemetry
 import com.fcm.nanochat.models.runtime.ModelRuntimeManager
+import com.fcm.nanochat.util.CrashReporter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +32,8 @@ class DownloadedModelInferenceClient(
     private val modelRegistry: ModelRegistry,
     private val runtimeManager: ModelRuntimeManager,
     private val mediaStore: ChatMediaStore,
-    private val telemetry: LocalRuntimeTelemetry
+    private val telemetry: LocalRuntimeTelemetry,
+    private val crashReporter: CrashReporter
 ) : InferenceClient {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -265,6 +267,9 @@ class DownloadedModelInferenceClient(
             TAG,
             "Starting local generation modelId=$resolvedModelId selectedModelId=$activeModelId path=$localPath installState=${record.installState} historyTurns=${request.history.size}"
         )
+        crashReporter.logBreadcrumb(
+            "local_generation_prepare modelId=$resolvedModelId sessionId=${request.sessionId ?: -1L}"
+        )
 
         val activeSessionId = request.sessionId
         val runtimeState = runtimeManager.loadState.value
@@ -300,12 +305,7 @@ class DownloadedModelInferenceClient(
                         thinkingEffort = request.settings.thinkingEffort,
                         supportsThinking = model?.supportsThinking ?: false
                     )
-                val finalUserMessage =
-                    if (isGemmaFamily) {
-                        "$systemPrompt\n\n$latestTurn"
-                    } else {
-                        latestTurn
-                    }
+                val finalUserMessage = latestTurn
 
                 DownloadedPrompt(
                     family = promptFamily,
@@ -399,6 +399,9 @@ class DownloadedModelInferenceClient(
                 TAG,
                 "local_generation_started modelId=$resolvedModelId family=${formattedPrompt.family.name} watchdogMs=$noTokenWatchdogMs stallMs=$visibleStallWatchdogMs isRetry=$isRetry reusing=$isReusing"
             )
+            crashReporter.logBreadcrumb(
+                "local_generation_started modelId=$resolvedModelId watchdogMs=$noTokenWatchdogMs retry=$isRetry"
+            )
 
             suspend fun emitStableDelta(currentSnapshot: String, chunkIndex: Int) {
                 val emittedDelta = incrementalVisibleDelta(emittedOutput, currentSnapshot)
@@ -411,6 +414,10 @@ class DownloadedModelInferenceClient(
                     Log.d(
                         TAG,
                         "local_generation_first_token modelId=$resolvedModelId firstTokenMs=${firstVisibleTokenAt - generationStart} rawCallbacks=$rawCallbackCount"
+                    )
+                    crashReporter.updateInferenceStage(
+                        stage = "local_first_token",
+                        visibleChars = currentSnapshot.length
                     )
                 }
                 lastVisibleProgressAt = System.currentTimeMillis()
@@ -726,6 +733,10 @@ class DownloadedModelInferenceClient(
                     TAG,
                     "local_generation_failed modelId=$resolvedModelId completionReason=$completionReason message=${backendUnavailable.message.orEmpty()}"
                 )
+                crashReporter.recordNonFatal(
+                    backendUnavailable,
+                    "local_generation_failed modelId=$resolvedModelId reason=$completionReason"
+                )
                 throw backendUnavailable
             } catch (degenerate: DegenerateOutputException) {
                 throw degenerate
@@ -738,6 +749,10 @@ class DownloadedModelInferenceClient(
                         "Selected local model/runtime could not process image input."
                     )
                 }
+                crashReporter.recordNonFatal(
+                    error,
+                    "local_generation_error modelId=$resolvedModelId"
+                )
                 throw InferenceException.BackendUnavailable(toFriendlyRuntimeError(error))
             }
         }
@@ -1127,6 +1142,15 @@ class DownloadedModelInferenceClient(
                 "This model needs more memory on this device."
             }
 
+            "context" in combined && "limit" in combined ||
+                    "context" in combined && "exceed" in combined ||
+                    "maximum context" in combined ||
+                    "too many token" in combined ||
+                    "input token" in combined && "limit" in combined ||
+                    "prompt token" in combined && "limit" in combined -> {
+                "This conversation is too long for the local model. Start a new chat or shorten your message."
+            }
+
             "permission" in combined -> {
                 "NanoChat cannot access the local model file. Move or re-download the model."
             }
@@ -1162,6 +1186,14 @@ class DownloadedModelInferenceClient(
             "outofmemory" in lowercase || "out of memory" in lowercase -> {
                 "This model needs more memory on this device."
             }
+            "context" in lowercase && "limit" in lowercase ||
+                    "context" in lowercase && "exceed" in lowercase ||
+                    "maximum context" in lowercase ||
+                    "too many token" in lowercase ||
+                    "input token" in lowercase && "limit" in lowercase ||
+                    "prompt token" in lowercase && "limit" in lowercase -> {
+                "This conversation is too long for the local model. Start a new chat or shorten your message."
+            }
             "permission" in lowercase -> {
                 "NanoChat cannot access the local model file. Move or re-download the model."
             }
@@ -1171,8 +1203,8 @@ class DownloadedModelInferenceClient(
 
     private companion object {
         const val TAG = "DownloadedInference"
-        const val LOCAL_NO_TOKEN_WATCHDOG_MS = 15_000L
-        const val LOCAL_RETRY_NO_TOKEN_WATCHDOG_MS = 45_000L
+        const val LOCAL_NO_TOKEN_WATCHDOG_MS = 45_000L
+        const val LOCAL_RETRY_NO_TOKEN_WATCHDOG_MS = 75_000L
         const val LOCAL_VISIBLE_STALL_WATCHDOG_MS = 10_000L
         const val NO_TOKEN_WATCHDOG_MESSAGE =
             "Local generation started but produced no visible output. Retry, or reselect this model."

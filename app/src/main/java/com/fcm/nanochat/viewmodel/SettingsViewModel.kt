@@ -39,6 +39,8 @@ class SettingsViewModel @Inject constructor(
                             baseUrl = snapshot.baseUrl,
                             modelName = snapshot.modelName,
                             transcriptionModelName = snapshot.transcriptionModelName,
+                            inferenceMode = snapshot.inferenceMode,
+                            activeLocalModelId = snapshot.activeLocalModelId,
                             apiKey = snapshot.apiKey,
                             temperature = snapshot.temperature,
                             topP = snapshot.topP,
@@ -54,6 +56,8 @@ class SettingsViewModel @Inject constructor(
                     } else {
                         current.copy(
                             transcriptionModelName = snapshot.transcriptionModelName,
+                            inferenceMode = snapshot.inferenceMode,
+                            activeLocalModelId = snapshot.activeLocalModelId,
                             thinkingEffort = snapshot.thinkingEffort,
                             acceleratorPreference = snapshot.acceleratorPreference,
                             geminiStatus = current.geminiStatus.copy(
