@@ -15,6 +15,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +37,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -54,6 +56,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -366,6 +369,62 @@ private fun ModelControlsSheet(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+
+                        // AI behavior preset chips
+                        val activePreset = closestBehaviorPreset(
+                                settings.temperature,
+                                settings.topP
+                        )
+                        Surface(
+                                shape = ControlCardShape,
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh
+                        ) {
+                                Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                        Text(
+                                                text = "AI behavior",
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .horizontalScroll(rememberScrollState()),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                                BehaviorPreset.entries.forEach { preset ->
+                                                        FilterChip(
+                                                                selected = activePreset == preset,
+                                                                onClick = {
+                                                                        onUpdateSettings(
+                                                                                settings.baseUrl,
+                                                                                settings.modelName,
+                                                                                preset.temperature,
+                                                                                preset.topP,
+                                                                                settings.contextLength
+                                                                        )
+                                                                },
+                                                                label = { Text(preset.title) },
+                                                                colors = FilterChipDefaults.filterChipColors(
+                                                                        selectedContainerColor =
+                                                                                MaterialTheme.colorScheme.primaryContainer,
+                                                                        selectedLabelColor =
+                                                                                MaterialTheme.colorScheme.onPrimaryContainer
+                                                                )
+                                                        )
+                                                }
+                                        }
+                                        Text(
+                                                text = activePreset.description,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                }
+                        }
 
                         Surface(
                                 shape = ControlCardShape,
