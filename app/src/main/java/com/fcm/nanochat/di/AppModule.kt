@@ -22,6 +22,7 @@ import com.fcm.nanochat.models.registry.ModelRegistry
 import com.fcm.nanochat.models.runtime.InMemoryLocalRuntimeTelemetry
 import com.fcm.nanochat.models.runtime.ModelRuntimeManager
 import com.fcm.nanochat.notifications.NotificationCoordinator
+import com.fcm.nanochat.util.CrashReporter
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -187,12 +188,14 @@ object AppModule {
     fun provideDownloadedModelInferenceClient(
         modelRegistry: ModelRegistry,
         runtimeManager: ModelRuntimeManager,
-        telemetry: InMemoryLocalRuntimeTelemetry
+        telemetry: InMemoryLocalRuntimeTelemetry,
+        crashReporter: CrashReporter
     ): DownloadedModelInferenceClient {
         return DownloadedModelInferenceClient(
             modelRegistry = modelRegistry,
             runtimeManager = runtimeManager,
-            telemetry = telemetry
+            telemetry = telemetry,
+            crashReporter = crashReporter
         )
     }
 
@@ -222,7 +225,7 @@ object AppModule {
         )
     }
 
-    private const val BUNDLED_ALLOWLIST_ASSET = "model_allowlist_2_0_0.json"
-    private const val BUNDLED_ALLOWLIST_VERSION = "2_0_0"
+    private const val BUNDLED_ALLOWLIST_ASSET = "model_allowlist_2_0_3.json"
+    private const val BUNDLED_ALLOWLIST_VERSION = "2_0_3"
     private const val REMOTE_ALLOWLIST_URL = ""
 }

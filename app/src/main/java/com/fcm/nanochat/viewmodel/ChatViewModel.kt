@@ -12,10 +12,12 @@ import com.fcm.nanochat.inference.GeneratedTextSanitizer
 import com.fcm.nanochat.inference.InferenceException
 import com.fcm.nanochat.inference.InferenceMode
 import com.fcm.nanochat.model.ChatMessage
-import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.ChatSession
 import com.fcm.nanochat.models.registry.ActiveModelStatus
+import com.fcm.nanochat.util.CrashReporter
+import com.fcm.nanochat.util.InferenceCrashMarkerStore
+import com.fcm.nanochat.util.InferenceDumpLogger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -39,7 +41,12 @@ import javax.inject.Inject
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class ChatViewModel @Inject constructor(private val repository: ChatRepository) : ViewModel() {
+class ChatViewModel @Inject constructor(
+    private val repository: ChatRepository,
+    private val inferenceCrashMarkerStore: InferenceCrashMarkerStore,
+    private val crashReporter: CrashReporter,
+    private val inferenceDumpLogger: InferenceDumpLogger
+) : ViewModel() {
     private val defaultLocalModelCapabilities =
             LocalModelCapabilities(modelId = null, supportsThinking = false, promptFamily = null)
     private val generationMutex = Mutex()
@@ -98,11 +105,8 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
 
     private val activeSessionId =
             combine(selectedSessionId, sessions) { selected, sessionList ->
-                        if (selected != null && sessionList.any { it.id == selected }) {
-                            selected
-                        } else {
-                            sessionList.firstOrNull()?.id
-                        }
+                selected?.takeIf { id -> sessionList.any { it.id == id } }
+                    ?: sessionList.firstOrNull()?.id
                     }
                     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
@@ -117,37 +121,25 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
                     }
                     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    private val orderedSessions =
+        combine(sessions, pinnedSessionIds) { sessionList, pinnedIds ->
+            sessionList
+                .map { session -> session.copy(isPinned = pinnedIds.contains(session.id)) }
+                .sortedWith(
+                    compareByDescending<ChatSession> { it.isPinned }
+                        .thenByDescending { it.updatedAt }
+                )
+        }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     private val sessionState =
-            combine(sessions, pinnedSessionIds, messages, activeSessionId, isSending) {
-                    sessionList,
-                    pinnedIds,
-                    messageList,
-                    selectedId,
-                    sending ->
-                val orderedSessions =
-                        sessionList
-                                .map { session ->
-                                    session.copy(isPinned = pinnedIds.contains(session.id))
-                                }
-                                .sortedWith(
-                                        compareByDescending<ChatSession> { it.isPinned }
-                                                .thenByDescending { it.updatedAt }
-                                )
-
-                val uiMessages =
-                        messageList.map { message ->
-                            message.copy(
-                                    isStreaming =
-                                            sending &&
-                                                    message.role == ChatRole.ASSISTANT &&
-                                                    message.id == messageList.lastOrNull()?.id
-                            )
-                        }
-
+        combine(orderedSessions, messages, activeSessionId) { ordered,
+                                                              messageList,
+                                                              selectedId ->
                 SessionUiState(
-                        sessions = orderedSessions,
+                    sessions = ordered,
                         selectedSessionId = selectedId,
-                        messages = uiMessages
+                    messages = messageList
                 )
             }
 
@@ -248,8 +240,10 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
 
             if (mode == InferenceMode.DOWNLOADED) {
                 val preparationError =
-                        withContext(Dispatchers.IO) { repository.prepareSelectedLocalModel() }
-                if (!preparationError.isNullOrBlank() && shouldSurfaceNotice(mode, preparationError)
+                    withContext(Dispatchers.IO) {
+                        repository.prepareSelectedLocalModel(settings.value)
+                    }
+                if (!preparationError.isNullOrBlank() && shouldSurfaceNotice(preparationError)
                 ) {
                     notice.value = preparationError
                     return@launch
@@ -262,7 +256,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
                             }
             ) {
                 is BackendAvailability.Unavailable -> {
-                    notice.value = availability.message.takeIf { shouldSurfaceNotice(mode, it) }
+                    notice.value = availability.message.takeIf { shouldSurfaceNotice(it) }
                 }
                 BackendAvailability.Available -> notice.value = null
             }
@@ -299,13 +293,47 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         var watchdogJob: Job? = null
         var hasVisibleContent = false
         var watchdogTriggered = false
+        var diagnosticsMode: InferenceMode? = null
+        var diagnosticsModelId: String? = null
+        var inferenceMarkerActive = false
 
         try {
             val snapshot = settings.value
             val mode = snapshot.inferenceMode
+            diagnosticsMode = mode
+            diagnosticsModelId = diagnosticsModelId(snapshot)
             Log.d(TAG, "chat_generation_started requestId=$requestId mode=${mode.name}")
 
             if (!checkAvailability(mode, snapshot)) return
+
+            inferenceCrashMarkerStore.markStarted(
+                mode = mode,
+                modelId = diagnosticsModelId,
+                sessionId = sessionId,
+                requestId = requestId
+            )
+            crashReporter.setInferenceContext(
+                mode = mode,
+                modelId = diagnosticsModelId,
+                sessionId = sessionId,
+                requestId = requestId
+            )
+            crashReporter.updateInferenceStage(stage = "stream_started", visibleChars = 0)
+            crashReporter.logBreadcrumb(
+                "inference_started requestId=$requestId mode=${mode.name} modelId=${diagnosticsModelId.orEmpty()}"
+            )
+            if (mode == InferenceMode.DOWNLOADED) {
+                inferenceDumpLogger.writeInferenceEvent(
+                    event = "generation_started",
+                    mode = mode,
+                    modelId = diagnosticsModelId,
+                    sessionId = sessionId,
+                    requestId = requestId,
+                    stage = "stream_started",
+                    visibleChars = 0
+                )
+            }
+            inferenceMarkerActive = true
 
             val history = withContext(Dispatchers.IO) { repository.recentTurnsFor(mode, sessionId) }
             val assistantId =
@@ -327,7 +355,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
                         watchdogTriggered = true
                         parentJob?.cancel(
                             GenerationWatchdogTimeout(
-                                "No response arrived in time. Retry or reselect this model."
+                                "No response arrived in time. Retry last, or reselect this model."
                             )
                         )
                     }
@@ -337,7 +365,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
             var lastPersistedLength = 0
             var lastPersistedSnapshot = ""
 
-            repository.streamResponse(mode, history, prompt, snapshot).collect { delta ->
+            repository.streamResponse(mode, history, prompt, snapshot, sessionId).collect { delta ->
                 ensureRequestActive(requestId)
                 val content = assembler.append(mode, delta)
                 val filtered = filterThinking(content, snapshot.thinkingEffort)
@@ -349,6 +377,17 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
                         "chat_generation_first_visible requestId=$requestId mode=${mode.name}"
                     )
                     hasVisibleContent = true
+                    inferenceCrashMarkerStore.markProgress(
+                        stage = "first_visible",
+                        visibleChars = filtered.length
+                    )
+                    crashReporter.updateInferenceStage(
+                        stage = "first_visible",
+                        visibleChars = filtered.length
+                    )
+                    crashReporter.logBreadcrumb(
+                        "inference_first_visible requestId=$requestId chars=${filtered.length}"
+                    )
                 }
 
                 if (mode != InferenceMode.AICORE &&
@@ -380,16 +419,38 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
                     repository.updateAssistantMessage(assistantId, finalContent)
                 }
             }
+            inferenceCrashMarkerStore.markProgress(
+                stage = "completed",
+                visibleChars = finalContent.length
+            )
+            crashReporter.updateInferenceStage(
+                stage = "completed",
+                visibleChars = finalContent.length
+            )
         } catch (cancellation: CancellationException) {
             handleGenerationCancellation(
                 requestId,
                 assistantMessageId,
                 watchdogTriggered,
-                cancellation
+                cancellation,
+                sessionId,
+                diagnosticsMode,
+                diagnosticsModelId
             )
         } catch (error: Throwable) {
-            handleGenerationError(requestId, assistantMessageId, error)
+            handleGenerationError(
+                requestId = requestId,
+                assistantMessageId = assistantMessageId,
+                error = error,
+                sessionId = sessionId,
+                mode = diagnosticsMode,
+                modelId = diagnosticsModelId
+            )
         } finally {
+            if (inferenceMarkerActive) {
+                inferenceCrashMarkerStore.clear()
+                crashReporter.clearInferenceContext()
+            }
             cleanupGeneration(requestId, assistantMessageId, watchdogJob)
         }
     }
@@ -399,9 +460,12 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         snapshot: SettingsSnapshot
     ): Boolean {
         if (mode == InferenceMode.DOWNLOADED) {
-            val error = withContext(Dispatchers.IO) { repository.prepareSelectedLocalModel() }
+            val error =
+                withContext(Dispatchers.IO) {
+                    repository.prepareSelectedLocalModel(snapshot)
+                }
             if (!error.isNullOrBlank()) {
-                notice.value = error.takeIf { shouldSurfaceNotice(mode, it) }
+                notice.value = error.takeIf { shouldSurfaceNotice(it) }
                 return false
             }
         }
@@ -409,7 +473,7 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         val availability =
             withContext(Dispatchers.IO) { repository.backendAvailability(mode, snapshot) }
         if (availability is BackendAvailability.Unavailable) {
-            notice.value = availability.message.takeIf { shouldSurfaceNotice(mode, it) }
+            notice.value = availability.message.takeIf { shouldSurfaceNotice(it) }
             return false
         }
         return true
@@ -419,7 +483,10 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         requestId: Long,
         assistantMessageId: Long?,
         watchdogTriggered: Boolean,
-        cancellation: CancellationException
+        cancellation: CancellationException,
+        sessionId: Long,
+        mode: InferenceMode?,
+        modelId: String?
     ) {
         Log.d(
             TAG,
@@ -441,9 +508,34 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         }
 
         if (watchdogTriggered || cancellation is GenerationWatchdogTimeout) {
+            inferenceCrashMarkerStore.markProgress(
+                stage = "watchdog_timeout",
+                visibleChars = activeAssistantPreview.length
+            )
+            crashReporter.updateInferenceStage(
+                stage = "watchdog_timeout",
+                visibleChars = activeAssistantPreview.length
+            )
+            crashReporter.recordNonFatal(
+                cancellation,
+                "inference_watchdog_timeout requestId=$requestId mode=${mode?.name.orEmpty()}"
+            )
+            if (mode == InferenceMode.DOWNLOADED) {
+                inferenceDumpLogger.writeInferenceEvent(
+                    event = "generation_watchdog_timeout",
+                    mode = mode,
+                    modelId = modelId,
+                    sessionId = sessionId,
+                    requestId = requestId,
+                    stage = "watchdog_timeout",
+                    visibleChars = activeAssistantPreview.length,
+                    watchdogTriggered = true,
+                    throwable = cancellation
+                )
+            }
             notice.value =
                 WATCHDOG_TIMEOUT_MESSAGE.takeIf {
-                    shouldSurfaceNotice(settings.value.inferenceMode, it)
+                    shouldSurfaceNotice(it)
                 }
         }
     }
@@ -451,7 +543,10 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
     private suspend fun handleGenerationError(
         requestId: Long,
         assistantMessageId: Long?,
-        error: Throwable
+        error: Throwable,
+        sessionId: Long,
+        mode: InferenceMode?,
+        modelId: String?
     ) {
         Log.e(
             TAG,
@@ -463,13 +558,33 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
 
         notice.value =
             if (fallbackContent == null)
-                message.takeIf { shouldSurfaceNotice(settings.value.inferenceMode, it) }
+                message.takeIf { shouldSurfaceNotice(it) }
             else null
 
         assistantMessageId?.let { id ->
             withContext(Dispatchers.IO) {
                 repository.updateAssistantMessage(id, fallbackContent ?: message)
             }
+        }
+
+        val visibleChars = fallbackContent?.length ?: 0
+        inferenceCrashMarkerStore.markProgress(stage = "failed", visibleChars = visibleChars)
+        crashReporter.updateInferenceStage(stage = "failed", visibleChars = visibleChars)
+        crashReporter.recordNonFatal(
+            error,
+            "inference_failed requestId=$requestId mode=${mode?.name.orEmpty()}"
+        )
+        if (mode == InferenceMode.DOWNLOADED) {
+            inferenceDumpLogger.writeInferenceEvent(
+                event = "generation_failed",
+                mode = mode,
+                modelId = modelId,
+                sessionId = sessionId,
+                requestId = requestId,
+                stage = "failed",
+                visibleChars = visibleChars,
+                throwable = error
+            )
         }
     }
 
@@ -553,8 +668,8 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         }
     }
 
-    private fun shouldSurfaceNotice(mode: InferenceMode, message: String): Boolean {
-        return message.isNotBlank() && mode != InferenceMode.DOWNLOADED
+    private fun shouldSurfaceNotice(message: String): Boolean {
+        return message.isNotBlank()
     }
 
     private fun filterThinking(content: String, effort: ThinkingEffort): String {
@@ -565,11 +680,18 @@ class ChatViewModel @Inject constructor(private val repository: ChatRepository) 
         }
     }
 
+    private fun diagnosticsModelId(snapshot: SettingsSnapshot): String? {
+        return when (snapshot.inferenceMode) {
+            InferenceMode.DOWNLOADED -> snapshot.activeLocalModelId.trim().ifBlank { null }
+            InferenceMode.REMOTE, InferenceMode.AICORE -> snapshot.modelName.trim().ifBlank { null }
+        }
+    }
+
     private companion object {
         const val TAG = "ChatViewModel"
         const val STREAM_PERSIST_INTERVAL_MS = 180L
         const val STREAM_PERSIST_MIN_LENGTH_DELTA = 24
-        const val LOCAL_FIRST_TOKEN_WATCHDOG_MS = 18_000L
+        const val LOCAL_FIRST_TOKEN_WATCHDOG_MS = 65_000L
         const val REMOTE_FIRST_TOKEN_WATCHDOG_MS = 25_000L
         const val CANCELLATION_MESSAGE = "Generation cancelled."
         const val WATCHDOG_TIMEOUT_MESSAGE =

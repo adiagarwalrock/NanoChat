@@ -1,5 +1,5 @@
 {
-  "version": "2_0_0",
+  "version": "2_0_1",
   "models": [
     {
       "name": "Qwen2.5-1.5B-Instruct",
@@ -39,7 +39,7 @@
       "modelId": "litert-community/Qwen2.5-3B-Instruct",
       "modelFile": "Qwen2.5-3B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm",
       "description": "Higher quality Qwen model for deeper reasoning at modest speed.",
-      "enabled": true,
+      "enabled": false,
       "sizeInBytes": 2863001600,
       "minDeviceMemoryInGb": 8,
       "commitHash": "8627038374d75f27e9976450689622d05775f0a3",
@@ -138,6 +138,7 @@
       "modelId": "google/gemma-3n-E2B-it-litert-lm",
       "modelFile": "gemma-3n-E2B-it-int4.litertlm",
       "description": "Multimodal Gemma model supporting chat, image, and audio prompts.",
+      "enabled": true,
       "sizeInBytes": 3655827456,
       "minDeviceMemoryInGb": 8,
       "commitHash": "ba9ca88da013b537b6ed38108be609b8db1c3a16",
@@ -173,6 +174,7 @@
       "modelId": "google/gemma-3n-E4B-it-litert-lm",
       "modelFile": "gemma-3n-E4B-it-int4.litertlm",
       "description": "Higher-capacity Gemma 3n variant for strongest local response quality.",
+      "enabled": true,
       "sizeInBytes": 4919541760,
       "minDeviceMemoryInGb": 12,
       "commitHash": "297ed75955702dec3503e00c2c2ecbbf475300bc",
@@ -204,10 +206,175 @@
       "isExperimental": true
     },
     {
+      "name": "TinyGarden-270M",
+      "modelId": "litert-community/functiongemma-270m-ft-tiny-garden",
+      "modelFile": "tiny_garden_q8_ekv1024.litertlm",
+      "description": "Fine-tuned Function Gemma 270M model for Tiny Garden.",
+      "enabled": true,
+      "sizeInBytes": 288964608,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "c205853ff82da86141a1105faa2344a8b176dfe7",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 0.0,
+        "maxTokens": 1024,
+        "accelerators": "cpu"
+      },
+      "taskTypes": [
+        "llm_tiny_garden"
+      ],
+      "bestForTaskTypes": [
+        "llm_tiny_garden"
+      ],
+      "llmSupportImage": false,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": false,
+      "supportedUseCases": [
+        "tools"
+      ],
+      "memoryTier": "entry"
+    },
+    {
+      "name": "MobileActions-270M",
+      "modelId": "litert-community/functiongemma-270m-ft-mobile-actions",
+      "modelFile": "mobile_actions_q8_ekv1024.litertlm",
+      "description": "Fine-tuned Function Gemma 270M model for Mobile Actions.",
+      "enabled": true,
+      "sizeInBytes": 288964608,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "38942192c9b723af836d489074823ff33d4a3e7a",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 0.0,
+        "maxTokens": 1024,
+        "accelerators": "cpu"
+      },
+      "taskTypes": [
+        "llm_mobile_actions"
+      ],
+      "bestForTaskTypes": [
+        "llm_mobile_actions"
+      ],
+      "llmSupportImage": false,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": false,
+      "supportedUseCases": [
+        "tools"
+      ],
+      "memoryTier": "entry"
+    },
+    {
+      "name": "Qwen3.5-0.8B-Instruct",
+      "modelId": "litert-community/Qwen3.5-0.8B-LiteRT",
+      "modelFile": "model_multimodal.litertlm",
+      "description": "Ultra-compact Qwen 3.5 vision-language model for fast edge reasoning.",
+      "enabled": true,
+      "sizeInBytes": 1245540352,
+      "minDeviceMemoryInGb": 4,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_ask_image"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat"
+      ],
+      "llmSupportImage": true,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "vision"
+      ],
+      "memoryTier": "entry"
+    },
+    {
+      "name": "Qwen3.5-4B-Instruct",
+      "modelId": "litert-community/Qwen3.5-4B-LiteRT",
+      "modelFile": "model_multimodal.litertlm",
+      "description": "Powerful Qwen 3.5 hybrid MoE vision-language model.",
+      "enabled": true,
+      "sizeInBytes": 5647810560,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 32,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_ask_image"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat"
+      ],
+      "llmSupportImage": true,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "vision"
+      ],
+      "memoryTier": "high"
+    },
+    {
+      "name": "Qwen3.5-2B-Instruct",
+      "modelId": "litert-community/Qwen3.5-2B-LiteRT",
+      "modelFile": "model_multimodal.litertlm",
+      "description": "Intermediate Qwen 3.5 vision-language model with balanced performance.",
+      "enabled": true,
+      "sizeInBytes": 2984960000,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 32,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_ask_image"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat"
+      ],
+      "llmSupportImage": true,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "vision"
+      ],
+      "memoryTier": "mid"
+    },
+    {
       "name": "Phi-4-mini-instruct",
       "modelId": "litert-community/Phi-4-mini-instruct",
       "modelFile": "Phi-4-mini-instruct_multi-prefill-seq_q8_ekv4096.litertlm",
       "description": "Compact yet powerful reasoning model from Microsoft.",
+      "enabled": true,
       "sizeInBytes": 4096000000,
       "minDeviceMemoryInGb": 8,
       "commitHash": "8cd368be75fdb94d5a6f6f5b40f1ab22a6c2543e",
@@ -235,50 +402,6 @@
         "reasoning"
       ],
       "memoryTier": "high"
-    },
-    {
-      "name": "TinyGarden-270M",
-      "modelId": "litert-community/functiongemma-270m-ft-tiny-garden",
-      "modelFile": "tiny_garden_q8_ekv1024.litertlm",
-      "description": "Fine-tuned Function Gemma 270M model for Tiny Garden.",
-      "sizeInBytes": 288964608,
-      "minDeviceMemoryInGb": 6,
-      "commitHash": "c205853ff82da86141a1105faa2344a8b176dfe7",
-      "defaultConfig": {
-        "topK": 64,
-        "topP": 0.95,
-        "temperature": 0.0,
-        "maxTokens": 1024,
-        "accelerators": "cpu"
-      },
-      "taskTypes": [
-        "llm_tiny_garden"
-      ],
-      "bestForTaskTypes": [
-        "llm_tiny_garden"
-      ]
-    },
-    {
-      "name": "MobileActions-270M",
-      "modelId": "litert-community/functiongemma-270m-ft-mobile-actions",
-      "modelFile": "mobile_actions_q8_ekv1024.litertlm",
-      "description": "Fine-tuned Function Gemma 270M model for Mobile Actions.",
-      "sizeInBytes": 288964608,
-      "minDeviceMemoryInGb": 6,
-      "commitHash": "38942192c9b723af836d489074823ff33d4a3e7a",
-      "defaultConfig": {
-        "topK": 64,
-        "topP": 0.95,
-        "temperature": 0.0,
-        "maxTokens": 1024,
-        "accelerators": "cpu"
-      },
-      "taskTypes": [
-        "llm_mobile_actions"
-      ],
-      "bestForTaskTypes": [
-        "llm_mobile_actions"
-      ]
     }
   ]
 }

@@ -50,18 +50,14 @@ class ChatRepository(
 
                 when (runtimeState.phase) {
                     RuntimeLoadPhase.LOADING -> {
-                        val msg =
+                        baseStatus.unready(
                             if (sameModel) preparingModelMessage(displayName)
                             else notReadyYetMessage(displayName)
-                        baseStatus.unready(msg)
+                        )
                     }
                     RuntimeLoadPhase.LOADED -> {
                         if (sameModel) {
-                            baseStatus.copy(
-                                    message =
-                                        if (baseStatus.ready) "Ready for local chat"
-                                        else baseStatus.message
-                            )
+                            baseStatus.copy(ready = true, message = "Ready for local chat")
                         } else {
                             baseStatus.unready(willPrepareOnStartMessage(displayName))
                         }
@@ -70,11 +66,11 @@ class ChatRepository(
                         baseStatus.unready(notLoadedMessage(displayName))
                     }
                     RuntimeLoadPhase.FAILED -> {
-                        val msg =
+                        baseStatus.unready(
                             if (runtimeModelId.isBlank() || sameModel)
                                 prepareFailedMessage(displayName)
                             else notReadyYetMessage(displayName)
-                        baseStatus.unready(msg)
+                        )
                     }
                 }
             }
@@ -199,7 +195,6 @@ class ChatRepository(
             baseUrl: String,
             modelName: String,
             apiKey: String,
-            huggingFaceToken: String,
             temperature: Double,
             topP: Double,
             contextLength: Int
@@ -211,7 +206,7 @@ class ChatRepository(
                 topP = topP,
                 contextLength = contextLength
         )
-        preferences.updateSecrets(apiKey = apiKey, huggingFaceToken = huggingFaceToken)
+        preferences.updateSecrets(apiKey = apiKey)
     }
 
     suspend fun settingsSnapshot(): SettingsSnapshot = preferences.settings.first()
@@ -229,13 +224,13 @@ class ChatRepository(
             settings: SettingsSnapshot
     ): BackendAvailability = buildClient(mode).availability(settings)
 
-    suspend fun prepareSelectedLocalModel(): String? {
+    suspend fun prepareSelectedLocalModel(settings: SettingsSnapshot? = null): String? {
         val selectedModelId =
                 localModelRepository.activeModelStatus.value.modelId?.trim().orEmpty().lowercase()
         if (selectedModelId.isBlank()) {
             return "Choose a local model from Model Library."
         }
-        return localModelRepository.prepareModelInMemory(selectedModelId)
+        return localModelRepository.prepareModelInMemory(selectedModelId, settings)
     }
 
     suspend fun recentTurnsFor(mode: InferenceMode, sessionId: Long): List<ChatTurn> {
@@ -251,7 +246,8 @@ class ChatRepository(
             mode: InferenceMode,
             history: List<ChatTurn>,
             prompt: String,
-            settings: SettingsSnapshot
+            settings: SettingsSnapshot,
+            sessionId: Long? = null
     ): Flow<String> {
         return buildClient(mode)
                 .streamChat(
@@ -259,7 +255,8 @@ class ChatRepository(
                                 history = history,
                                 prompt = prompt,
                                 settings = settings,
-                                activeDownloadedModelId = settings.activeLocalModelId
+                            activeDownloadedModelId = settings.activeLocalModelId,
+                            sessionId = sessionId
                         )
                 )
     }
@@ -340,6 +337,10 @@ private fun prepareFailedMessage(displayName: String): String {
     return "Selected $displayName failed to prepare for local chat. Tap Use model to retry."
 }
 
+private fun ChatMessageEntity.toTurn(): ChatTurn {
+    return ChatTurn(role = role, content = content)
+}
+
 private fun ChatSessionEntity.toModel(): ChatSession {
     return ChatSession(id = id, title = title, updatedAt = updatedAt, isPinned = false)
 }
@@ -356,8 +357,4 @@ private fun ChatMessageEntity.toModel(): ChatMessage {
             topP = topP,
             contextLength = contextLength
     )
-}
-
-private fun ChatMessageEntity.toTurn(): ChatTurn {
-    return ChatTurn(role = role, content = content)
 }

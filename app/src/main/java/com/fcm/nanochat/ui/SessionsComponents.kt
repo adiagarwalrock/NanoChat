@@ -55,6 +55,7 @@ import com.fcm.nanochat.ui.theme.NanoChatTheme
 @Composable
 internal fun SessionsDrawer(
         state: ChatScreenState,
+        modifier: Modifier = Modifier,
         onCreateSession: () -> Unit,
         onSelectSession: (Long) -> Unit,
         onPinSession: (Long, Boolean) -> Unit,
@@ -66,7 +67,11 @@ internal fun SessionsDrawer(
     val pinned = state.sessions.filter { it.isPinned }
     val recents = state.sessions.filterNot { it.isPinned }
 
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 14.dp)) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
         Text(
                 text = stringResource(id = R.string.app_name),
                 style = MaterialTheme.typography.titleLarge,
@@ -184,18 +189,19 @@ private fun SessionRow(
 ) {
     Row(
             modifier =
-                    Modifier.fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(
-                                    color =
-                                            if (isSelected) {
-                                                MaterialTheme.colorScheme.surfaceContainerHigh
-                                            } else {
-                                                Color.Transparent
-                                            }
-                            )
-                            .clickable { onSelectSession(session.id) }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        color =
+                            if (isSelected) {
+                                MaterialTheme.colorScheme.surfaceContainerHigh
+                            } else {
+                                Color.Transparent
+                            }
+                    )
+                    .clickable { onSelectSession(session.id) }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -278,52 +284,6 @@ private fun SessionRow(
     }
 }
 
-@Composable
-internal fun SessionsRail(
-        state: ChatScreenState,
-        modifier: Modifier = Modifier,
-        onCreateSession: () -> Unit,
-        onSelectSession: () -> Unit
-) {
-    Column(
-            modifier =
-                    modifier.background(MaterialTheme.colorScheme.surfaceContainer)
-                            .padding(horizontal = 14.dp, vertical = 12.dp)
-    ) {
-        Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                    text = stringResource(id = R.string.chats_label),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-            )
-            Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh
-            ) {
-                IconButton(onClick = onCreateSession, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                }
-            }
-        }
-        Spacer(modifier = Modifier.height(10.dp))
-        FilledTonalButton(
-                onClick = onSelectSession,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-        ) { Text(text = stringResource(id = R.string.open_sessions)) }
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(
-                text = stringResource(id = R.string.sessions_count, state.sessions.size),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
 @Preview(showBackground = true, widthDp = 320)
 @Composable
 private fun SessionsDrawerPreview() {
@@ -361,33 +321,6 @@ private fun SessionsDrawerPreview() {
                 onRenameSession = { _, _ -> },
                 onOpenModels = {},
                 onOpenSettings = {}
-        )
-    }
-}
-
-@Preview(showBackground = true, widthDp = 280)
-@Composable
-private fun SessionsRailPreview() {
-    NanoChatTheme {
-        SessionsRail(
-                state =
-                        ChatScreenState(
-                                sessions =
-                                        listOf(
-                                                ChatSession(
-                                                        id = 1,
-                                                        title = "Session 1",
-                                                        updatedAt = System.currentTimeMillis()
-                                                ),
-                                                ChatSession(
-                                                        id = 2,
-                                                        title = "Session 2",
-                                                        updatedAt = System.currentTimeMillis()
-                                                )
-                                        )
-                        ),
-                onCreateSession = {},
-                onSelectSession = {}
         )
     }
 }

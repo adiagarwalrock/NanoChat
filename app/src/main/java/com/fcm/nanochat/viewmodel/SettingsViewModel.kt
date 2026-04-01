@@ -5,11 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.fcm.nanochat.data.AcceleratorPreference
 import com.fcm.nanochat.data.AppPreferences
 import com.fcm.nanochat.data.ThinkingEffort
-import com.fcm.nanochat.data.network.HuggingFaceWhoAmIParser
 import com.fcm.nanochat.data.repository.ChatRepository
 import com.fcm.nanochat.inference.GeminiNanoStatus
 import com.fcm.nanochat.model.GeminiNanoStatusUi
-import com.fcm.nanochat.model.HuggingFaceAccountUi
 import com.fcm.nanochat.model.SettingsScreenState
 import com.fcm.nanochat.model.UsageStats
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -35,46 +33,39 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SettingsScreenState())
     val uiState: StateFlow<SettingsScreenState> = _uiState.asStateFlow()
-    private var tokenValidationJob: Job? = null
-    private var lastValidatedToken: String = ""
 
     init {
         viewModelScope.launch {
+            var isFirstEmission = true
             preferences.settings.collect { snapshot ->
-                val token = snapshot.huggingFaceToken.trim()
-                val cachedAccount = snapshot.huggingFaceAccountJson.takeIf { it.isNotBlank() }
-                    ?.let { runCatching { HuggingFaceWhoAmIParser.parseAccount(it) }.getOrNull() }
                 _uiState.update { current ->
-                    current.copy(
-                        baseUrl = snapshot.baseUrl,
-                        modelName = snapshot.modelName,
-                        apiKey = snapshot.apiKey,
-                        huggingFaceToken = snapshot.huggingFaceToken,
-                        temperature = snapshot.temperature,
-                        topP = snapshot.topP,
-                        contextLength = snapshot.contextLength,
-                        thinkingEffort = snapshot.thinkingEffort,
-                        acceleratorPreference = snapshot.acceleratorPreference,
-                        geminiStatus = _uiState.value.geminiStatus.copy(
-                            lastKnownModelSizeBytes = snapshot.geminiNanoModelSizeBytes
-                        ),
-                        huggingFaceAccount = when {
-                            token.isBlank() -> HuggingFaceAccountUi()
-                            cachedAccount != null -> cachedAccount.toUi(
-                                isValid = true,
-                                message = "Connected"
+                    if (isFirstEmission) {
+                        current.copy(
+                            baseUrl = snapshot.baseUrl,
+                            modelName = snapshot.modelName,
+                            apiKey = snapshot.apiKey,
+                            temperature = snapshot.temperature,
+                            topP = snapshot.topP,
+                            contextLength = snapshot.contextLength,
+                            thinkingEffort = snapshot.thinkingEffort,
+                            acceleratorPreference = snapshot.acceleratorPreference,
+                            geminiStatus = current.geminiStatus.copy(
+                                lastKnownModelSizeBytes = snapshot.geminiNanoModelSizeBytes
+                            ),
+                            saveNotice = current.saveNotice,
+                            clearNotice = current.clearNotice
+                        )
+                    } else {
+                        current.copy(
+                            thinkingEffort = snapshot.thinkingEffort,
+                            acceleratorPreference = snapshot.acceleratorPreference,
+                            geminiStatus = current.geminiStatus.copy(
+                                lastKnownModelSizeBytes = snapshot.geminiNanoModelSizeBytes
                             )
-
-                            else -> current.huggingFaceAccount
-                        },
-                        saveNotice = current.saveNotice,
-                        clearNotice = current.clearNotice
-                    )
+                        )
+                    }
                 }
-
-                if (token.isNotBlank() && token != lastValidatedToken) {
-                    scheduleHuggingFaceValidation(token = token, withDelay = false)
-                }
+                isFirstEmission = false
             }
         }
 
@@ -92,26 +83,6 @@ class SettingsViewModel @Inject constructor(
 
     fun updateApiKey(value: String) {
         _uiState.update { it.copy(apiKey = value, saveNotice = null) }
-    }
-
-    fun updateHuggingFaceToken(value: String) {
-        _uiState.update {
-            it.copy(
-                huggingFaceToken = value,
-                saveNotice = null,
-                huggingFaceAccount = HuggingFaceAccountUi()
-            )
-        }
-
-        val trimmed = value.trim()
-        if (trimmed.isBlank()) {
-            tokenValidationJob?.cancel()
-            lastValidatedToken = ""
-            viewModelScope.launch { preferences.updateHuggingFaceAccount("") }
-            return
-        }
-
-        scheduleHuggingFaceValidation(token = trimmed, withDelay = true)
     }
 
     fun updateTemperature(value: Double) {
@@ -150,20 +121,12 @@ class SettingsViewModel @Inject constructor(
                 contextLength = current.contextLength
             )
             preferences.updateSecrets(
-                apiKey = current.apiKey,
-                huggingFaceToken = current.huggingFaceToken
+                apiKey = current.apiKey
             )
             preferences.updateThinkingEffort(current.thinkingEffort)
             preferences.updateAcceleratorPreference(current.acceleratorPreference)
             _uiState.update { it.copy(saveNotice = "Settings saved.", clearNotice = null) }
         }
-    }
-
-    fun validateHuggingFaceToken() {
-        scheduleHuggingFaceValidation(
-            token = _uiState.value.huggingFaceToken.trim(),
-            withDelay = false
-        )
     }
 
     fun refreshStats() {
@@ -229,120 +192,6 @@ class SettingsViewModel @Inject constructor(
         )
     }
 
-    private fun com.fcm.nanochat.data.network.HuggingFaceWhoAmI.toUi(
-        isValid: Boolean,
-        message: String?
-    ): HuggingFaceAccountUi {
-        return HuggingFaceAccountUi(
-            isValidating = false,
-            isValid = isValid,
-            username = name,
-            fullName = fullName,
-            email = email,
-            emailVerified = emailVerified,
-            avatarUrl = avatarUrl,
-            profileUrl = profileUrl,
-            isPro = isPro,
-            tokenName = tokenName,
-            tokenRole = tokenRole,
-            message = message
-        )
-    }
-
-    private fun scheduleHuggingFaceValidation(token: String, withDelay: Boolean) {
-        tokenValidationJob?.cancel()
-        if (token.isBlank()) {
-            _uiState.update { it.copy(huggingFaceAccount = HuggingFaceAccountUi()) }
-            return
-        }
-
-        tokenValidationJob = viewModelScope.launch {
-            if (withDelay) {
-                delay(600)
-            }
-
-            _uiState.update { current ->
-                if (current.huggingFaceToken.trim() != token) {
-                    current
-                } else {
-                    current.copy(
-                        huggingFaceAccount = current.huggingFaceAccount.copy(
-                            isValidating = true,
-                            isValid = false,
-                            message = null
-                        )
-                    )
-                }
-            }
-
-            val accountState = fetchHuggingFaceAccount(token)
-
-            _uiState.update { current ->
-                if (current.huggingFaceToken.trim() != token) current
-                else current.copy(huggingFaceAccount = accountState)
-            }
-
-            if (_uiState.value.huggingFaceToken.trim() == token) {
-                lastValidatedToken = token
-            }
-        }
-    }
-
-    private suspend fun fetchHuggingFaceAccount(token: String): HuggingFaceAccountUi {
-        return withContext(Dispatchers.IO) {
-            val request = Request.Builder()
-                .url(HUGGING_FACE_WHOAMI_URL)
-                .header("Authorization", "Bearer $token")
-                .header("Accept", "application/json")
-                .get()
-                .build()
-
-            try {
-                httpClient.newCall(request).execute().use { response ->
-                    val body = response.body.string()
-                    if (!response.isSuccessful) {
-                        val serverMessage = HuggingFaceWhoAmIParser.parseError(body)
-                        val message = when {
-                            response.code == 401 -> "Token is invalid or expired."
-                            !serverMessage.isNullOrBlank() -> serverMessage
-                            else -> "Unable to validate Hugging Face token (HTTP ${response.code})."
-                        }
-                        return@withContext invalidHuggingFaceAccount(message)
-                    }
-
-                    val account = HuggingFaceWhoAmIParser.parseAccount(body)
-                    preferences.updateHuggingFaceAccount(body)
-                    return@withContext account.toUi(isValid = true, message = "Connected")
-                }
-            } catch (error: Throwable) {
-                if (error is CancellationException) {
-                    throw error
-                }
-
-                return@withContext invalidHuggingFaceAccount(
-                    error.message ?: "Failed to validate Hugging Face token."
-                )
-            }
-        }
-    }
-
-    private fun invalidHuggingFaceAccount(message: String): HuggingFaceAccountUi {
-        return HuggingFaceAccountUi(
-            isValidating = false,
-            isValid = false,
-            username = null,
-            fullName = null,
-            email = null,
-            emailVerified = false,
-            avatarUrl = null,
-            profileUrl = null,
-            isPro = false,
-            tokenName = null,
-            tokenRole = null,
-            message = message
-        )
-    }
-
     fun clearAllHistory() {
         viewModelScope.launch {
             val wasCleared = try {
@@ -367,5 +216,3 @@ class SettingsViewModel @Inject constructor(
         }
     }
 }
-
-private const val HUGGING_FACE_WHOAMI_URL = "https://huggingface.co/api/whoami-v2"

@@ -24,11 +24,10 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.util.Locale
 
-private const val HUGGING_FACE_WHOAMI_URL = "https://huggingface.co/api/whoami-v2"
 private val nonSafeIdCharacterRegex = Regex("[^a-zA-Z0-9._-]")
 
 private sealed interface DownloadPreflightResult {
-    data class Allowed(val attachAuthorization: Boolean) : DownloadPreflightResult
+    data object Allowed : DownloadPreflightResult
     data class Blocked(val message: String) : DownloadPreflightResult
 }
 
@@ -252,19 +251,10 @@ class ModelDownloadCoordinator(
         val model = allowlistRepository.currentModelOrNull(modelId)
             ?: return upsertFailure(modelId, "Model is no longer listed in the allowlist.")
 
-        val settings = preferences.settings.first()
-        val token = settings.huggingFaceToken.trim()
-        val preflight = preflightDownloadAccess(model.downloadUrl, model.requiresHfToken, token)
-        if (preflight is DownloadPreflightResult.Blocked) {
-            upsertFailure(modelId, preflight.message)
-            return
-        }
-        val attachAuthorization = (preflight as DownloadPreflightResult.Allowed).attachAuthorization
-
         Log.d(
             TAG,
             "download_target modelId=${model.id} url=${model.downloadUrl} expectedFile=${model.modelFile} " +
-                    "expectedSizeBytes=${model.sizeInBytes} expectedExt=${model.fileType} tokenAttached=$attachAuthorization"
+                    "expectedSizeBytes=${model.sizeInBytes} expectedExt=${model.fileType}"
         )
 
         val now = System.currentTimeMillis()
@@ -308,9 +298,6 @@ class ModelDownloadCoordinator(
             .header("Accept", "application/octet-stream")
             .get()
 
-        if (attachAuthorization) {
-            requestBuilder.header("Authorization", "Bearer $token")
-        }
         if (resumeBytes > 0L) {
             requestBuilder.header("Range", "bytes=$resumeBytes-")
         }
@@ -331,16 +318,10 @@ class ModelDownloadCoordinator(
                 )
 
                 if (!response.isSuccessful && response.code != 206) {
-                    upsertFailure(
-                        modelId,
-                        downloadHttpErrorMessage(
-                            httpCode = response.code,
-                            downloadUrl = model.downloadUrl,
-                            tokenPresent = token.isNotBlank()
-                        )
-                    )
-                    return
-                }
+            val message = downloadHttpErrorMessage(response.code, model.downloadUrl)
+            upsertFailure(modelId, message)
+            return
+        }
 
                 val body = response.body
 
@@ -586,160 +567,14 @@ class ModelDownloadCoordinator(
         }
     }
 
-    private fun preflightDownloadAccess(
-        downloadUrl: String,
-        requiresToken: Boolean,
-        token: String
-    ): DownloadPreflightResult {
-        if (!isHuggingFaceUrl(downloadUrl)) {
-            return DownloadPreflightResult.Allowed(attachAuthorization = false)
-        }
-
-        if (requiresToken && token.isBlank()) {
-            return DownloadPreflightResult.Blocked(
-                "Add a Hugging Face read token to download this model."
-            )
-        }
-
-        val anonymousCode = runCatching {
-            requestHuggingFaceFile(downloadUrl, token = null)
-        }.getOrElse { -1 }
-
-        if (anonymousCode == 200 || anonymousCode == 206) {
-            return DownloadPreflightResult.Allowed(attachAuthorization = false)
-        }
-
-        val shouldTryToken = token.isNotBlank() &&
-                (requiresToken || anonymousCode == 401 || anonymousCode == 403)
-
-        if (!shouldTryToken) {
-            return when {
-                anonymousCode == 401 || anonymousCode == 403 -> {
-                    DownloadPreflightResult.Blocked(
-                        "Add a Hugging Face read token to download this model."
-                    )
-                }
-
-                anonymousCode < 0 -> {
-                    DownloadPreflightResult.Blocked(
-                        "NanoChat could not verify model access. Check your connection and try again."
-                    )
-                }
-
-                else -> {
-                    DownloadPreflightResult.Blocked(
-                        downloadHttpErrorMessage(
-                            httpCode = anonymousCode,
-                            downloadUrl = downloadUrl,
-                            tokenPresent = false
-                        )
-                    )
-                }
-            }
-        }
-
-        val tokenValidation = validateHuggingFaceToken(token)
-        if (tokenValidation is DownloadPreflightResult.Blocked) {
-            return tokenValidation
-        }
-
-        val authenticatedCode = runCatching {
-            requestHuggingFaceFile(downloadUrl, token = token)
-        }.getOrElse { -1 }
-
-        return when (authenticatedCode) {
-            200, 206 -> DownloadPreflightResult.Allowed(attachAuthorization = true)
-            401, 403 -> DownloadPreflightResult.Blocked(
-                "Your token is valid, but this account does not have access yet. Approve the model license/access on Hugging Face and retry."
-            )
-
-            -1 -> DownloadPreflightResult.Blocked(
-                "NanoChat could not verify model access. Check your connection and try again."
-            )
-
-            else -> DownloadPreflightResult.Blocked(
-                downloadHttpErrorMessage(
-                    httpCode = authenticatedCode,
-                    downloadUrl = downloadUrl,
-                    tokenPresent = true
-                )
-            )
-        }
-    }
-
-    private fun validateHuggingFaceToken(token: String): DownloadPreflightResult {
-        val request = Request.Builder()
-            .url(HUGGING_FACE_WHOAMI_URL)
-            .header("Authorization", "Bearer $token")
-            .header("Accept", "application/json")
-            .get()
-            .build()
-
-        return runCatching {
-            httpClient.newCall(request).execute().use { response ->
-                when {
-                    response.isSuccessful -> {
-                        DownloadPreflightResult.Allowed(attachAuthorization = true)
-                    }
-
-                    response.code == 401 -> {
-                        DownloadPreflightResult.Blocked(
-                            "Add a valid Hugging Face read token to download this model."
-                        )
-                    }
-
-                    else -> {
-                        DownloadPreflightResult.Blocked(
-                            "NanoChat could not validate your Hugging Face token right now."
-                        )
-                    }
-                }
-            }
-        }.getOrElse {
-            DownloadPreflightResult.Blocked(
-                "NanoChat could not validate your Hugging Face token right now."
-            )
-        }
-    }
-
-    private fun requestHuggingFaceFile(downloadUrl: String, token: String?): Int {
-        val requestBuilder = Request.Builder()
-            .url(downloadUrl)
-            .header("Accept", "application/octet-stream")
-            .header("Range", "bytes=0-0")
-            .get()
-
-        if (!token.isNullOrBlank()) {
-            requestBuilder.header("Authorization", "Bearer $token")
-        }
-
-        val request = requestBuilder.build()
-        return httpClient.newCall(request).execute().use { response ->
-            response.code
-        }
-    }
-
     private fun downloadHttpErrorMessage(
         httpCode: Int,
-        downloadUrl: String,
-        tokenPresent: Boolean
+        downloadUrl: String
     ): String {
         return when {
-            isHuggingFaceUrl(downloadUrl) && (httpCode == 401 || httpCode == 403) && !tokenPresent -> {
-                "Add a Hugging Face read token to download this model."
-            }
-
-            isHuggingFaceUrl(downloadUrl) && (httpCode == 401 || httpCode == 403) -> {
-                "Requires Hugging Face access approval."
-            }
-
             httpCode in 400..599 -> "Download failed (HTTP $httpCode)."
             else -> "Download failed."
         }
-    }
-
-    private fun isHuggingFaceUrl(downloadUrl: String): Boolean {
-        return downloadUrl.contains("huggingface.co", ignoreCase = true)
     }
 
     private fun logInstalledArtifact(
@@ -802,14 +637,6 @@ class ModelDownloadCoordinator(
         val message = raw.trim()
         if (message.isBlank()) return "Unable to complete the model download."
 
-        if (
-            message.startsWith("Add a Hugging Face", ignoreCase = true) ||
-            message.startsWith("Your token is valid", ignoreCase = true) ||
-            message.startsWith("Requires Hugging Face", ignoreCase = true)
-        ) {
-            return message
-        }
-
         val lowercase = message.lowercase()
         return when {
             "enospc" in lowercase || "no space left" in lowercase -> {
@@ -821,7 +648,7 @@ class ModelDownloadCoordinator(
             }
 
             "401" in lowercase || "403" in lowercase -> {
-                "This model requires Hugging Face access approval or a valid read token."
+                "Access denied. The model may not be publicly available."
             }
 
             else -> message

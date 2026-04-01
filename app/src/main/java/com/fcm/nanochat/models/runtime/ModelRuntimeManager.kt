@@ -40,10 +40,12 @@ class ModelRuntimeManager(
     ): RuntimeHandle {
         return withContext(Dispatchers.IO) {
             mutex.withLock {
+                val normalizedModelId = modelId.trim().lowercase()
+                val configSignature = configSignature(defaultConfig)
                 val shouldReuse = activeRuntime != null &&
-                    activeModelId == modelId &&
+                        activeModelId == normalizedModelId &&
                         activeModelPath == modelPath &&
-                        activeConfigSignature == configSignature(defaultConfig)
+                        activeConfigSignature == configSignature
                 if (shouldReuse) {
                     Log.d(TAG, "Reusing local runtime for modelId=$modelId")
                     _loadState.value = RuntimeLoadState(
@@ -91,9 +93,9 @@ class ModelRuntimeManager(
                 }
                 val initDuration = System.currentTimeMillis() - initStart
 
-                activeModelId = modelId
+                activeModelId = normalizedModelId
                 activeModelPath = modelPath
-                activeConfigSignature = configSignature(defaultConfig)
+                activeConfigSignature = configSignature
                 activeRuntime = runtime
 
                 _loadState.value = RuntimeLoadState(
@@ -132,6 +134,7 @@ class ModelRuntimeManager(
         }
     }
 
+    @Suppress("unused")
     suspend fun probe(modelPath: String, defaultConfig: AllowlistDefaultConfig): String? {
         return probe(
             modelId = "unknown",
@@ -143,6 +146,7 @@ class ModelRuntimeManager(
         )
     }
 
+    @Suppress("unused")
     suspend fun probe(
         modelId: String,
         modelPath: String,
@@ -167,6 +171,10 @@ class ModelRuntimeManager(
                 )
             }
         }
+    }
+
+    fun getActiveSessionId(): Long? {
+        return activeRuntime?.getActiveSessionId()
     }
 
     private companion object {

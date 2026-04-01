@@ -20,7 +20,8 @@ data class AllowlistDefaultConfig(
     val temperature: Double,
     val maxTokens: Int,
     val accelerators: String,
-    val strictAccelerator: Boolean = false
+    val strictAccelerator: Boolean = false,
+    val promptFamily: String? = null
 ) {
     val acceleratorHints: List<String>
         get() = accelerators
@@ -31,6 +32,7 @@ data class AllowlistDefaultConfig(
 
 data class AllowlistedModel(
     val id: String,
+    val enabled: Boolean,
     val displayName: String,
     val name: String,
     val modelId: String,
@@ -46,7 +48,8 @@ data class AllowlistedModel(
     val llmSupportAudio: Boolean,
     val backendType: String,
     val sourceRepo: String,
-    val requiresHfToken: Boolean,
+    val downloadRepo: String?,
+    val downloadPath: String?,
     val isExperimental: Boolean,
     val supportedUseCases: List<String>,
     val recommendedForChat: Boolean,
@@ -89,7 +92,9 @@ internal object AllowlistParser {
             for (index in 0 until modelsArray.length()) {
                 val modelJson = modelsArray.optJSONObject(index) ?: continue
                 val model = modelJson.toDomainModelOrNull() ?: continue
-                add(model)
+                if (model.enabled) {
+                    add(model)
+                }
             }
         }.sortedBy { it.displayName.lowercase() }
 
@@ -106,21 +111,26 @@ internal object AllowlistParser {
         val name = optString("name").trim()
         val modelId = optString("modelId").trim()
         val modelFile = optString("modelFile").trim()
+
         if (name.isBlank() || modelId.isBlank() || modelFile.isBlank()) {
             return null
         }
+
+        val enabled = optBoolean("enabled", true)
 
         val description = optString("description").trim()
         val sizeInBytes = optLong("sizeInBytes")
         val minDeviceMemoryInGb = optInt("minDeviceMemoryInGb")
         val commitHash = optString("commitHash").ifBlank { "main" }
         val configJson = optJSONObject("defaultConfig") ?: JSONObject()
+        val parsedPromptFamily = optString("promptFamily").ifBlank { null }
         val defaultConfig = AllowlistDefaultConfig(
             topK = configJson.optInt("topK", 40),
             topP = configJson.optDouble("topP", 0.9),
             temperature = configJson.optDouble("temperature", 0.7),
             maxTokens = configJson.optInt("maxTokens", 1024),
-            accelerators = configJson.optString("accelerators").ifBlank { "cpu" }
+            accelerators = configJson.optString("accelerators").ifBlank { "cpu" },
+            promptFamily = parsedPromptFamily
         )
 
         val taskTypes = optStringList("taskTypes").ifEmpty { listOf("llm_chat") }
@@ -129,12 +139,9 @@ internal object AllowlistParser {
         val llmSupportAudio = optBoolean("llmSupportAudio", false)
         val backendType = optString("backendType").ifBlank { "litert-lm" }
         val sourceRepo = optString("sourceRepo").ifBlank { modelId }
+        val downloadRepo = optString("downloadRepo").trim().ifBlank { null }
+        val downloadPath = optString("downloadPath").trim().trimStart('/').ifBlank { null }
 
-        val requiresHfToken = if (has("requiresHfToken")) {
-            optBoolean("requiresHfToken", false)
-        } else {
-            modelId.startsWith("google/", ignoreCase = true)
-        }
 
         val isExperimental = optBoolean("isExperimental", false)
         val supportedUseCases = optStringList("supportedUseCases").ifEmpty { taskTypes }
@@ -154,11 +161,14 @@ internal object AllowlistParser {
             defaultConfig.acceleratorHints
         }
         val downloadUrl = optString("downloadUrl").ifBlank {
-            "https://huggingface.co/$sourceRepo/resolve/$commitHash/$modelFile?download=true"
+            buildDownloadUrl(
+                repo = downloadRepo ?: sourceRepo,
+                commitHash = commitHash,
+                path = downloadPath ?: modelFile
+            )
         }
         val fileType = modelFile.substringAfterLast('.', missingDelimiterValue = "").lowercase()
         val supportedAbis = optStringList("supportedAbis")
-        val promptFamily = optString("promptFamily").ifBlank { null }
         val supportsThinking = if (has("supportsThinking")) {
             optBoolean("supportsThinking", false)
         } else {
@@ -171,6 +181,7 @@ internal object AllowlistParser {
 
         return AllowlistedModel(
             id = modelId.lowercase(),
+            enabled = enabled,
             displayName = name,
             name = name,
             modelId = modelId,
@@ -186,7 +197,8 @@ internal object AllowlistParser {
             llmSupportAudio = llmSupportAudio,
             backendType = backendType,
             sourceRepo = sourceRepo,
-            requiresHfToken = requiresHfToken,
+            downloadRepo = downloadRepo,
+            downloadPath = downloadPath,
             isExperimental = isExperimental,
             supportedUseCases = supportedUseCases,
             recommendedForChat = recommendedForChat,
@@ -195,9 +207,20 @@ internal object AllowlistParser {
             downloadUrl = downloadUrl,
             fileType = fileType,
             supportedAbis = supportedAbis,
-            promptFamily = promptFamily,
+            promptFamily = parsedPromptFamily,
             supportsThinking = supportsThinking
         )
+    }
+
+    private fun buildDownloadUrl(
+        repo: String,
+        commitHash: String,
+        path: String
+    ): String {
+        val normalizedRepo = repo.trim().trim('/')
+        val normalizedCommit = commitHash.trim().ifBlank { "main" }
+        val normalizedPath = path.trim().trimStart('/')
+        return "https://huggingface.co/$normalizedRepo/resolve/$normalizedCommit/$normalizedPath?download=true"
     }
 
     private fun JSONObject.optStringList(key: String): List<String> {

@@ -12,21 +12,25 @@ import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.ExperimentalApi
-import com.google.ai.edge.litertlm.ExperimentalFlags
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
-import java.io.File
-import java.io.FileInputStream
-import java.util.Locale
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileInputStream
+import java.util.Locale
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 private data class StartupFileInspection(
         val path: String,
@@ -43,45 +47,109 @@ internal class LiteRtLmRuntime(
 ) : LocalModelRuntime {
     private val generationCounter = AtomicLong(0L)
     private val activeConversation = AtomicReference<ActiveConversation?>(null)
+    private val lifecycleMutex = Mutex()
+    private val cleanupExecutor = Executors.newSingleThreadExecutor()
 
-    override fun stream(prompt: String, systemInstruction: String?): Flow<String> = callbackFlow {
-        val request = prompt.trim()
+    override fun stream(
+        sessionId: Long?,
+        prompt: String,
+        systemInstruction: String?
+    ): Flow<String> = callbackFlow {
+        val request = sanitizeForNative(prompt.trim())
         if (request.isBlank()) {
             channel.close()
             return@callbackFlow
         }
 
-        cancelAndDrainActiveConversation(reason = "superseded")
-
         val generationId = generationCounter.incrementAndGet()
         val gate = StreamLifecycleGate()
         val normalizedSystemInstruction =
-                systemInstruction?.trim()?.takeIf { it.isNotBlank() }?.let {
+            systemInstruction?.trim()?.takeIf { it.isNotBlank() }?.let { sanitizeForNative(it) }
+
+        var resolvedConversation: Conversation? = null
+
+        lifecycleMutex.withLock {
+            val active = activeConversation.get()
+            val canReuse = sessionId != null &&
+                    active != null &&
+                    active.sessionId == sessionId &&
+                    active.systemInstruction == normalizedSystemInstruction
+
+            if (canReuse) {
+                Log.d(
+                    TAG,
+                    "Reusing existing conversation for sessionId=$sessionId generationId=$generationId"
+                )
+                resolvedConversation = active.conversation
+                // Update generation ID but keep the same conversation object
+                activeConversation.set(active.copy(generationId = generationId, gate = gate))
+            } else {
+                cancelAndDrainActiveConversationLocked(reason = "new_session_or_instruction")
+
+                val systemContents = normalizedSystemInstruction?.let {
                     Contents.of(listOf(Content.Text(it)))
                 }
 
-        val conversation =
-                engine.createConversation(
-                        ConversationConfig(
-                                samplerConfig = samplerConfig,
-                                systemInstruction = normalizedSystemInstruction
-                        )
-                )
-        val active =
-                ActiveConversation(
-                        generationId = generationId,
-                        conversation = conversation,
-                        gate = gate
-                )
-        activeConversation.set(active)
-        Log.d(TAG, "Starting local generation generationId=$generationId")
+                var conversation: Conversation? = null
+                var lastError: Throwable? = null
 
+                repeat(SESSION_RETRY_ATTEMPTS) { attempt ->
+                    try {
+                        // Force conversation creation onto a background thread
+                        // to avoid JNI abort on main thread Looper.
+                        conversation = withContext(Dispatchers.IO) {
+                            engine.createConversation(
+                                ConversationConfig(
+                                    samplerConfig = samplerConfig,
+                                    systemInstruction = systemContents
+                                )
+                            )
+                        }
+                    } catch (e: Throwable) {
+                        lastError = e
+                        val message = e.message.orEmpty()
+                        val cause = e.cause?.message.orEmpty()
+                        if (message.contains("session already exists", ignoreCase = true) ||
+                            cause.contains("session already exists", ignoreCase = true)
+                        ) {
+                            Log.w(
+                                TAG,
+                                "LiteRT-LM session already exists in native layer, retrying (attempt=${attempt + 1})"
+                            )
+                            delay(SESSION_RETRY_DELAY_MS * (attempt + 1))
+                        } else {
+                            throw e
+                        }
+                    }
+                    if (conversation != null) return@repeat
+                }
+
+                resolvedConversation = conversation ?: throw lastError
+                    ?: IllegalStateException("Failed to create conversation after retries")
+
+                activeConversation.set(
+                    ActiveConversation(
+                        generationId = generationId,
+                        sessionId = sessionId,
+                        systemInstruction = normalizedSystemInstruction,
+                        conversation = resolvedConversation,
+                        gate = gate
+                    )
+                )
+                Log.d(
+                    TAG,
+                    "Created new conversation sessionId=$sessionId generationId=$generationId"
+                )
+            }
+        }
+
+        val currentConversation = checkNotNull(resolvedConversation)
         val contents = Contents.of(listOf(Content.Text(request)))
 
         val callback =
                 object : MessageCallback {
                     override fun onMessage(message: Message) {
-                        if (!isCurrentGeneration(generationId, conversation)) {
+                        if (!isCurrentGeneration(generationId, currentConversation)) {
                             return
                         }
                         val chunk = message.toString()
@@ -91,28 +159,39 @@ internal class LiteRtLmRuntime(
                     }
 
                     override fun onDone() {
-                        if (!finishGeneration(generationId, conversation, reason = "done")) {
-                            return
-                        }
+                        // Mark as finalized BEFORE closing channel so awaitClose doesn't cancel
+                        gate.tryFinalize()
                         channel.close()
+                        Log.d(TAG, "Local generation turn completed generationId=$generationId")
                     }
 
                     override fun onError(throwable: Throwable) {
-                        if (!finishGeneration(generationId, conversation, reason = "error")) {
-                            return
-                        }
+                        Log.e(TAG, "LiteRT-LM onError generationId=$generationId", throwable)
                         channel.close(throwable)
+                        // On error, we should probably discard the conversation to be safe.
+                        finishGeneration(generationId, currentConversation, reason = "error")
                     }
                 }
 
-        runCatching { conversation.sendMessageAsync(contents, callback) }.onFailure { error ->
-            if (!finishGeneration(generationId, conversation, reason = "send_message_failure")) {
-                return@onFailure
-            }
+        runCatching {
+            currentConversation.sendMessageAsync(
+                contents,
+                callback
+            )
+        }.onFailure { error ->
             channel.close(error)
+            finishGeneration(generationId, currentConversation, reason = "send_message_failure")
         }
 
-        awaitClose { cancelActiveGeneration("await_close") }
+        awaitClose {
+            if (!gate.isFinalized()) {
+                cancelActiveGeneration("await_close")
+            }
+        }
+    }
+
+    override fun getActiveSessionId(): Long? {
+        return activeConversation.get()?.sessionId
     }
 
     override fun cancelActiveGeneration(reason: String) {
@@ -127,18 +206,52 @@ internal class LiteRtLmRuntime(
     }
 
     override suspend fun close() {
-        cancelAndDrainActiveConversation(reason = "close")
-        runCatching { engine.close() }
+        lifecycleMutex.withLock {
+            cancelAndDrainActiveConversationLocked(reason = "close")
+            runCatching { engine.close() }
+            cleanupExecutor.shutdown()
+        }
     }
 
     private companion object {
         const val TAG = "LiteRtLmRuntime"
-        const val SUPERSEDE_DRAIN_POLL_MS = 50L
-        const val SUPERSEDE_DRAIN_ATTEMPTS = 20
+        const val SUPERSEDE_DRAIN_POLL_MS = 60L
+        const val SUPERSEDE_DRAIN_ATTEMPTS = 50
+        const val SESSION_RETRY_ATTEMPTS = 8
+        const val SESSION_RETRY_DELAY_MS = 200L
+
+        /**
+         * Strips characters known to crash the LiteRT-LM native tokenizer:
+         * null chars, isolated surrogates, and other problematic code points.
+         */
+        fun sanitizeForNative(text: String): String {
+            val sb = StringBuilder(text.length)
+            var i = 0
+            while (i < text.length) {
+                val c = text[i]
+                when {
+                    c == '\u0000' -> { /* skip null chars */ }
+                    c.isHighSurrogate() -> {
+                        if (i + 1 < text.length && text[i + 1].isLowSurrogate()) {
+                            sb.append(c)
+                            sb.append(text[i + 1])
+                            i++
+                        }
+                        // else: lone high surrogate — skip
+                    }
+                    c.isLowSurrogate() -> { /* lone low surrogate — skip */ }
+                    else -> sb.append(c)
+                }
+                i++
+            }
+            return sb.toString()
+        }
     }
 
     private data class ActiveConversation(
             val generationId: Long,
+            val sessionId: Long?,
+            val systemInstruction: String?,
             val conversation: Conversation,
             val gate: StreamLifecycleGate
     )
@@ -160,34 +273,60 @@ internal class LiteRtLmRuntime(
 
         activeConversation.compareAndSet(active, null)
         Log.d(TAG, "Finalizing local generation generationId=$generationId reason=$reason")
-        runCatching { conversation.close() }
+
+        val deferred = CompletableDeferred<Unit>()
+        cleanupExecutor.execute {
+            runCatching { conversation.close() }
+            deferred.complete(Unit)
+        }
         return true
     }
 
-    private suspend fun cancelAndDrainActiveConversation(reason: String) {
-        if (activeConversation.get() == null) {
-            return
-        }
+    private suspend fun cancelAndDrainActiveConversationLocked(reason: String) {
+        if (activeConversation.get() == null) return
+
         cancelActiveGeneration(reason)
 
-        repeat(SUPERSEDE_DRAIN_ATTEMPTS) {
-            if (activeConversation.get() == null) {
-                return
+        var attempts = 0
+        while (attempts < SUPERSEDE_DRAIN_ATTEMPTS) {
+            val current = activeConversation.get()
+            if (current == null || current.gate.isFinalized()) {
+                break
             }
             delay(SUPERSEDE_DRAIN_POLL_MS)
+            attempts++
         }
 
         val stale = activeConversation.getAndSet(null) ?: return
-        if (!stale.gate.tryFinalize()) {
-            return
-        }
+        stale.gate.tryFinalize()
 
         Log.w(
                 TAG,
-                "Forcing local generation finalization generationId=${stale.generationId} reason=$reason"
+            "Closing local conversation generationId=${stale.generationId} reason=$reason"
         )
         runCatching { stale.conversation.cancelProcess() }
-        runCatching { stale.conversation.close() }
+
+        val deferred = CompletableDeferred<Unit>()
+        cleanupExecutor.execute {
+            runCatching { stale.conversation.close() }
+            deferred.complete(Unit)
+        }
+
+        // Wait for the conversation to be fully closed to avoid "session already exists"
+        runCatching {
+            val result = kotlinx.coroutines.withTimeoutOrNull(4000L) {
+                deferred.await()
+            }
+            if (result == null) {
+                Log.e(
+                    TAG,
+                    "Timed out waiting for conversation to close generationId=${stale.generationId}"
+                )
+            }
+        }
+
+        // Extra delay to ensure native layer is clean
+        delay(250L)
     }
 }
 
@@ -198,6 +337,8 @@ internal class StreamLifecycleGate {
     fun tryCancel(): Boolean = cancelled.compareAndSet(false, true)
 
     fun tryFinalize(): Boolean = finalized.compareAndSet(false, true)
+
+    fun isFinalized(): Boolean = finalized.get()
 }
 
 internal object LiteRtLmRuntimeFactory {
@@ -301,10 +442,7 @@ internal object LiteRtLmRuntimeFactory {
             config: AllowlistDefaultConfig,
             backendLabel: String
     ): LocalModelRuntime {
-        val backend = backendFromLabel(backendLabel)
-        if (backendLabel == "npu") {
-            ExperimentalFlags.npuLibrariesDir = context.applicationInfo.nativeLibraryDir
-        }
+        val backend = backendFromLabel(backendLabel, context.applicationInfo.nativeLibraryDir)
 
         val engineConfig =
                 EngineConfig(
@@ -335,10 +473,11 @@ internal object LiteRtLmRuntimeFactory {
         return LiteRtLmRuntime(engine = engine, samplerConfig = samplerConfig)
     }
 
-    private fun backendFromLabel(label: String): Backend {
+    @OptIn(ExperimentalApi::class)
+    private fun backendFromLabel(label: String, nativeLibraryDir: String): Backend {
         return when (label) {
             "gpu" -> Backend.GPU()
-            "npu" -> Backend.NPU()
+            "npu" -> Backend.NPU(nativeLibraryDir = nativeLibraryDir)
             else -> Backend.CPU()
         }
     }
@@ -400,6 +539,10 @@ internal object LiteRtLmRuntimeFactory {
         val file = File(inspection.path)
         if (file.name.endsWith(".part", ignoreCase = true)) {
             error("Model file points to an incomplete partial download.")
+        }
+
+        if (inspection.detectedFormat == "tflite-flatbuffer") {
+            error("LiteRT-LM requires a .litertlm ZIP package containing metadata, not a raw .tflite flatbuffer. Please download the correct package.")
         }
 
         val normalizedExpectedName = expectedFileName?.trim().orEmpty()
@@ -476,8 +619,8 @@ internal object LiteRtLmRuntimeFactory {
                                 )
 
         return when {
-            extension == "litertlm" -> "litertlm-package"
-            isTflite || extension == "tflite" -> "tflite-flatbuffer"
+            isZip && extension == "litertlm" -> "litertlm-package"
+            isTflite -> "tflite-flatbuffer"
             extension == "task" -> "mediapipe-task"
             isZip -> "zip-container"
             else -> "unknown"

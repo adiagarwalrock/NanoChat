@@ -73,7 +73,6 @@ class ModelRegistry(
             }
         }
         val allowlistedById = snapshot.models.associateBy { it.id }
-        val tokenPresent = preferences.settings.first().huggingFaceToken.isNotBlank()
         val installed = installedModelDao.allInstalledModels()
         installed.forEach { entity ->
             if (entity.installState != ModelInstallState.INSTALLED) return@forEach
@@ -93,8 +92,7 @@ class ModelRegistry(
             val compatibility = compatibilityEvaluator.evaluate(
                 model = allowlisted,
                 installedPath = entity.localPath,
-                installState = ModelInstallState.INSTALLED,
-                tokenPresent = tokenPresent
+                installState = ModelInstallState.INSTALLED
             )
 
             when (compatibility) {
@@ -139,7 +137,6 @@ class ModelRegistry(
                 LocalModelCompatibilityState.Downloadable,
                 is LocalModelCompatibilityState.NeedsMoreRam,
                 is LocalModelCompatibilityState.NeedsMoreStorage,
-                LocalModelCompatibilityState.TokenRequired,
                 is LocalModelCompatibilityState.UnsupportedDevice,
                 LocalModelCompatibilityState.UnsupportedForChat -> {
                     val persistedMessage = compatibilityMessage(compatibility)
@@ -163,7 +160,6 @@ class ModelRegistry(
             preferences.settings
         ) { allowlistSnapshot, installedEntities, settings ->
             val installedById = installedEntities.associateBy { it.modelId.lowercase() }
-            val tokenPresent = settings.huggingFaceToken.isNotBlank()
             val activeId = settings.activeLocalModelId.trim().lowercase()
             val records = mutableListOf<InstalledModelRecord>()
 
@@ -172,7 +168,6 @@ class ModelRegistry(
                 records += buildAllowlistedRecord(
                     model = model,
                     installed = installed,
-                    tokenPresent = tokenPresent,
                     activeId = activeId,
                     allowlistVersion = allowlistSnapshot.version.value
                 )
@@ -203,7 +198,6 @@ class ModelRegistry(
     private fun buildAllowlistedRecord(
         model: AllowlistedModel,
         installed: InstalledModelEntity?,
-        tokenPresent: Boolean,
         activeId: String,
         allowlistVersion: String
     ): InstalledModelRecord {
@@ -212,8 +206,7 @@ class ModelRegistry(
         val compatibility = compatibilityEvaluator.evaluate(
             model = model,
             installedPath = localPath,
-            installState = installState,
-            tokenPresent = tokenPresent
+            installState = installState
         )
 
         return InstalledModelRecord(
@@ -315,7 +308,6 @@ class ModelRegistry(
                 "This model is not designed for chat in NanoChat."
             }
 
-            LocalModelCompatibilityState.TokenRequired -> "This model requires a Hugging Face token."
             is LocalModelCompatibilityState.DownloadedButNotActivatable -> {
                 sanitizeCompatibilityReason(compatibility.reason)
             }

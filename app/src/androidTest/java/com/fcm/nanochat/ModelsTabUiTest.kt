@@ -110,7 +110,6 @@ class ModelsTabUiTest {
             bestForTaskTypes = listOf("llm_chat"),
             llmSupportImage = false,
             llmSupportAudio = false,
-            requiresHfToken = false,
             recommendedForChat = true,
             isExperimental = false,
             installState = installState,

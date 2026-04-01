@@ -17,8 +17,7 @@ class LocalModelCompatibilityEvaluator(
     fun evaluate(
         model: AllowlistedModel,
         installedPath: String?,
-        installState: ModelInstallState,
-        tokenPresent: Boolean
+        installState: ModelInstallState
     ): LocalModelCompatibilityState {
         if (!isFileTypeSupported(model.fileType)) {
             return LocalModelCompatibilityState.UnsupportedDevice(
@@ -34,10 +33,6 @@ class LocalModelCompatibilityEvaluator(
 
         if (!isChatSuitable(model)) {
             return LocalModelCompatibilityState.UnsupportedForChat
-        }
-
-        if (model.requiresHfToken && !tokenPresent) {
-            return LocalModelCompatibilityState.TokenRequired
         }
 
         val availableRamGb = deviceRamInGb()

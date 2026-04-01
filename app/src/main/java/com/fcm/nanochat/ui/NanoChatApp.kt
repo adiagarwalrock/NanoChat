@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
@@ -17,6 +19,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PermanentDrawerSheet
+import androidx.compose.material3.PermanentNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.SnackbarHost
@@ -33,9 +37,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import com.fcm.nanochat.R
 import com.fcm.nanochat.inference.InferenceMode
 import com.fcm.nanochat.model.ChatMessage
@@ -43,12 +50,14 @@ import com.fcm.nanochat.model.ChatRole
 import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.ModelGalleryScreenState
 import com.fcm.nanochat.model.SettingsScreenState
+import com.fcm.nanochat.ui.SettingsSection.AboutDeveloper
 import com.fcm.nanochat.ui.SettingsSection.AiConfiguration
+import com.fcm.nanochat.ui.SettingsSection.AppInfo
 import com.fcm.nanochat.ui.SettingsSection.Connection
 import com.fcm.nanochat.ui.SettingsSection.DataHistory
 import com.fcm.nanochat.ui.SettingsSection.Home
-import com.fcm.nanochat.ui.SettingsSection.HuggingFaceConnection
 import com.fcm.nanochat.ui.SettingsSection.ModelControls
+import com.fcm.nanochat.ui.SettingsSection.OpenSourceLicenses
 import com.fcm.nanochat.ui.theme.NanoChatTheme
 import kotlinx.coroutines.launch
 
@@ -96,8 +105,6 @@ fun NanoChatApp(
     onBaseUrlChange: (String) -> Unit = {},
     onModelNameChange: (String) -> Unit = {},
     onApiKeyChange: (String) -> Unit = {},
-    onHuggingFaceTokenChange: (String) -> Unit = {},
-    onValidateHuggingFaceToken: () -> Unit = {},
     onTemperatureChange: (Double) -> Unit = {},
     onTopPChange: (Double) -> Unit = {},
     onContextLengthChange: (Int) -> Unit = {},
@@ -115,8 +122,12 @@ fun NanoChatApp(
     var destination by rememberSaveable { mutableStateOf(AppDestination.Chat) }
     var modelsBackDestination by rememberSaveable { mutableStateOf(AppDestination.Chat) }
     var settingsStartSection by rememberSaveable { mutableStateOf(Home) }
-    var renameTargetId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var renameDraft by rememberSaveable { mutableStateOf("") }
+    val renameTargetIdState = rememberSaveable { mutableStateOf<Long?>(null) }
+    val renameDraftState = rememberSaveable { mutableStateOf("") }
+
+    val windowInfo = LocalWindowInfo.current
+    val screenWidthDp = with(LocalDensity.current) { windowInfo.containerSize.width.toDp() }
+    val isExpanded = screenWidthDp >= 700.dp
 
     LaunchedEffect(modelState.notice) {
         val currentNotice = modelState.notice ?: return@LaunchedEffect
@@ -138,44 +149,41 @@ fun NanoChatApp(
         onConsumedModelsNavigation()
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet(
-                drawerContainerColor = MaterialTheme.colorScheme.surface,
-                drawerContentColor = MaterialTheme.colorScheme.onSurface
-            ) {
-                SessionsDrawer(
-                    state = chatState,
-                    onCreateSession = {
-                        onCreateSession()
-                        scope.launch { drawerState.close() }
-                    },
-                    onSelectSession = { id ->
-                        onSelectSession(id)
-                        scope.launch { drawerState.close() }
-                    },
-                    onPinSession = onPinSession,
-                    onDeleteSession = onDeleteSession,
-                    onRenameSession = { id, currentTitle ->
-                        renameTargetId = id
-                        renameDraft = currentTitle
-                    },
-                    onOpenModels = {
-                        modelsBackDestination = AppDestination.Chat
-                        destination = AppDestination.Models
-                        onOpenModelGallery()
-                        scope.launch { drawerState.close() }
-                    },
-                    onOpenSettings = {
-                        settingsStartSection = Home
-                        destination = AppDestination.Settings
-                        scope.launch { drawerState.close() }
-                    }
-                )
+    val drawerContentComposable: @Composable () -> Unit = {
+        SessionsDrawer(
+            state = chatState,
+            modifier = if (isExpanded) Modifier
+                .width(300.dp)
+                .statusBarsPadding() else Modifier,
+            onCreateSession = {
+                onCreateSession()
+                if (!isExpanded) scope.launch { drawerState.close() }
+            },
+            onSelectSession = { id ->
+                onSelectSession(id)
+                if (!isExpanded) scope.launch { drawerState.close() }
+            },
+            onPinSession = onPinSession,
+            onDeleteSession = onDeleteSession,
+            onRenameSession = { id, currentTitle ->
+                renameTargetIdState.value = id
+                renameDraftState.value = currentTitle
+            },
+            onOpenModels = {
+                modelsBackDestination = AppDestination.Chat
+                destination = AppDestination.Models
+                onOpenModelGallery()
+                if (!isExpanded) scope.launch { drawerState.close() }
+            },
+            onOpenSettings = {
+                settingsStartSection = Home
+                destination = AppDestination.Settings
+                if (!isExpanded) scope.launch { drawerState.close() }
             }
-        }
-    ) {
+        )
+    }
+
+    val appContent: @Composable () -> Unit = {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
@@ -192,7 +200,6 @@ fun NanoChatApp(
                         onSendMessage = onSendMessage,
                         onStopGeneration = onStopGeneration,
                         onMessageDraftChange = onMessageDraftChange,
-                        onCreateSession = onCreateSession,
                         onRetryLast = onRetryLast,
                         onInferenceModeChange = onInferenceModeChange,
                         onOpenModelGallery = {
@@ -219,8 +226,8 @@ fun NanoChatApp(
                                 settingsStartSection = Home
                             }
                         },
-                        onOpenHuggingFaceSettings = {
-                            settingsStartSection = HuggingFaceConnection
+                        onNavigateSettings = {
+                            settingsStartSection = Connection
                             destination = AppDestination.Settings
                         },
                         onRefreshAllowlist = onRefreshAllowlist,
@@ -250,13 +257,9 @@ fun NanoChatApp(
                         onBaseUrlChange = onBaseUrlChange,
                         onModelNameChange = onModelNameChange,
                         onApiKeyChange = onApiKeyChange,
-                        onHuggingFaceTokenChange = onHuggingFaceTokenChange,
-                        onValidateHuggingFaceToken = onValidateHuggingFaceToken,
                         onTemperatureChange = onTemperatureChange,
                         onTopPChange = onTopPChange,
                         onContextLengthChange = onContextLengthChange,
-                        onThinkingEffortChange = onThinkingEffortChange,
-                        onAcceleratorChange = onAcceleratorChange,
                         onSaveSettings = onSaveSettings,
                         onClearHistory = onClearHistory,
                         onRefreshStats = onRefreshStats,
@@ -268,15 +271,45 @@ fun NanoChatApp(
         }
     }
 
+    if (isExpanded) {
+        PermanentNavigationDrawer(
+            drawerContent = {
+                PermanentDrawerSheet(
+                    drawerContainerColor = MaterialTheme.colorScheme.surface,
+                    drawerContentColor = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.width(300.dp)
+                ) {
+                    drawerContentComposable()
+                }
+            }
+        ) {
+            appContent()
+        }
+    } else {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ModalDrawerSheet(
+                    drawerContainerColor = MaterialTheme.colorScheme.surface,
+                    drawerContentColor = MaterialTheme.colorScheme.onSurface
+                ) {
+                    drawerContentComposable()
+                }
+            }
+        ) {
+            appContent()
+        }
+    }
+
     RenameSessionDialog(
-        sessionId = renameTargetId,
-        draft = renameDraft,
-        onDraftChange = { renameDraft = it },
+        sessionId = renameTargetIdState.value,
+        draft = renameDraftState.value,
+        onDraftChange = { renameDraftState.value = it },
         onConfirm = { id, title ->
             onRenameSession(id, title)
-            renameTargetId = null
+            renameTargetIdState.value = null
         },
-        onDismiss = { renameTargetId = null }
+        onDismiss = { renameTargetIdState.value = null }
     )
 }
 
@@ -286,7 +319,7 @@ private fun ModelsPage(
     state: ModelGalleryScreenState,
     modifier: Modifier = Modifier,
     onBack: () -> Unit,
-    onOpenHuggingFaceSettings: () -> Unit,
+    onNavigateSettings: () -> Unit,
     onRefreshAllowlist: () -> Unit,
     onDownloadModel: (String) -> Unit,
     onCancelModelDownload: (String) -> Unit,
@@ -332,7 +365,7 @@ private fun ModelsPage(
             onDeleteModel = onDeleteModel,
             onMoveStorage = onMoveModelStorage,
             onImportLocalModel = onImportLocalModel,
-            onOpenHuggingFaceSettings = onOpenHuggingFaceSettings
+            onOpenSettings = onNavigateSettings
         )
     }
 }
@@ -349,13 +382,9 @@ private fun SettingsPage(
     onBaseUrlChange: (String) -> Unit,
     onModelNameChange: (String) -> Unit,
     onApiKeyChange: (String) -> Unit,
-    onHuggingFaceTokenChange: (String) -> Unit,
-    onValidateHuggingFaceToken: () -> Unit,
     onTemperatureChange: (Double) -> Unit,
     onTopPChange: (Double) -> Unit,
     onContextLengthChange: (Int) -> Unit,
-    onThinkingEffortChange: (com.fcm.nanochat.data.ThinkingEffort) -> Unit,
-    onAcceleratorChange: (com.fcm.nanochat.data.AcceleratorPreference) -> Unit,
     onSaveSettings: () -> Unit,
     onClearHistory: () -> Unit,
     onRefreshStats: () -> Unit,
@@ -369,21 +398,26 @@ private fun SettingsPage(
             AiConfiguration -> "Remote AI configuration"
             Connection -> "Connection"
             ModelControls -> "Model behavior"
-            HuggingFaceConnection -> "Hugging Face"
             DataHistory -> "Usage and history"
+            AppInfo -> "App info"
+            AboutDeveloper -> "About the developer"
+            OpenSourceLicenses -> "Open source licenses"
         }
 
     val navigateBack: () -> Unit = {
-        section =
-            when (section) {
-                Home -> {
-                    onBack()
-                    Home
-                }
-
-                AiConfiguration, HuggingFaceConnection, DataHistory -> Home
-                Connection, ModelControls -> AiConfiguration
+        when (section) {
+            Home -> {
+                onBack()
             }
+
+            AiConfiguration, DataHistory, AppInfo, AboutDeveloper, OpenSourceLicenses -> {
+                section = Home
+            }
+
+            Connection, ModelControls -> {
+                section = AiConfiguration
+            }
+        }
     }
 
     BackHandler(onBack = navigateBack)
@@ -443,17 +477,6 @@ private fun SettingsPage(
                     onTemperatureChange = onTemperatureChange,
                     onTopPChange = onTopPChange,
                     onContextLengthChange = onContextLengthChange,
-                    onThinkingEffortChange = onThinkingEffortChange,
-                    onAcceleratorChange = onAcceleratorChange,
-                    onSaveSettings = onSaveSettings
-                )
-
-            HuggingFaceConnection ->
-                HuggingFaceConnectionSettings(
-                    state = state,
-                    modifier = contentModifier,
-                    onHuggingFaceTokenChange = onHuggingFaceTokenChange,
-                    onValidateHuggingFaceToken = onValidateHuggingFaceToken,
                     onSaveSettings = onSaveSettings
                 )
 
@@ -464,6 +487,19 @@ private fun SettingsPage(
                     onRefreshStats = onRefreshStats,
                     onClearHistory = onClearHistory
                 )
+
+            AppInfo ->
+                AppInfoSettings(
+                    state = state,
+                    modifier = contentModifier,
+                    onNavigate = { section = it }
+                )
+
+            AboutDeveloper ->
+                AboutDeveloperSettings(modifier = contentModifier)
+
+            OpenSourceLicenses ->
+                OpenSourceLicensesSettings(modifier = contentModifier)
         }
     }
 }

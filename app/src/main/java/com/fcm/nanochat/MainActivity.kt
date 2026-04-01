@@ -4,24 +4,35 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.fcm.nanochat.data.AppPreferences
 import com.fcm.nanochat.notifications.NotificationCoordinator
 import com.fcm.nanochat.ui.NanoChatApp
+import com.fcm.nanochat.ui.StartupGateContent
 import com.fcm.nanochat.ui.theme.NanoChatTheme
+import com.fcm.nanochat.util.CrashReporter
+import com.fcm.nanochat.util.InferenceCrashMarkerStore
+import com.fcm.nanochat.util.InferenceDumpLogger
 import com.fcm.nanochat.viewmodel.ChatViewModel
 import com.fcm.nanochat.viewmodel.ModelManagerViewModel
 import com.fcm.nanochat.viewmodel.SettingsViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -29,17 +40,64 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var notificationCoordinator: NotificationCoordinator
 
+    @Inject
+    lateinit var appPreferences: AppPreferences
+
+    @Inject
+    lateinit var crashReporter: CrashReporter
+
+    @Inject
+    lateinit var inferenceDumpLogger: InferenceDumpLogger
+
+    @Inject
+    lateinit var inferenceCrashMarkerStore: InferenceCrashMarkerStore
+
     private val sessionNavigation = MutableStateFlow<Long?>(null)
     private val modelsNavigation = MutableStateFlow(false)
     private val requestNotificationsPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> }
+    private var gemmaTermsAccepted by mutableStateOf<Boolean?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        runCatching {
+            installSplashScreen().setKeepOnScreenCondition { gemmaTermsAccepted == null }
+        }.onFailure { error ->
+            Log.w(TAG, "SplashScreen setup failed, continuing without keep condition", error)
+            crashReporter.logBreadcrumb("startup_splashscreen_setup_failed")
+            crashReporter.recordNonFatal(error, "startup_splashscreen_setup_failed")
+        }
+
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        runCatching { enableEdgeToEdge() }
+            .onFailure { error ->
+                Log.w(TAG, "Edge-to-edge setup failed, continuing without it", error)
+                crashReporter.logBreadcrumb("startup_edge_to_edge_failed")
+                crashReporter.recordNonFatal(error, "startup_edge_to_edge_failed")
+            }
+
+        inferenceCrashMarkerStore.consumeUncleanMarker()?.let { marker ->
+            crashReporter.recordUncleanInferenceTermination(marker)
+            inferenceDumpLogger.writeInferenceEvent(
+                event = "unclean_inference_termination",
+                mode = marker.mode,
+                modelId = marker.modelId,
+                sessionId = marker.sessionId,
+                requestId = marker.requestId,
+                stage = marker.stage,
+                visibleChars = marker.visibleChars,
+                marker = marker
+            )
+        }
+
         notificationCoordinator.ensureChannels()
         handleNavigationIntent(intent)
         maybeRequestNotificationPermission()
+
+        lifecycleScope.launch {
+            appPreferences.gemmaTermsAccepted.collect { accepted ->
+                gemmaTermsAccepted = accepted
+            }
+        }
 
         setContent {
             NanoChatTheme {
@@ -53,52 +111,60 @@ class MainActivity : ComponentActivity() {
                 val targetSessionId by sessionNavigation.collectAsStateWithLifecycle()
                 val navigateToModels by modelsNavigation.collectAsStateWithLifecycle()
 
-                NanoChatApp(
-                    chatState = chatState,
-                    modelState = modelState,
-                    settingsState = settingsState,
-                    navigateToChatSessionId = targetSessionId,
-                    navigateToModels = navigateToModels,
-                    onConsumedNavigation = { sessionNavigation.value = null },
-                    onConsumedModelsNavigation = { modelsNavigation.value = false },
-                    onSendMessage = chatViewModel::sendMessage,
-                    onStopGeneration = chatViewModel::stopGeneration,
-                    onMessageDraftChange = chatViewModel::updateDraft,
-                    onSelectSession = chatViewModel::selectSession,
-                    onCreateSession = chatViewModel::createSession,
-                    onRetryLast = chatViewModel::retryLastMessage,
-                    onInferenceModeChange = chatViewModel::setInferenceMode,
-                    onRenameSession = chatViewModel::renameSession,
-                    onDeleteSession = chatViewModel::deleteSession,
-                    onPinSession = chatViewModel::setSessionPinned,
-                    onDeleteMessage = chatViewModel::deleteMessage,
-                    onOpenModelGallery = {},
-                    onRefreshAllowlist = modelManagerViewModel::refreshAllowlist,
-                    onDownloadModel = modelManagerViewModel::downloadModel,
-                    onCancelModelDownload = modelManagerViewModel::cancelDownload,
-                    onRetryModelDownload = modelManagerViewModel::retryDownload,
-                    onUseModel = modelManagerViewModel::useModel,
-                    onEjectModel = modelManagerViewModel::ejectModel,
-                    onDeleteModel = modelManagerViewModel::deleteModel,
-                    onMoveModelStorage = modelManagerViewModel::moveStorage,
-                    onImportLocalModel = modelManagerViewModel::importLocalModel,
-                    onDismissModelNotice = modelManagerViewModel::clearNotice,
-                    onBaseUrlChange = settingsViewModel::updateBaseUrl,
-                    onModelNameChange = settingsViewModel::updateModelName,
-                    onApiKeyChange = settingsViewModel::updateApiKey,
-                    onHuggingFaceTokenChange = settingsViewModel::updateHuggingFaceToken,
-                    onValidateHuggingFaceToken = settingsViewModel::validateHuggingFaceToken,
-                    onTemperatureChange = settingsViewModel::updateTemperature,
-                    onTopPChange = settingsViewModel::updateTopP,
-                    onContextLengthChange = settingsViewModel::updateContextLength,
-                    onThinkingEffortChange = settingsViewModel::updateThinkingEffort,
-                    onAcceleratorChange = settingsViewModel::updateAcceleratorPreference,
-                    onSaveSettings = settingsViewModel::save,
-                    onClearHistory = settingsViewModel::clearAllHistory,
-                    onRefreshStats = settingsViewModel::refreshStats,
-                    onRefreshGeminiStatus = settingsViewModel::refreshGeminiStatus,
-                    onDownloadGeminiNano = settingsViewModel::downloadGeminiNano
-                )
+                StartupGateContent(
+                    gemmaTermsAccepted = gemmaTermsAccepted,
+                    onAccepted = {
+                        gemmaTermsAccepted = true
+                        lifecycleScope.launch {
+                            appPreferences.updateGemmaTermsAccepted(true)
+                        }
+                    }
+                ) {
+                    NanoChatApp(
+                        chatState = chatState,
+                        modelState = modelState,
+                        settingsState = settingsState,
+                        navigateToChatSessionId = targetSessionId,
+                        navigateToModels = navigateToModels,
+                        onConsumedNavigation = { sessionNavigation.value = null },
+                        onConsumedModelsNavigation = { modelsNavigation.value = false },
+                        onSendMessage = chatViewModel::sendMessage,
+                        onStopGeneration = chatViewModel::stopGeneration,
+                        onMessageDraftChange = chatViewModel::updateDraft,
+                        onSelectSession = chatViewModel::selectSession,
+                        onCreateSession = chatViewModel::createSession,
+                        onRetryLast = chatViewModel::retryLastMessage,
+                        onInferenceModeChange = chatViewModel::setInferenceMode,
+                        onRenameSession = chatViewModel::renameSession,
+                        onDeleteSession = chatViewModel::deleteSession,
+                        onPinSession = chatViewModel::setSessionPinned,
+                        onDeleteMessage = chatViewModel::deleteMessage,
+                        onOpenModelGallery = {},
+                        onRefreshAllowlist = modelManagerViewModel::refreshAllowlist,
+                        onDownloadModel = modelManagerViewModel::downloadModel,
+                        onCancelModelDownload = modelManagerViewModel::cancelDownload,
+                        onRetryModelDownload = modelManagerViewModel::retryDownload,
+                        onUseModel = modelManagerViewModel::useModel,
+                        onEjectModel = modelManagerViewModel::ejectModel,
+                        onDeleteModel = modelManagerViewModel::deleteModel,
+                        onMoveModelStorage = modelManagerViewModel::moveStorage,
+                        onImportLocalModel = modelManagerViewModel::importLocalModel,
+                        onDismissModelNotice = modelManagerViewModel::clearNotice,
+                        onBaseUrlChange = settingsViewModel::updateBaseUrl,
+                        onModelNameChange = settingsViewModel::updateModelName,
+                        onApiKeyChange = settingsViewModel::updateApiKey,
+                        onTemperatureChange = settingsViewModel::updateTemperature,
+                        onTopPChange = settingsViewModel::updateTopP,
+                        onContextLengthChange = settingsViewModel::updateContextLength,
+                        onThinkingEffortChange = settingsViewModel::updateThinkingEffort,
+                        onAcceleratorChange = settingsViewModel::updateAcceleratorPreference,
+                        onSaveSettings = settingsViewModel::save,
+                        onClearHistory = settingsViewModel::clearAllHistory,
+                        onRefreshStats = settingsViewModel::refreshStats,
+                        onRefreshGeminiStatus = settingsViewModel::refreshGeminiStatus,
+                        onDownloadGeminiNano = settingsViewModel::downloadGeminiNano
+                    )
+                }
             }
         }
     }
@@ -129,6 +195,10 @@ class MainActivity : ComponentActivity() {
         if (!granted) {
             requestNotificationsPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+    }
+
+    private companion object {
+        const val TAG = "MainActivity"
     }
 }
 

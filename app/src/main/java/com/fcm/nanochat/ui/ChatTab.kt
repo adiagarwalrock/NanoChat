@@ -7,7 +7,6 @@ import android.text.method.LinkMovementMethod
 import android.widget.TextView
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
-
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -32,7 +31,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -71,6 +69,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -130,7 +129,6 @@ internal fun ChatTab(
         onSendMessage: () -> Unit,
         onStopGeneration: () -> Unit,
         onMessageDraftChange: (String) -> Unit,
-        onCreateSession: () -> Unit,
         onRetryLast: () -> Unit,
         onInferenceModeChange: (InferenceMode) -> Unit,
         onOpenModelGallery: () -> Unit,
@@ -147,63 +145,33 @@ internal fun ChatTab(
         val compact = screenWidthDp < 700.dp
         val horizontalPadding = if (compact) 16.dp else 24.dp
         val contentModifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = horizontalPadding)
+            .fillMaxSize()
+            .padding(horizontal = horizontalPadding)
 
         Box(modifier = modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)) {
-                if (compact) {
-                        ChatTabContent(
-                                state = state,
-                                settingsState = settingsState,
-                                modifier = contentModifier,
-                                onOpenSessions = onOpenSessions,
-                                onSendMessage = onSendMessage,
-                                onStopGeneration = onStopGeneration,
-                                onMessageDraftChange = onMessageDraftChange,
-                                onRetryLast = onRetryLast,
-                                onInferenceModeChange = onInferenceModeChange,
-                                onOpenModelGallery = onOpenModelGallery,
-                                onTemperatureChange = onTemperatureChange,
-                                onTopPChange = onTopPChange,
-                                onContextLengthChange = onContextLengthChange,
-                                onThinkingEffortChange = onThinkingEffortChange,
-                                onAcceleratorChange = onAcceleratorChange,
-                                onMessageInfo = onMessageInfo,
-                                onDeleteMessage = onDeleteMessage
-                        )
-                } else {
-                        Row(modifier = Modifier.fillMaxSize()) {
-                                SessionsRail(
-                                        state = state,
-                                        modifier = Modifier
-                                                .width(280.dp)
-                                                .fillMaxSize(),
-                                        onCreateSession = onCreateSession,
-                                        onSelectSession = onOpenSessions
-                                )
-                                ChatTabContent(
-                                        state = state,
-                                        settingsState = settingsState,
-                                        modifier = contentModifier,
-                                        onOpenSessions = onOpenSessions,
-                                        onSendMessage = onSendMessage,
-                                        onStopGeneration = onStopGeneration,
-                                        onMessageDraftChange = onMessageDraftChange,
-                                        onRetryLast = onRetryLast,
-                                        onInferenceModeChange = onInferenceModeChange,
-                                        onOpenModelGallery = onOpenModelGallery,
-                                        onTemperatureChange = onTemperatureChange,
-                                        onTopPChange = onTopPChange,
-                                        onContextLengthChange = onContextLengthChange,
-                                        onThinkingEffortChange = onThinkingEffortChange,
-                                        onAcceleratorChange = onAcceleratorChange,
-                                        onMessageInfo = onMessageInfo,
-                                        onDeleteMessage = onDeleteMessage
-                                )
-                        }
-                }
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+        ) {
+            ChatTabContent(
+                    state = state,
+                    settingsState = settingsState,
+                    modifier = contentModifier,
+                    showMenuIcon = compact,
+                    onOpenSessions = onOpenSessions,
+                    onSendMessage = onSendMessage,
+                    onStopGeneration = onStopGeneration,
+                    onMessageDraftChange = onMessageDraftChange,
+                    onRetryLast = onRetryLast,
+                    onInferenceModeChange = onInferenceModeChange,
+                    onOpenModelGallery = onOpenModelGallery,
+                    onTemperatureChange = onTemperatureChange,
+                    onTopPChange = onTopPChange,
+                    onContextLengthChange = onContextLengthChange,
+                    onThinkingEffortChange = onThinkingEffortChange,
+                    onAcceleratorChange = onAcceleratorChange,
+                    onMessageInfo = onMessageInfo,
+                    onDeleteMessage = onDeleteMessage
+            )
         }
 }
 
@@ -213,6 +181,7 @@ private fun ChatTabContent(
         state: ChatScreenState,
         settingsState: SettingsScreenState,
         modifier: Modifier = Modifier,
+        showMenuIcon: Boolean,
         onOpenSessions: () -> Unit,
         onSendMessage: () -> Unit,
         onStopGeneration: () -> Unit,
@@ -229,11 +198,12 @@ private fun ChatTabContent(
         onDeleteMessage: (ChatMessage) -> Unit
 ) {
         var controlsVisible by remember { mutableStateOf(false) }
-        var composerHeightPx by remember { mutableIntStateOf(0) }
-        val bottomPadding = with(LocalDensity.current) { composerHeightPx.toDp() }
+    val composerHeightPxState = remember { mutableIntStateOf(0) }
+    val bottomPadding = with(LocalDensity.current) { composerHeightPxState.intValue.toDp() }
         val listState = rememberLazyListState()
-        val showLocalModelCta =
+    val showLocalModelCta = remember(state.inferenceMode, state.isLocalModelReady) {
                 state.inferenceMode == InferenceMode.DOWNLOADED && !state.isLocalModelReady
+    }
 
         Box(modifier = modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -242,6 +212,7 @@ private fun ChatTabContent(
                                 modelName = settingsState.modelName,
                                 activeLocalModelName = state.activeLocalModelName,
                                 isLocalModelReady = state.isLocalModelReady,
+                                showMenuIcon = showMenuIcon,
                                 onInferenceModeChange = onInferenceModeChange,
                                 onOpenSessions = onOpenSessions
                         )
@@ -254,8 +225,8 @@ private fun ChatTabContent(
                                         onOpenModelGallery = onOpenModelGallery,
                                         modifier =
                                                 Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(vertical = 10.dp)
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 10.dp)
                                 )
                         }
 
@@ -279,20 +250,25 @@ private fun ChatTabContent(
                                         )
 
                                         // Soft top-fade overlay — only visible when scrolled
-                                        if (listState.canScrollBackward) {
+                                    val canScrollBackward by remember { derivedStateOf { listState.canScrollBackward } }
+                                    if (canScrollBackward) {
                                                 Box(
                                                         modifier = Modifier
-                                                                .fillMaxWidth()
-                                                                .height(32.dp)
-                                                                .align(Alignment.TopCenter)
-                                                                .background(
-                                                                        Brush.verticalGradient(
-                                                                                colors = listOf(
-                                                                                        MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
-                                                                                        MaterialTheme.colorScheme.background.copy(alpha = 0f)
-                                                                                )
+                                                            .fillMaxWidth()
+                                                            .height(32.dp)
+                                                            .align(Alignment.TopCenter)
+                                                            .background(
+                                                                Brush.verticalGradient(
+                                                                    colors = listOf(
+                                                                        MaterialTheme.colorScheme.background.copy(
+                                                                            alpha = 0.85f
+                                                                        ),
+                                                                        MaterialTheme.colorScheme.background.copy(
+                                                                            alpha = 0f
                                                                         )
+                                                                    )
                                                                 )
+                                                            )
                                                 )
                                         }
                                 }
@@ -311,11 +287,11 @@ private fun ChatTabContent(
                         onRetry = onRetryLast,
                         modifier =
                                 Modifier
-                                        .align(Alignment.BottomCenter)
-                                        .onSizeChanged { composerHeightPx = it.height }
-                                        .navigationBarsPadding()
-                                        .imePadding()
-                                        .padding(bottom = 15.dp)
+                                    .align(Alignment.BottomCenter)
+                                    .onSizeChanged { composerHeightPxState.intValue = it.height }
+                                    .navigationBarsPadding()
+                                    .imePadding()
+                                    .padding(bottom = 15.dp)
                 )
 
                 if (controlsVisible) {
@@ -368,8 +344,8 @@ private fun ModelControlsSheet(
                 Column(
                         modifier =
                                 Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 18.dp, vertical = 4.dp),
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 18.dp, vertical = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                         Text(
@@ -387,22 +363,14 @@ private fun ModelControlsSheet(
                                 color = MaterialTheme.colorScheme.surfaceContainerHigh
                         ) {
                                 Column(
-                                        modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(14.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
                                         verticalArrangement = Arrangement.spacedBy(14.dp)
                                 ) {
                                         LabeledSlider(
-                                                label =
-                                                        stringResource(
-                                                                id = R.string.temperature_label
-                                                        ),
-                                                description =
-                                                        stringResource(
-                                                                id =
-                                                                        R.string
-                                                                                .temperature_description
-                                                        ),
+                                            label = stringResource(id = R.string.temperature_label),
+                                            description = stringResource(id = R.string.temperature_description),
                                                 value = settings.temperature.toFloat(),
                                                 range = 0f..2f,
                                                 steps = 5,
@@ -418,16 +386,13 @@ private fun ModelControlsSheet(
                                                 }
                                         )
                                         HorizontalDivider(
-                                                color =
-                                                        MaterialTheme.colorScheme.outlineVariant
-                                                                .copy(alpha = 0.5f)
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(
+                                                alpha = 0.5f
+                                            )
                                         )
                                         LabeledSlider(
                                                 label = stringResource(id = R.string.top_p_label),
-                                                description =
-                                                        stringResource(
-                                                                id = R.string.top_p_description
-                                                        ),
+                                            description = stringResource(id = R.string.top_p_description),
                                                 value = settings.topP.toFloat(),
                                                 range = 0f..1f,
                                                 steps = 9,
@@ -443,21 +408,13 @@ private fun ModelControlsSheet(
                                                 }
                                         )
                                         HorizontalDivider(
-                                                color =
-                                                        MaterialTheme.colorScheme.outlineVariant
-                                                                .copy(alpha = 0.5f)
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(
+                                                alpha = 0.5f
+                                            )
                                         )
                                         LabeledSlider(
-                                                label =
-                                                        stringResource(
-                                                                id = R.string.context_length_label
-                                                        ),
-                                                description =
-                                                        stringResource(
-                                                                id =
-                                                                        R.string
-                                                                                .context_length_description
-                                                        ),
+                                            label = stringResource(id = R.string.context_length_label),
+                                            description = stringResource(id = R.string.context_length_description),
                                                 value = settings.contextLength.toFloat(),
                                                 range = 512f..32768f,
                                                 steps = 10,
@@ -473,63 +430,37 @@ private fun ModelControlsSheet(
                                                 }
                                         )
 
-                                        if (shouldShowThinkingControls(state, settings)) {
+                                    val showThinking = remember(
+                                        state,
+                                        settings
+                                    ) { shouldShowThinkingControls(state, settings) }
+                                    if (showThinking) {
                                                 HorizontalDivider(
-                                                        color =
-                                                                MaterialTheme.colorScheme
-                                                                        .outlineVariant.copy(
-                                                                        alpha = 0.5f
-                                                                )
+                                                    color = MaterialTheme.colorScheme.outlineVariant.copy(
+                                                        alpha = 0.5f
+                                                    )
                                                 )
                                                 LabeledChipRow(
-                                                        label =
-                                                                stringResource(
-                                                                        id =
-                                                                                R.string
-                                                                                        .thinking_effort_label
-                                                                ),
-                                                        description =
-                                                                stringResource(
-                                                                        id =
-                                                                                R.string
-                                                                                        .thinking_effort_description
-                                                                ),
-                                                        options =
-                                                                listOf(
-                                                                        ChipOption(
-                                                                                stringResource(
-                                                                                        id =
-                                                                                                R.string
-                                                                                                        .thinking_effort_none
-                                                                                ),
-                                                                                ThinkingEffort.NONE
-                                                                        ),
-                                                                        ChipOption(
-                                                                                stringResource(
-                                                                                        id =
-                                                                                                R.string
-                                                                                                        .thinking_effort_low
-                                                                                ),
-                                                                                ThinkingEffort.LOW
-                                                                        ),
-                                                                        ChipOption(
-                                                                                stringResource(
-                                                                                        id =
-                                                                                                R.string
-                                                                                                        .thinking_effort_medium
-                                                                                ),
-                                                                                ThinkingEffort
-                                                                                        .MEDIUM
-                                                                        ),
-                                                                        ChipOption(
-                                                                                stringResource(
-                                                                                        id =
-                                                                                                R.string
-                                                                                                        .thinking_effort_high
-                                                                                ),
-                                                                                ThinkingEffort.HIGH
-                                                                        )
-                                                                ),
+                                                    label = stringResource(id = R.string.thinking_effort_label),
+                                                    description = stringResource(id = R.string.thinking_effort_description),
+                                                    options = listOf(
+                                                        ChipOption(
+                                                            stringResource(id = R.string.thinking_effort_none),
+                                                            ThinkingEffort.NONE
+                                                        ),
+                                                        ChipOption(
+                                                            stringResource(id = R.string.thinking_effort_low),
+                                                            ThinkingEffort.LOW
+                                                        ),
+                                                        ChipOption(
+                                                            stringResource(id = R.string.thinking_effort_medium),
+                                                            ThinkingEffort.MEDIUM
+                                                        ),
+                                                        ChipOption(
+                                                            stringResource(id = R.string.thinking_effort_high),
+                                                            ThinkingEffort.HIGH
+                                                        )
+                                                    ),
                                                         selected = settings.thinkingEffort,
                                                         onSelected = onUpdateThinkingEffort
                                                 )
@@ -537,36 +468,22 @@ private fun ModelControlsSheet(
 
                                         if (state.inferenceMode == InferenceMode.DOWNLOADED) {
                                                 HorizontalDivider(
-                                                        color =
-                                                                MaterialTheme.colorScheme
-                                                                        .outlineVariant.copy(
-                                                                        alpha = 0.5f
-                                                                )
+                                                    color = MaterialTheme.colorScheme.outlineVariant.copy(
+                                                        alpha = 0.5f
+                                                    )
                                                 )
                                                 val context = LocalContext.current
-                                                val availableOptions =
-                                                        remember(
-                                                                state.localModelSupportedAccelerators
-                                                        ) {
-                                                                getAvailableAcceleratorOptions(
-                                                                        context,
-                                                                        state.localModelSupportedAccelerators
-                                                                )
-                                                        }
+                                            val availableOptions =
+                                                remember(state.localModelSupportedAccelerators) {
+                                                    getAvailableAcceleratorOptions(
+                                                        context,
+                                                        state.localModelSupportedAccelerators
+                                                    )
+                                                }
 
                                                 LabeledChipRow(
-                                                        label =
-                                                                stringResource(
-                                                                        id =
-                                                                                R.string
-                                                                                        .accelerator_label
-                                                                ),
-                                                        description =
-                                                                stringResource(
-                                                                        id =
-                                                                                R.string
-                                                                                        .accelerator_description
-                                                                ),
+                                                    label = stringResource(id = R.string.accelerator_label),
+                                                    description = stringResource(id = R.string.accelerator_description),
                                                         options = availableOptions,
                                                         selected = settings.acceleratorPreference,
                                                         onSelected = onUpdateAccelerator
@@ -619,11 +536,7 @@ private fun LabeledSlider(
                                         text = formatter(value),
                                         style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurface,
-                                        modifier =
-                                                Modifier.padding(
-                                                        horizontal = 10.dp,
-                                                        vertical = 5.dp
-                                                )
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                                 )
                         }
                 }
@@ -633,16 +546,11 @@ private fun LabeledSlider(
                         onValueChange = onValueChange,
                         valueRange = range,
                         steps = steps,
-                        colors =
-                                SliderDefaults.colors(
-                                        thumbColor = MaterialTheme.colorScheme.primary,
-                                        activeTrackColor =
-                                                MaterialTheme.colorScheme.primary.copy(
-                                                        alpha = 0.75f
-                                                ),
-                                        inactiveTrackColor =
-                                                MaterialTheme.colorScheme.surfaceContainerHighest
-                                )
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.primary,
+                        activeTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
+                        inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    )
                 )
         }
 }
@@ -692,133 +600,117 @@ private fun ChatTopBar(
         modelName: String,
         activeLocalModelName: String?,
         isLocalModelReady: Boolean = false,
+        showMenuIcon: Boolean,
         onInferenceModeChange: (InferenceMode) -> Unit,
         onOpenSessions: () -> Unit
 ) {
         var expanded by remember { mutableStateOf(false) }
-        val cleanModel =
-                modelName.replace(ModelSeparatorRegex, " ").trim().ifBlank {
-                        stringResource(id = R.string.default_model_label)
-                }
+    val cleanModel = remember(modelName) {
+        modelName.replace(ModelSeparatorRegex, " ").trim().ifBlank { "Remote Model" }
+    }
 
-        val selectedLabel =
+    val selectedLabel = remember(selectedMode, activeLocalModelName, cleanModel) {
                 when (selectedMode) {
-                        InferenceMode.AICORE -> stringResource(id = R.string.gemini_nano_title)
+                    InferenceMode.AICORE -> "Gemini Nano"
                         InferenceMode.DOWNLOADED -> activeLocalModelName ?: "Downloaded model"
                         InferenceMode.REMOTE -> cleanModel
                 }
+    }
 
         val readyGreen = Color(0xFF4CAF50)
-        val statusDotColor =
+    val statusDotColor = remember(selectedMode, isLocalModelReady) {
                 when (selectedMode) {
-                        InferenceMode.AICORE -> MaterialTheme.colorScheme.secondary
-                        InferenceMode.DOWNLOADED -> if (isLocalModelReady) readyGreen else MaterialTheme.colorScheme.tertiary
-                        InferenceMode.REMOTE -> MaterialTheme.colorScheme.primary
+                    InferenceMode.AICORE -> Color(0xFF9C27B0) // Material secondary-ish
+                    InferenceMode.DOWNLOADED -> if (isLocalModelReady) readyGreen else Color(
+                        0xFFFF9800
+                    )
+
+                    InferenceMode.REMOTE -> Color(0xFF2196F3)
                 }
+    }
 
 
-        val chevronRotation by
-                animateFloatAsState(
-                        targetValue = if (expanded) 180f else 0f,
-                        animationSpec = tween(durationMillis = 160),
-                        label = "ModelChevronRotation"
-                )
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(durationMillis = 160),
+        label = "ModelChevronRotation"
+    )
 
         Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
-                        modifier =
-                                Modifier
-                                        .fillMaxWidth()
-                                        .statusBarsPadding()
-                                        .padding(top = 6.dp, bottom = 10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(top = 6.dp, bottom = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                 ) {
-                        Surface(
-                                shape = HeaderIconShape,
-                                color = MaterialTheme.colorScheme.surfaceContainer,
-                                tonalElevation = 1.dp
-                        ) {
-                                IconButton(
-                                        onClick = onOpenSessions,
-                                        modifier = Modifier.size(42.dp)
+                        if (showMenuIcon) {
+                                Surface(
+                                        shape = HeaderIconShape,
+                                        color = MaterialTheme.colorScheme.surfaceContainer,
+                                        tonalElevation = 1.dp
                                 ) {
-                                        Icon(
-                                                imageVector = Icons.Default.Menu,
-                                                contentDescription =
-                                                        stringResource(id = R.string.open_sessions),
-                                                tint = MaterialTheme.colorScheme.onSurface
-                                        )
+                                        IconButton(
+                                                onClick = onOpenSessions,
+                                                modifier = Modifier.size(42.dp)
+                                        ) {
+                                                Icon(
+                                                        imageVector = Icons.Default.Menu,
+                                                    contentDescription = stringResource(id = R.string.open_sessions),
+                                                        tint = MaterialTheme.colorScheme.onSurface
+                                                )
+                                        }
                                 }
+                        } else {
+                                Spacer(modifier = Modifier.size(42.dp))
                         }
 
                         Box(
-                                modifier = Modifier
-                                        .weight(1f)
-                                        .padding(horizontal = 12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 12.dp),
                                 contentAlignment = Alignment.Center
                         ) {
                                 Box {
                                         Surface(
                                                 onClick = { expanded = true },
                                                 shape = HeaderSelectorShape,
-                                                color =
-                                                        MaterialTheme.colorScheme
-                                                                .surfaceContainerHigh,
+                                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
                                                 tonalElevation = 1.dp,
                                                 shadowElevation = 2.dp
                                         ) {
                                                 Row(
-                                                        modifier =
-                                                                Modifier
-                                                                        .animateContentSize()
-                                                                        .padding(
-                                                                                horizontal = 14.dp,
-                                                                                vertical = 8.dp
-                                                                        ),
-                                                        verticalAlignment =
-                                                                Alignment.CenterVertically,
-                                                        horizontalArrangement =
-                                                                Arrangement.spacedBy(8.dp)
+                                                    modifier = Modifier
+                                                        .animateContentSize()
+                                                        .padding(
+                                                            horizontal = 14.dp,
+                                                            vertical = 8.dp
+                                                        ),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                 ) {
                                                         Box(
-                                                                modifier =
-                                                                        Modifier
-                                                                                .size(7.dp)
-                                                                                .clip(CircleShape)
-                                                                                .background(
-                                                                                        statusDotColor
-                                                                                )
+                                                            modifier = Modifier
+                                                                .size(7.dp)
+                                                                .clip(CircleShape)
+                                                                .background(statusDotColor)
                                                         )
                                                         Text(
                                                                 text = selectedLabel,
-                                                                style =
-                                                                        MaterialTheme.typography
-                                                                                .labelLarge,
-                                                                color =
-                                                                        MaterialTheme.colorScheme
-                                                                                .onSurface,
+                                                            style = MaterialTheme.typography.labelLarge,
+                                                            color = MaterialTheme.colorScheme.onSurface,
                                                                 maxLines = 1,
                                                                 overflow = TextOverflow.Ellipsis
                                                         )
                                                         Icon(
-                                                                imageVector =
-                                                                        Icons.Default.ArrowDropDown,
-                                                                contentDescription =
-                                                                        stringResource(
-                                                                                id =
-                                                                                        R.string
-                                                                                                .select_backend
-                                                                        ),
-                                                                tint =
-                                                                        MaterialTheme.colorScheme
-                                                                                .onSurfaceVariant,
-                                                                modifier =
-                                                                        Modifier
-                                                                                .size(18.dp)
-                                                                                .graphicsLayer {
-                                                                                        rotationZ =
-                                                                                                chevronRotation
-                                                                                }
+                                                            imageVector = Icons.Default.ArrowDropDown,
+                                                            contentDescription = stringResource(id = R.string.select_backend),
+                                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            modifier = Modifier
+                                                                .size(18.dp)
+                                                                .graphicsLayer {
+                                                                    rotationZ = chevronRotation
+                                                                }
                                                         )
                                                 }
                                         }
@@ -827,73 +719,41 @@ private fun ChatTopBar(
                                                 expanded = expanded,
                                                 onDismissRequest = { expanded = false },
                                                 shape = RoundedCornerShape(16.dp),
-                                                containerColor =
-                                                        MaterialTheme.colorScheme
-                                                                .surfaceContainerHigh
+                                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                                         ) {
                                                 DropdownMenuItem(
                                                         text = {
                                                                 Column {
+                                                                    Text(text = stringResource(id = R.string.gemini_nano_title))
                                                                         Text(
-                                                                                text =
-                                                                                        stringResource(
-                                                                                                id =
-                                                                                                        R.string
-                                                                                                                .gemini_nano_title
-                                                                                        )
-                                                                        )
-                                                                        Text(
-                                                                                text =
-                                                                                        stringResource(
-                                                                                                id =
-                                                                                                        R.string
-                                                                                                                .on_device_mode
-                                                                                        ),
-                                                                                style =
-                                                                                        MaterialTheme
-                                                                                                .typography
-                                                                                                .bodySmall,
-                                                                                color =
-                                                                                        MaterialTheme
-                                                                                                .colorScheme
-                                                                                                .onSurfaceVariant
+                                                                            text = stringResource(id = R.string.on_device_mode),
+                                                                            style = MaterialTheme.typography.bodySmall,
+                                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                                                         )
                                                                 }
                                                         },
                                                         onClick = {
                                                                 expanded = false
-                                                                onInferenceModeChange(
-                                                                        InferenceMode.AICORE
-                                                                )
+                                                            onInferenceModeChange(InferenceMode.AICORE)
                                                         }
                                                 )
                                                 DropdownMenuItem(
                                                         text = {
                                                                 Column {
+                                                                    Text(
+                                                                        text = activeLocalModelName
+                                                                            ?: "Downloaded model"
+                                                                    )
                                                                         Text(
-                                                                                text =
-                                                                                        activeLocalModelName
-                                                                                                ?: "Downloaded model"
-                                                                        )
-                                                                        Text(
-                                                                                text =
-                                                                                        "Local model",
-                                                                                style =
-                                                                                        MaterialTheme
-                                                                                                .typography
-                                                                                                .bodySmall,
-                                                                                color =
-                                                                                        MaterialTheme
-                                                                                                .colorScheme
-                                                                                                .onSurfaceVariant
+                                                                            text = "Local model",
+                                                                            style = MaterialTheme.typography.bodySmall,
+                                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                                                         )
                                                                 }
                                                         },
                                                         onClick = {
                                                                 expanded = false
-                                                                onInferenceModeChange(
-                                                                        InferenceMode.DOWNLOADED
-                                                                )
+                                                            onInferenceModeChange(InferenceMode.DOWNLOADED)
                                                         }
                                                 )
                                                 DropdownMenuItem(
@@ -901,28 +761,15 @@ private fun ChatTopBar(
                                                                 Column {
                                                                         Text(text = cleanModel)
                                                                         Text(
-                                                                                text =
-                                                                                        stringResource(
-                                                                                                id =
-                                                                                                        R.string
-                                                                                                                .remote_mode
-                                                                                        ),
-                                                                                style =
-                                                                                        MaterialTheme
-                                                                                                .typography
-                                                                                                .bodySmall,
-                                                                                color =
-                                                                                        MaterialTheme
-                                                                                                .colorScheme
-                                                                                                .onSurfaceVariant
+                                                                            text = stringResource(id = R.string.remote_mode),
+                                                                            style = MaterialTheme.typography.bodySmall,
+                                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                                                         )
                                                                 }
                                                         },
                                                         onClick = {
                                                                 expanded = false
-                                                                onInferenceModeChange(
-                                                                        InferenceMode.REMOTE
-                                                                )
+                                                            onInferenceModeChange(InferenceMode.REMOTE)
                                                         }
                                                 )
                                         }
@@ -932,9 +779,7 @@ private fun ChatTopBar(
                         Spacer(modifier = Modifier.size(42.dp))
                 }
 
-                HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-                )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
         }
 }
 
@@ -950,29 +795,22 @@ private fun LocalModelStatusSurface(
         val lowerMessage = normalizedMessage.lowercase()
         val preparing = !isReady && ("preparing" in lowerMessage || "loading" in lowerMessage)
 
-        val titleText =
-                when {
-                        isReady -> "Running on ${modelName.orEmpty().ifBlank { "local model" }}"
-                        preparing -> "Preparing local model"
-                        modelName.isNullOrBlank() -> "Select a local model"
-                        else -> "Local model selected"
-                }
+    val titleText = when {
+        isReady -> "Running on ${modelName.orEmpty().ifBlank { "local model" }}"
+        preparing -> "Preparing local model"
+        modelName.isNullOrBlank() -> "Select a local model"
+        else -> "Local model selected"
+    }
 
         Surface(
                 modifier = modifier,
                 shape = RoundedCornerShape(14.dp),
-                color =
-                        if (isReady) {
-                                MaterialTheme.colorScheme.secondaryContainer
-                        } else {
-                                MaterialTheme.colorScheme.surfaceContainerHigh
-                        }
+            color = if (isReady) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
         ) {
                 Column(
-                        modifier =
-                                Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                         Row(
@@ -987,26 +825,13 @@ private fun LocalModelStatusSurface(
                                         Text(
                                                 text = titleText,
                                                 style = MaterialTheme.typography.labelLarge,
-                                                color =
-                                                        if (isReady) {
-                                                                MaterialTheme.colorScheme
-                                                                        .onSecondaryContainer
-                                                        } else {
-                                                                MaterialTheme.colorScheme.onSurface
-                                                        }
+                                            color = if (isReady) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
                                         )
                                         if (normalizedMessage.isNotBlank()) {
                                                 Text(
                                                         text = normalizedMessage,
                                                         style = MaterialTheme.typography.bodySmall,
-                                                        color =
-                                                                if (isReady) {
-                                                                        MaterialTheme.colorScheme
-                                                                                .onSecondaryContainer
-                                                                } else {
-                                                                        MaterialTheme.colorScheme
-                                                                                .onSurfaceVariant
-                                                                }
+                                                    color = if (isReady) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                         }
                                 }
@@ -1019,8 +844,7 @@ private fun LocalModelStatusSurface(
                                 LinearProgressIndicator(
                                         modifier = Modifier.fillMaxWidth(),
                                         color = MaterialTheme.colorScheme.primary,
-                                        trackColor =
-                                                MaterialTheme.colorScheme.surfaceContainerHighest
+                                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                                 )
                         }
                 }
@@ -1042,10 +866,7 @@ private fun LocalModelEmptyState(
                         modifier = Modifier.padding(horizontal = 24.dp)
                 ) {
                         Text(
-                                text =
-                                        stringResource(
-                                                id = R.string.local_model_empty_title
-                                        ),
+                            text = stringResource(id = R.string.local_model_empty_title),
                                 style = MaterialTheme.typography.titleMedium,
                                 textAlign = TextAlign.Center,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -1079,6 +900,15 @@ private fun MessageList(
         onRetryLast: () -> Unit,
         onDeleteMessage: (ChatMessage) -> Unit
 ) {
+    val streamingMessageId =
+        remember(messages, isSending) {
+            if (!isSending) {
+                null
+            } else {
+                messages.lastOrNull()?.takeIf { it.role == ChatRole.ASSISTANT }?.id
+            }
+        }
+
         if (messages.isEmpty() && !isSending) {
                 EmptyChatGreeting(bottomPadding = bottomPadding, modifier = modifier)
         } else {
@@ -1087,20 +917,18 @@ private fun MessageList(
                         modifier = modifier.fillMaxWidth(),
                         contentPadding = PaddingValues(top = 12.dp, bottom = bottomPadding)
                 ) {
-                        itemsIndexed(messages, key = { _, message -> message.id }) { index, message
-                                ->
-                                val sameRoleAsPrevious =
-                                        messages.getOrNull(index - 1)?.role == message.role
-                                val topPadding =
-                                        when {
-                                                index == 0 -> 2.dp
-                                                sameRoleAsPrevious -> 10.dp
-                                                else -> 18.dp
-                                        }
+                    itemsIndexed(messages, key = { _, message -> message.id }) { index, message ->
+                        val sameRoleAsPrevious = messages.getOrNull(index - 1)?.role == message.role
+                        val topPadding = when {
+                            index == 0 -> 2.dp
+                            sameRoleAsPrevious -> 10.dp
+                            else -> 18.dp
+                        }
 
                                 MessageRow(
                                         message = message,
                                         isSending = isSending,
+                                    isStreaming = message.id == streamingMessageId,
                                         modifier = Modifier.padding(top = topPadding),
                                         onMessageInfo = onMessageInfo,
                                         onRetryLast = onRetryLast,
@@ -1117,30 +945,27 @@ private fun EmptyChatGreeting(bottomPadding: Dp, modifier: Modifier = Modifier) 
         var visible by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) { visible = true }
 
-        val alpha by
-        animateFloatAsState(
+    val alpha by animateFloatAsState(
                 targetValue = if (visible) 1f else 0f,
                 animationSpec = tween(600),
                 label = "GreetingFade"
         )
 
-        val translateY by
-        animateFloatAsState(
+    val translateY by animateFloatAsState(
                 targetValue = if (visible) 0f else 24f,
                 animationSpec = tween(600),
                 label = "GreetingSlide"
         )
 
         Column(
-                modifier =
-                        modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 28.dp)
-                                .padding(bottom = bottomPadding)
-                                .graphicsLayer {
-                                        this.alpha = alpha
-                                        translationY = with(density) { translateY.dp.toPx() }
-                                },
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(horizontal = 28.dp)
+                .padding(bottom = bottomPadding)
+                .graphicsLayer {
+                    this.alpha = alpha
+                    translationY = with(density) { translateY.dp.toPx() }
+                },
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
         ) {
@@ -1184,6 +1009,7 @@ private fun EmptyChatGreeting(bottomPadding: Dp, modifier: Modifier = Modifier) 
 private fun MessageRow(
         message: ChatMessage,
         isSending: Boolean,
+        isStreaming: Boolean,
         modifier: Modifier = Modifier,
         onMessageInfo: (ChatMessage) -> Unit,
         onRetryLast: () -> Unit,
@@ -1200,107 +1026,83 @@ private fun MessageRow(
 
         LaunchedEffect(message.id) { entered = true }
 
-        val alpha by
-                animateFloatAsState(
-                        targetValue = if (entered) 1f else 0f,
-                        animationSpec = tween(durationMillis = 170),
-                        label = "MessageFade"
-                )
-        val offsetY by
-                animateFloatAsState(
-                        targetValue = if (entered) 0f else 10f,
-                        animationSpec = tween(durationMillis = 170),
-                        label = "MessageOffset"
-                )
+    val alpha by animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = tween(durationMillis = 170),
+        label = "MessageFade"
+    )
+    val offsetY by animateFloatAsState(
+        targetValue = if (entered) 0f else 10f,
+        animationSpec = tween(durationMillis = 170),
+        label = "MessageOffset"
+    )
 
         Row(
-                modifier =
-                        modifier
-                                .fillMaxWidth()
-                                .graphicsLayer {
-                                        this.alpha = alpha
-                                        translationY = with(density) { offsetY.dp.toPx() }
-                                },
+            modifier = modifier
+                .fillMaxWidth()
+                .graphicsLayer {
+                    this.alpha = alpha
+                    translationY = with(density) { offsetY.dp.toPx() }
+                },
                 horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
         ) {
                 Box(modifier = Modifier.fillMaxWidth(if (isUser) 0.76f else 0.96f)) {
-                        val interactionModifier =
-                                Modifier
-                                        .fillMaxWidth()
-                                        .combinedClickable(
-                                                onClick = { onMessageInfo(message) },
-                                                onLongClick = {
-                                                        haptics.performHapticFeedback(
-                                                                androidx.compose.ui.hapticfeedback
-                                                                        .HapticFeedbackType
-                                                                        .LongPress
-                                                        )
-                                                        actionMenuExpanded = true
-                                                }
-                                        )
+                    val interactionModifier = Modifier
+                        .fillMaxWidth()
+                        .combinedClickable(
+                            onClick = { onMessageInfo(message) },
+                            onLongClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                actionMenuExpanded = true
+                            }
+                        )
 
                         if (isUser) {
                                 Surface(
                                         modifier = interactionModifier,
                                         shape = UserBubbleShape,
-                                        color =
-                                                MaterialTheme.colorScheme.primaryContainer.copy(
-                                                        alpha = 0.86f
-                                                ),
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.86f),
                                         tonalElevation = 1.dp
                                 ) {
                                         MarkdownMessage(
                                                 content = message.content,
-                                                textColor =
-                                                        MaterialTheme.colorScheme
-                                                                .onPrimaryContainer,
+                                            textColor = MaterialTheme.colorScheme.onPrimaryContainer,
                                                 fontSizeSp = 15f,
                                                 lineSpacingMultiplier = 1.33f,
-                                                modifier =
-                                                        Modifier
-                                                                .fillMaxWidth()
-                                                                .padding(
-                                                                        horizontal = 14.dp,
-                                                                        vertical = 11.dp
-                                                                )
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 14.dp, vertical = 11.dp)
                                         )
                                 }
                         } else {
                                 Column(
-                                        modifier =
-                                                interactionModifier.padding(
-                                                        horizontal = 8.dp,
-                                                        vertical = 4.dp
-                                                ),
+                                    modifier = interactionModifier.padding(
+                                        horizontal = 8.dp,
+                                        vertical = 4.dp
+                                    ),
                                         verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                        if (message.content.isBlank() && message.isStreaming) {
+                                    if (message.content.isBlank() && isStreaming) {
                                                 TypingIndicator()
                                         } else if (message.content.isBlank()) {
                                                 Text(
-                                                        text =
-                                                                stringResource(
-                                                                        id =
-                                                                                R.string
-                                                                                        .assistant_no_response_yet
-                                                                ),
+                                                    text = stringResource(id = R.string.assistant_no_response_yet),
                                                         style = MaterialTheme.typography.bodySmall,
-                                                        color =
-                                                                MaterialTheme.colorScheme
-                                                                        .onSurfaceVariant
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                         } else {
-                                                val (thinking, visible) =
-                                                        splitThinking(message.content)
+                                            val (thinking, visible) = remember(message.content) {
+                                                splitThinking(
+                                                    message.content
+                                                )
+                                            }
                                                 if (thinking != null) {
                                                         ThinkAccordion(thinkingText = thinking)
                                                 }
                                                 if (visible.isNotBlank()) {
                                                         MarkdownMessage(
                                                                 content = visible,
-                                                                textColor =
-                                                                        MaterialTheme.colorScheme
-                                                                                .onSurface,
+                                                            textColor = MaterialTheme.colorScheme.onSurface,
                                                                 fontSizeSp = 16f,
                                                                 lineSpacingMultiplier = 1.45f,
                                                                 modifier = Modifier.fillMaxWidth()
@@ -1313,7 +1115,7 @@ private fun MessageRow(
                         MessageActionsMenu(
                                 expanded = actionMenuExpanded,
                                 canRegenerate = !isSending,
-                                canDelete = !message.isStreaming,
+                            canDelete = !isStreaming,
                                 onDismiss = { actionMenuExpanded = false },
                                 onCopy = {
                                         clipboardManager.setText(AnnotatedString(message.content))
@@ -1355,34 +1157,43 @@ private fun MessageActionsMenu(
         ) {
                 DropdownMenuItem(
                         text = { Text(stringResource(id = R.string.copy_message)) },
-                        leadingIcon = {
-                                Icon(
-                                        imageVector = Icons.Default.ContentCopy,
-                                        contentDescription = null
-                                )
-                        },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = null
+                        )
+                    },
                         onClick = onCopy
                 )
                 DropdownMenuItem(
                         text = { Text(stringResource(id = R.string.share_message)) },
-                        leadingIcon = {
-                                Icon(imageVector = Icons.Default.Share, contentDescription = null)
-                        },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = null
+                        )
+                    },
                         onClick = onShare
                 )
                 DropdownMenuItem(
                         text = { Text(stringResource(id = R.string.regenerate_response)) },
-                        leadingIcon = {
-                                Icon(imageVector = Icons.Default.Refresh, contentDescription = null)
-                        },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null
+                        )
+                    },
                         enabled = canRegenerate,
                         onClick = onRegenerate
                 )
                 DropdownMenuItem(
                         text = { Text(stringResource(id = R.string.delete_message)) },
-                        leadingIcon = {
-                                Icon(imageVector = Icons.Default.Delete, contentDescription = null)
-                        },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = null
+                        )
+                    },
                         enabled = canDelete,
                         onClick = onDelete
                 )
@@ -1392,39 +1203,33 @@ private fun MessageActionsMenu(
 @Composable
 private fun TypingIndicator() {
         val transition = rememberInfiniteTransition(label = "TypingDots")
-        val dotOne by
-                transition.animateFloat(
-                        initialValue = 0.25f,
-                        targetValue = 0.9f,
-                        animationSpec =
-                                infiniteRepeatable(
-                                        animation = tween(durationMillis = 520),
-                                        repeatMode = RepeatMode.Reverse
-                                ),
-                        label = "DotOneAlpha"
-                )
-        val dotTwo by
-                transition.animateFloat(
-                        initialValue = 0.25f,
-                        targetValue = 0.9f,
-                        animationSpec =
-                                infiniteRepeatable(
-                                        animation = tween(durationMillis = 520, delayMillis = 120),
-                                        repeatMode = RepeatMode.Reverse
-                                ),
-                        label = "DotTwoAlpha"
-                )
-        val dotThree by
-                transition.animateFloat(
-                        initialValue = 0.25f,
-                        targetValue = 0.9f,
-                        animationSpec =
-                                infiniteRepeatable(
-                                        animation = tween(durationMillis = 520, delayMillis = 240),
-                                        repeatMode = RepeatMode.Reverse
-                                ),
-                        label = "DotThreeAlpha"
-                )
+    val dotOne by transition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 0.9f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 520),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "DotOneAlpha"
+    )
+    val dotTwo by transition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 0.9f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 520, delayMillis = 120),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "DotTwoAlpha"
+    )
+    val dotThree by transition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 0.9f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 520, delayMillis = 240),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "DotThreeAlpha"
+    )
 
         Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -1445,15 +1250,10 @@ private fun TypingIndicator() {
 @Composable
 private fun TypingDot(alpha: Float) {
         Box(
-                modifier =
-                        Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                alpha = alpha
-                                        )
-                                )
+            modifier = Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha))
         )
 }
 
@@ -1488,35 +1288,38 @@ private fun getAvailableAcceleratorOptions(
         val supported = supportedAccelerators.map { it.lowercase() }
         val options = mutableListOf<ChipOption<AcceleratorPreference>>()
 
-        options.add(
-                ChipOption(context.getString(R.string.accelerator_auto), AcceleratorPreference.AUTO)
+    options.add(
+        ChipOption(
+            context.getString(R.string.accelerator_auto),
+            AcceleratorPreference.AUTO
         )
+    )
 
         if (supported.isEmpty() || supported.contains("cpu")) {
-                options.add(
-                        ChipOption(
-                                context.getString(R.string.accelerator_cpu),
-                                AcceleratorPreference.CPU
-                        )
+            options.add(
+                ChipOption(
+                    context.getString(R.string.accelerator_cpu),
+                    AcceleratorPreference.CPU
                 )
+            )
         }
 
         if (supported.isEmpty() || supported.contains("gpu")) {
-                options.add(
-                        ChipOption(
-                                context.getString(R.string.accelerator_gpu),
-                                AcceleratorPreference.GPU
-                        )
+            options.add(
+                ChipOption(
+                    context.getString(R.string.accelerator_gpu),
+                    AcceleratorPreference.GPU
                 )
+            )
         }
 
         if (supported.isEmpty() || supported.contains("npu")) {
-                options.add(
-                        ChipOption(
-                                context.getString(R.string.accelerator_nnapi),
-                                AcceleratorPreference.NNAPI
-                        )
+            options.add(
+                ChipOption(
+                    context.getString(R.string.accelerator_nnapi),
+                    AcceleratorPreference.NNAPI
                 )
+            )
         }
 
         return options
@@ -1531,14 +1334,13 @@ private fun ThinkAccordion(thinkingText: String) {
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHighest,
                 tonalElevation = 1.dp,
-                modifier =
-                        Modifier
-                                .fillMaxWidth()
-                                .animateContentSize()
-                                .combinedClickable(
-                                        onClick = { expanded = !expanded },
-                                        onLongClick = { expanded = !expanded }
-                                )
+            modifier = Modifier
+                .fillMaxWidth()
+                .animateContentSize()
+                .combinedClickable(
+                    onClick = { expanded = !expanded },
+                    onLongClick = { expanded = !expanded }
+                )
         ) {
                 Column(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -1558,10 +1360,9 @@ private fun ThinkAccordion(thinkingText: String) {
                                         imageVector = Icons.Default.ArrowDropDown,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier =
-                                                Modifier.graphicsLayer {
-                                                        rotationZ = if (expanded) 180f else 0f
-                                                }
+                                    modifier = Modifier.graphicsLayer {
+                                        rotationZ = if (expanded) 180f else 0f
+                                    }
                                 )
                         }
 
@@ -1594,37 +1395,26 @@ private fun MarkdownMessage(
         val latexBackgroundColor = textColor.copy(alpha = 0.14f).toArgb()
         val latexCornerRadiusPx = with(density) { 10.dp.toPx() }
 
-        val markwon =
-                remember(context, textArgb, latexBackgroundColor, latexCornerRadiusPx) {
-                        markwonCache.get(textArgb)
-                                ?: Markwon.builder(context)
-                                        .usePlugin(MarkwonInlineParserPlugin.create())
-                                        .usePlugin(
-                                                JLatexMathPlugin.create(16f) { builder ->
-                                                        builder.inlinesEnabled(true)
-                                                        builder.theme().backgroundProvider {
-                                                                GradientDrawable().apply {
-                                                                        shape =
-                                                                                GradientDrawable
-                                                                                        .RECTANGLE
-                                                                        cornerRadius =
-                                                                                latexCornerRadiusPx
-                                                                        setColor(
-                                                                                latexBackgroundColor
-                                                                        )
-                                                                }
-                                                        }
-                                                        builder.theme()
-                                                                .padding(
-                                                                        JLatexMathTheme.Padding
-                                                                                .symmetric(5, 8)
-                                                                )
-                                                        builder.theme().textColor(textArgb)
-                                                }
-                                        )
-                                        .build()
-                                        .also { markwonCache.put(textArgb, it) }
+    val markwon = remember(context, textArgb, latexBackgroundColor, latexCornerRadiusPx) {
+        markwonCache.get(textArgb) ?: Markwon.builder(context)
+            .usePlugin(MarkwonInlineParserPlugin.create())
+            .usePlugin(JLatexMathPlugin.create(16f) { builder ->
+                builder.inlinesEnabled(true)
+                builder.theme().backgroundProvider {
+                    GradientDrawable().apply {
+                        shape = GradientDrawable.RECTANGLE
+                        cornerRadius = latexCornerRadiusPx
+                        setColor(latexBackgroundColor)
+                    }
                 }
+                builder.theme().padding(JLatexMathTheme.Padding.symmetric(5, 8))
+                builder.theme().textColor(textArgb)
+            })
+            .build()
+            .also { markwonCache.put(textArgb, it) }
+    }
+
+    val normalizedContent = remember(content) { normalizeLists(content) }
 
         AndroidView(
                 modifier = modifier,
@@ -1638,11 +1428,14 @@ private fun MarkdownMessage(
                         }
                 },
                 update = { textView ->
+                    if (textView.tag != normalizedContent) {
                         textView.setTextColor(textArgb)
                         textView.textSize = fontSizeSp
                         textView.setLineSpacing(0f, lineSpacingMultiplier)
                         textView.setTextIsSelectable(true)
-                        markwon.setMarkdown(textView, normalizeLists(content))
+                        markwon.setMarkdown(textView, normalizedContent)
+                        textView.tag = normalizedContent
+                    }
                 }
         )
 }
@@ -1660,29 +1453,31 @@ private fun Composer(
         onStop: () -> Unit,
         onRetry: () -> Unit
 ) {
-        val sendEnabled = canSend && draft.isNotBlank() && !isSending
+    val sendEnabled =
+        remember(canSend, draft, isSending) { canSend && draft.isNotBlank() && !isSending }
         val sendInteractionSource = remember { MutableInteractionSource() }
         val sendPressed by sendInteractionSource.collectIsPressedAsState()
         val haptics = LocalHapticFeedback.current
-        val sendScale by
-                animateFloatAsState(
-                        targetValue = if (sendPressed) 0.92f else 1f,
-                        animationSpec = tween(durationMillis = 110),
-                        label = "SendButtonScale"
-                )
+    val sendScale by animateFloatAsState(
+        targetValue = if (sendPressed) 0.92f else 1f,
+        animationSpec = tween(durationMillis = 110),
+        label = "SendButtonScale"
+    )
 
-        val sendContainerColor =
+    val sendContainerColor = remember(sendEnabled, isSending) {
                 when {
-                        sendEnabled -> MaterialTheme.colorScheme.primaryContainer
-                        isSending -> MaterialTheme.colorScheme.errorContainer
-                        else -> MaterialTheme.colorScheme.surfaceContainerHighest
+                    sendEnabled -> Color(0xFFD2E3FC) // Material primary container-ish
+                    isSending -> Color(0xFFF9DEDC) // Material error container-ish
+                    else -> Color(0xFFE1E2E1)
                 }
-        val sendContentColor =
+    }
+    val sendContentColor = remember(sendEnabled, isSending) {
                 when {
-                        sendEnabled -> MaterialTheme.colorScheme.onPrimaryContainer
-                        isSending -> MaterialTheme.colorScheme.onErrorContainer
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    sendEnabled -> Color(0xFF174EA6)
+                    isSending -> Color(0xFF410E0B)
+                    else -> Color(0xFF444746)
                 }
+    }
 
         Surface(
                 modifier = modifier.fillMaxWidth(),
@@ -1692,10 +1487,9 @@ private fun Composer(
                 shadowElevation = 10.dp
         ) {
                 Column(
-                        modifier =
-                                Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                         Row(
@@ -1705,9 +1499,9 @@ private fun Composer(
                         ) {
                                 Surface(
                                         shape = RoundedCornerShape(14.dp),
-                                        color =
-                                                MaterialTheme.colorScheme.surfaceContainerHighest
-                                                        .copy(alpha = 0.8f)
+                                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(
+                                        alpha = 0.8f
+                                    )
                                 ) {
                                         IconButton(
                                                 onClick = onOpenControls,
@@ -1715,12 +1509,7 @@ private fun Composer(
                                         ) {
                                                 Icon(
                                                         imageVector = Icons.Default.Tune,
-                                                        contentDescription =
-                                                                stringResource(
-                                                                        id =
-                                                                                R.string
-                                                                                        .model_controls_title
-                                                                ),
+                                                    contentDescription = stringResource(id = R.string.model_controls_title),
                                                         tint = MaterialTheme.colorScheme.onSurface
                                                 )
                                         }
@@ -1732,47 +1521,33 @@ private fun Composer(
                                         modifier = Modifier.weight(1f),
                                         placeholder = {
                                                 Text(
-                                                        text =
-                                                                stringResource(
-                                                                        id =
-                                                                                R.string
-                                                                                        .composer_placeholder
-                                                                ),
+                                                    text = stringResource(id = R.string.composer_placeholder),
                                                         style = MaterialTheme.typography.bodyMedium
                                                 )
                                         },
                                         minLines = 1,
                                         maxLines = 5,
                                         shape = RoundedCornerShape(16.dp),
-                                        colors =
-                                                TextFieldDefaults.colors(
-                                                        focusedContainerColor = Color.Transparent,
-                                                        unfocusedContainerColor = Color.Transparent,
-                                                        disabledContainerColor = Color.Transparent,
-                                                        focusedIndicatorColor = Color.Transparent,
-                                                        unfocusedIndicatorColor = Color.Transparent,
-                                                        disabledIndicatorColor = Color.Transparent,
-                                                        cursorColor =
-                                                                MaterialTheme.colorScheme.primary,
-                                                        focusedTextColor =
-                                                                MaterialTheme.colorScheme.onSurface,
-                                                        unfocusedTextColor =
-                                                                MaterialTheme.colorScheme.onSurface,
-                                                        focusedPlaceholderColor =
-                                                                MaterialTheme.colorScheme
-                                                                        .onSurfaceVariant,
-                                                        unfocusedPlaceholderColor =
-                                                                MaterialTheme.colorScheme
-                                                                        .onSurfaceVariant
-                                                )
+                                    colors = TextFieldDefaults.colors(
+                                        focusedContainerColor = Color.Transparent,
+                                        unfocusedContainerColor = Color.Transparent,
+                                        disabledContainerColor = Color.Transparent,
+                                        focusedIndicatorColor = Color.Transparent,
+                                        unfocusedIndicatorColor = Color.Transparent,
+                                        disabledIndicatorColor = Color.Transparent,
+                                        cursorColor = MaterialTheme.colorScheme.primary,
+                                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                        focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 )
 
                                 Surface(
-                                        modifier =
-                                                Modifier.graphicsLayer {
-                                                        scaleX = sendScale
-                                                        scaleY = sendScale
-                                                },
+                                    modifier = Modifier.graphicsLayer {
+                                        scaleX = sendScale
+                                        scaleY = sendScale
+                                    },
                                         shape = CircleShape,
                                         color = sendContainerColor,
                                         tonalElevation = if (sendEnabled) 3.dp else 0.dp
@@ -1782,10 +1557,9 @@ private fun Composer(
                                                         if (isSending) {
                                                                 onStop()
                                                         } else {
-                                                                haptics.performHapticFeedback(
-                                                                        HapticFeedbackType
-                                                                                .TextHandleMove
-                                                                )
+                                                            haptics.performHapticFeedback(
+                                                                HapticFeedbackType.TextHandleMove
+                                                            )
                                                                 onSend()
                                                         }
                                                 },
@@ -1794,19 +1568,10 @@ private fun Composer(
                                                 modifier = Modifier.size(40.dp)
                                         ) {
                                                 Icon(
-                                                        imageVector =
-                                                                if (isSending) Icons.Default.Stop
-                                                                else Icons.Default.ArrowUpward,
-                                                        contentDescription =
-                                                                if (isSending) {
-                                                                        "Stop generation"
-                                                                } else {
-                                                                        stringResource(
-                                                                                id =
-                                                                                        R.string
-                                                                                                .send_message
-                                                                        )
-                                                                },
+                                                    imageVector = if (isSending) Icons.Default.Stop else Icons.Default.ArrowUpward,
+                                                    contentDescription = if (isSending) "Stop generation" else stringResource(
+                                                        id = R.string.send_message
+                                                    ),
                                                         tint = sendContentColor
                                                 )
                                         }
@@ -1826,12 +1591,7 @@ private fun Composer(
                                                 modifier = Modifier.weight(1f)
                                         )
                                         TextButton(onClick = onRetry, enabled = !isSending) {
-                                                Text(
-                                                        text =
-                                                                stringResource(
-                                                                        id = R.string.retry_last
-                                                                )
-                                                )
+                                            Text(text = stringResource(id = R.string.retry_last))
                                         }
                                 }
                         }
@@ -1842,11 +1602,10 @@ private fun Composer(
 private fun shareMessage(context: android.content.Context, content: String) {
         if (content.isBlank()) return
 
-        val sendIntent =
-                Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, content)
-                }
+    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, content)
+    }
         val chooser = Intent.createChooser(sendIntent, context.getString(R.string.share_message))
         if (context !is Activity) {
                 chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -1858,10 +1617,8 @@ private fun normalizeLists(raw: String): String {
         if (raw.isBlank()) return raw
 
         val orderedListMissingSpaceRegex = Regex("""(?<=\b\d)\.(?=[A-Z])""")
-        val orderedListBoundaryRegex =
-                Regex("""(?<=[\p{L}\p{N})\].!?:])(?=\d+\.\s*[A-Z])""")
-        val unorderedListBoundaryRegex =
-                Regex("""(?<=[\p{L}\p{N})\].!?:])(?=[-*+]\s+[A-Z])""")
+    val orderedListBoundaryRegex = Regex("""(?<=[\p{L}\p{N})\].!?:])(?=\d+\.\s*[A-Z])""")
+    val unorderedListBoundaryRegex = Regex("""(?<=[\p{L}\p{N})\].!?:])(?=[-*+]\s+[A-Z])""")
         val lines = raw.replace("\r\n", "\n").replace('\r', '\n').lines()
         val builder = StringBuilder()
         var insideFence = false
@@ -1875,14 +1632,13 @@ private fun normalizeLists(raw: String): String {
                         continue
                 }
 
-                val normalizedLine =
-                        if (insideFence) {
-                                line
-                        } else {
-                                line.replace(orderedListMissingSpaceRegex, ". ")
-                                        .replace(orderedListBoundaryRegex, "\n")
-                                        .replace(unorderedListBoundaryRegex, "\n")
-                        }
+            val normalizedLine = if (insideFence) {
+                line
+            } else {
+                line.replace(orderedListMissingSpaceRegex, ". ")
+                    .replace(orderedListBoundaryRegex, "\n")
+                    .replace(unorderedListBoundaryRegex, "\n")
+            }
 
                 if (!insideFence && normalizedLine.startsWith("    ")) {
                         builder.append(normalizedLine.removePrefix("    ")).append('\n')
@@ -1899,30 +1655,22 @@ private fun normalizeLists(raw: String): String {
 private fun ChatTabPreview() {
         NanoChatTheme(darkTheme = false) {
                 ChatTab(
-                        state =
-                                ChatScreenState(
-                                        messages =
-                                                listOf(
-                                                        ChatMessage(
-                                                                1,
-                                                                1,
-                                                                ChatRole.USER,
-                                                                "Hello! How does on-device AI work?"
-                                                        ),
-                                                        ChatMessage(
-                                                                2,
-                                                                1,
-                                                                ChatRole.ASSISTANT,
-                                                                "On-device AI works by running the model directly on your phone's processor (CPU, GPU, or NPU) rather than sending data to a cloud server. This ensures privacy, reduces latency, and works offline!"
-                                                        )
-                                                )
-                                ),
+                    state = ChatScreenState(
+                        messages = listOf(
+                            ChatMessage(1, 1, ChatRole.USER, "Hello! How does on-device AI work?"),
+                            ChatMessage(
+                                2,
+                                1,
+                                ChatRole.ASSISTANT,
+                                "On-device AI works by running the model directly on your phone's processor (CPU, GPU, or NPU) rather than sending data to a cloud server. This ensures privacy, reduces latency, and works offline!"
+                            )
+                        )
+                    ),
                         settingsState = SettingsScreenState(modelName = "Mistral 7B (Local)"),
                         onOpenSessions = {},
                         onSendMessage = {},
                         onStopGeneration = {},
                         onMessageDraftChange = {},
-                        onCreateSession = {},
                         onRetryLast = {},
                         onInferenceModeChange = {},
                         onOpenModelGallery = {},
@@ -1942,30 +1690,22 @@ private fun ChatTabPreview() {
 private fun ChatTabDarkPreview() {
         NanoChatTheme(darkTheme = true) {
                 ChatTab(
-                        state =
-                                ChatScreenState(
-                                        messages =
-                                                listOf(
-                                                        ChatMessage(
-                                                                1,
-                                                                1,
-                                                                ChatRole.USER,
-                                                                "Explain quantum computing."
-                                                        ),
-                                                        ChatMessage(
-                                                                2,
-                                                                1,
-                                                                ChatRole.ASSISTANT,
-                                                                "Quantum computing uses quantum bits (qubits) which can exist in multiple states simultaneously, allowing for parallel processing of complex problems."
-                                                        )
-                                                )
-                                ),
+                    state = ChatScreenState(
+                        messages = listOf(
+                            ChatMessage(1, 1, ChatRole.USER, "Explain quantum computing."),
+                            ChatMessage(
+                                2,
+                                1,
+                                ChatRole.ASSISTANT,
+                                "Quantum computing uses quantum bits (qubits) which can exist in multiple states simultaneously, allowing for parallel processing of complex problems."
+                            )
+                        )
+                    ),
                         settingsState = SettingsScreenState(modelName = "Gemini Nano"),
                         onOpenSessions = {},
                         onSendMessage = {},
                         onStopGeneration = {},
                         onMessageDraftChange = {},
-                        onCreateSession = {},
                         onRetryLast = {},
                         onInferenceModeChange = {},
                         onOpenModelGallery = {},

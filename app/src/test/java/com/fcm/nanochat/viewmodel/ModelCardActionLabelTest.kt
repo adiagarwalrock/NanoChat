@@ -1,5 +1,7 @@
 package com.fcm.nanochat.viewmodel
 
+import com.fcm.nanochat.model.LocalModelHealthState
+import com.fcm.nanochat.model.LocalModelMemoryState
 import com.fcm.nanochat.model.ModelCardUi
 import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
 import com.fcm.nanochat.models.registry.ModelInstallState
@@ -9,21 +11,13 @@ import org.junit.Test
 
 class ModelCardActionLabelTest {
     @Test
-    fun `token required state maps to requires token`() {
-        val card = card(
-            installState = ModelInstallState.NOT_INSTALLED,
-            compatibility = LocalModelCompatibilityState.TokenRequired
-        )
-
-        assertEquals("Add token", card.primaryActionLabel())
-    }
-
-    @Test
     fun `installed active state maps to use model`() {
         val card = card(
             installState = ModelInstallState.INSTALLED,
             compatibility = LocalModelCompatibilityState.Ready,
-            isActive = true
+            isActive = true,
+            healthState = LocalModelHealthState.InstalledReady,
+            memoryState = LocalModelMemoryState.NotSelected
         )
 
         assertEquals("Use model", card.primaryActionLabel())
@@ -33,7 +27,8 @@ class ModelCardActionLabelTest {
     fun `failed state maps to retry`() {
         val card = card(
             installState = ModelInstallState.FAILED,
-            compatibility = LocalModelCompatibilityState.DownloadedButNotActivatable("failed")
+            compatibility = LocalModelCompatibilityState.DownloadedButNotActivatable("failed"),
+            healthState = LocalModelHealthState.DownloadFailed("failed")
         )
 
         assertEquals("Retry", card.primaryActionLabel())
@@ -42,7 +37,9 @@ class ModelCardActionLabelTest {
     private fun card(
         installState: ModelInstallState,
         compatibility: LocalModelCompatibilityState,
-        isActive: Boolean = false
+        isActive: Boolean = false,
+        healthState: LocalModelHealthState = LocalModelHealthState.NotInstalled,
+        memoryState: LocalModelMemoryState = LocalModelMemoryState.NotSelected
     ): ModelCardUi {
         return ModelCardUi(
             modelId = "id",
@@ -56,12 +53,13 @@ class ModelCardActionLabelTest {
             bestForTaskTypes = listOf("llm_chat"),
             llmSupportImage = false,
             llmSupportAudio = false,
-            requiresHfToken = false,
             recommendedForChat = true,
             isExperimental = false,
             installState = installState,
             compatibility = compatibility,
             isActive = isActive,
+            healthState = healthState,
+            memoryState = memoryState,
             isLegacy = false,
             storageLocation = ModelStorageLocation.INTERNAL,
             downloadedBytes = 0,

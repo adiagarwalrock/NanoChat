@@ -2,6 +2,7 @@ package com.fcm.nanochat.models.allowlist
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -48,7 +49,8 @@ class AllowlistParserTest {
         assertEquals("Qwen2.5-1.5B-Instruct.litertlm", model.modelFile)
         assertEquals("litert-lm", model.backendType)
         assertEquals("litert-community/Qwen2.5-1.5B-Instruct", model.sourceRepo)
-        assertFalse(model.requiresHfToken)
+        assertNull(model.downloadRepo)
+        assertNull(model.downloadPath)
         assertTrue(model.recommendedForChat)
         assertFalse(model.supportsThinking)
         assertTrue(model.downloadUrl.contains("/resolve/abc123/"))
@@ -88,5 +90,115 @@ class AllowlistParserTest {
         )
 
         assertTrue(parsed.models.first().supportsThinking)
+    }
+
+    @Test
+    fun `parse uses explicit mirror download repo and path`() {
+        val json = """
+            {
+              "models": [
+                {
+                  "name": "Gemma3-1B-IT",
+                  "modelId": "adiagarwal/nanochat-models/Gemma3-1B-IT",
+                  "modelFile": "gemma3-1b-it-int4.litertlm",
+                  "sizeInBytes": 1200,
+                  "minDeviceMemoryInGb": 6,
+                  "sourceRepo": "litert-community/Gemma3-1B-IT",
+                  "downloadRepo": "adiagarwal/nanochat-models",
+                  "downloadPath": "Gemma3-1B-IT/gemma3-1b-it-int4.litertlm"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val parsed = AllowlistParser.parse(
+            rawJson = json,
+            fallbackVersion = "2_0_3",
+            sourceType = AllowlistSourceType.BUNDLED
+        )
+
+        val model = parsed.models.first()
+        assertEquals("adiagarwal/nanochat-models", model.downloadRepo)
+        assertEquals("Gemma3-1B-IT/gemma3-1b-it-int4.litertlm", model.downloadPath)
+        assertEquals(
+            "https://huggingface.co/adiagarwal/nanochat-models/resolve/main/Gemma3-1B-IT/gemma3-1b-it-int4.litertlm?download=true",
+            model.downloadUrl
+        )
+    }
+
+    @Test
+    fun `parse keeps explicit download URL override`() {
+        val json = """
+            {
+              "models": [
+                {
+                  "name": "Model",
+                  "modelId": "org/model",
+                  "modelFile": "model.litertlm",
+                  "downloadRepo": "ignored/repo",
+                  "downloadPath": "ignored/path/model.litertlm",
+                  "downloadUrl": "https://cdn.example.com/model.litertlm",
+                  "sizeInBytes": 1200,
+                  "minDeviceMemoryInGb": 6
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val parsed = AllowlistParser.parse(
+            rawJson = json,
+            fallbackVersion = "2_0_3",
+            sourceType = AllowlistSourceType.BUNDLED
+        )
+
+        assertEquals("https://cdn.example.com/model.litertlm", parsed.models.first().downloadUrl)
+    }
+
+    @Test
+    fun `enabled models in bundled asset have valid offline mirror metadata`() {
+        val file = java.io.File("src/main/assets/model_allowlist_2_0_3.json")
+        assertTrue("Allowlist file must exist at ${file.absolutePath}", file.exists())
+
+        val json = file.readText()
+        val parsed = AllowlistParser.parse(
+            rawJson = json,
+            fallbackVersion = "2_0_3",
+            sourceType = AllowlistSourceType.BUNDLED
+        )
+
+        val enabledModels = parsed.models.filter { it.enabled }
+        assertTrue("There must be at least one enabled model", enabledModels.isNotEmpty())
+
+        for (model in enabledModels) {
+            assertFalse(
+                "modelFile must be basename-only for ${model.name}",
+                model.modelFile.contains('/')
+            )
+            assertFalse(
+                "modelFile must be basename-only for ${model.name}",
+                model.modelFile.contains('\\')
+            )
+            assertTrue(
+                "downloadRepo must be present for ${model.name}",
+                !model.downloadRepo.isNullOrBlank()
+            )
+            assertTrue(
+                "downloadPath must be present for ${model.name}",
+                !model.downloadPath.isNullOrBlank()
+            )
+            assertTrue(
+                "downloadPath must end with modelFile for ${model.name}",
+                model.downloadPath!!.endsWith("/${model.modelFile}") ||
+                        model.downloadPath == model.modelFile
+            )
+            assertTrue(
+                "downloadUrl must include resolve path for ${model.name}",
+                model.downloadUrl.contains("/resolve/")
+            )
+            assertTrue(
+                "downloadUrl must end with the model file for ${model.name}",
+                model.downloadUrl.contains("/${model.modelFile}?download=true")
+            )
+        }
     }
 }

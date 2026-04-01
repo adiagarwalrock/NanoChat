@@ -1,0 +1,443 @@
+{
+  "version": "2_0_2",
+  "models": [
+    {
+      "name": "Qwen2.5-1.5B-Instruct",
+      "modelId": "adiagarwal/nanochat-models/Qwen2.5-1.5B-Instruct",
+      "modelFile": "Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm",
+      "description": "Balanced on-device chat model with low memory requirements.",
+      "enabled": true,
+      "sizeInBytes": 1597931520,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat"
+      ],
+      "llmSupportImage": false,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "summarization"
+      ],
+      "memoryTier": "mid",
+      "sourceRepo": "litert-community/Qwen2.5-1.5B-Instruct",
+      "downloadRepo": "adiagarwal/nanochat-models",
+      "downloadPath": "Qwen2.5-1.5B-Instruct/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm"
+    },
+    {
+      "name": "Qwen2.5-3B-Instruct",
+      "modelId": "adiagarwal/nanochat-models/Qwen2.5-3B-Instruct",
+      "modelFile": "Qwen2.5-3B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm",
+      "description": "Higher quality Qwen model for deeper reasoning at modest speed.",
+      "enabled": false,
+      "sizeInBytes": 2863001600,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 32,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat"
+      ],
+      "llmSupportImage": false,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "reasoning"
+      ],
+      "memoryTier": "high",
+      "sourceRepo": "litert-community/Qwen2.5-3B-Instruct",
+      "downloadRepo": "adiagarwal/nanochat-models",
+      "downloadPath": "Qwen2.5-3B-Instruct/Qwen2.5-3B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm"
+    },
+    {
+      "name": "Gemma3-1B-IT",
+      "modelId": "adiagarwal/nanochat-models/Gemma3-1B-IT",
+      "modelFile": "gemma3-1b-it-int4.litertlm",
+      "description": "A variant of Gemma-3-1B-IT ready for deployment on Android using LiteRT-LM.",
+      "enabled": true,
+      "sizeInBytes": 584417280,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 1024,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ],
+      "llmSupportImage": false,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat"
+      ],
+      "memoryTier": "mid",
+      "sourceRepo": "litert-community/Gemma3-1B-IT",
+      "downloadRepo": "adiagarwal/nanochat-models",
+      "downloadPath": "Gemma3-1B-IT/gemma3-1b-it-int4.litertlm"
+    },
+    {
+      "name": "DeepSeek-R1-Distill-Qwen-1.5B",
+      "modelId": "adiagarwal/nanochat-models/DeepSeek-R1-Distill-Qwen-1.5B",
+      "modelFile": "DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm",
+      "description": "Reasoning-focused local model optimized for step-by-step responses.",
+      "enabled": false,
+      "sizeInBytes": 1833451520,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 4096,
+        "accelerators": "cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat"
+      ],
+      "llmSupportImage": false,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "analysis"
+      ],
+      "memoryTier": "mid",
+      "sourceRepo": "litert-community/DeepSeek-R1-Distill-Qwen-1.5B",
+      "downloadRepo": "adiagarwal/nanochat-models",
+      "downloadPath": "DeepSeek-R1-Distill-Qwen-1.5B/DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm"
+    },
+    {
+      "name": "Gemma-3n-E2B-it",
+      "modelId": "adiagarwal/nanochat-models/gemma-3n-E2B-it",
+      "modelFile": "gemma-3n-E2B-it-int4.litertlm",
+      "description": "Multimodal Gemma model supporting chat, image, and audio prompts.",
+      "enabled": true,
+      "sizeInBytes": 3655827456,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_ask_image",
+        "llm_ask_audio"
+      ],
+      "bestForTaskTypes": [
+        "llm_ask_image",
+        "llm_ask_audio"
+      ],
+      "llmSupportImage": true,
+      "llmSupportAudio": true,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "vision",
+        "audio"
+      ],
+      "memoryTier": "high",
+      "sourceRepo": "google/gemma-3n-E2B-it-litert-lm",
+      "downloadRepo": "adiagarwal/nanochat-models",
+      "downloadPath": "Gemma-3n-E2B-it/gemma-3n-E2B-it-int4.litertlm"
+    },
+    {
+      "name": "Gemma-3n-E4B-it",
+      "modelId": "adiagarwal/nanochat-models/gemma-3n-E4B-it",
+      "modelFile": "gemma-3n-E4B-it-int4.litertlm",
+      "description": "Higher-capacity Gemma 3n variant for strongest local response quality.",
+      "enabled": true,
+      "sizeInBytes": 4919541760,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_ask_image",
+        "llm_ask_audio"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat"
+      ],
+      "llmSupportImage": true,
+      "llmSupportAudio": true,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "vision",
+        "audio"
+      ],
+      "memoryTier": "high",
+      "isExperimental": true,
+      "sourceRepo": "google/gemma-3n-E4B-it-litert-lm",
+      "downloadRepo": "adiagarwal/nanochat-models",
+      "downloadPath": "Gemma-3n-E4B-it/gemma-3n-E4B-it-int4.litertlm"
+    },
+    {
+      "name": "TinyGarden-270M",
+      "modelId": "adiagarwal/nanochat-models/functiongemma-270m-ft-tiny-garden",
+      "modelFile": "tiny_garden_q8_ekv1024.litertlm",
+      "description": "Fine-tuned Function Gemma 270M model for Tiny Garden.",
+      "enabled": true,
+      "sizeInBytes": 288964608,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 0.0,
+        "maxTokens": 1024,
+        "accelerators": "cpu"
+      },
+      "taskTypes": [
+        "llm_tiny_garden"
+      ],
+      "bestForTaskTypes": [
+        "llm_tiny_garden"
+      ],
+      "llmSupportImage": false,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": false,
+      "supportedUseCases": [
+        "tools"
+      ],
+      "memoryTier": "entry",
+      "sourceRepo": "litert-community/functiongemma-270m-ft-tiny-garden",
+      "downloadRepo": "adiagarwal/nanochat-models",
+      "downloadPath": "TinyGarden-270M/tiny_garden_q8_ekv1024.litertlm"
+    },
+    {
+      "name": "MobileActions-270M",
+      "modelId": "adiagarwal/nanochat-models/functiongemma-270m-ft-mobile-actions",
+      "modelFile": "mobile_actions_q8_ekv1024.litertlm",
+      "description": "Fine-tuned Function Gemma 270M model for Mobile Actions.",
+      "enabled": true,
+      "sizeInBytes": 288964608,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 0.0,
+        "maxTokens": 1024,
+        "accelerators": "cpu"
+      },
+      "taskTypes": [
+        "llm_mobile_actions"
+      ],
+      "bestForTaskTypes": [
+        "llm_mobile_actions"
+      ],
+      "llmSupportImage": false,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": false,
+      "supportedUseCases": [
+        "tools"
+      ],
+      "memoryTier": "entry",
+      "sourceRepo": "litert-community/functiongemma-270m-ft-mobile-actions",
+      "downloadRepo": "adiagarwal/nanochat-models",
+      "downloadPath": "MobileActions-270M/mobile_actions_q8_ekv1024.litertlm"
+    },
+    {
+      "name": "Qwen3.5-0.8B-Instruct",
+      "modelId": "adiagarwal/nanochat-models/Qwen3.5-0.8B-LiteRT",
+      "modelFile": "model_multimodal.litertlm",
+      "description": "Ultra-compact Qwen 3.5 vision-language model for fast edge reasoning.",
+      "enabled": true,
+      "sizeInBytes": 1245540352,
+      "minDeviceMemoryInGb": 4,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_ask_image"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat"
+      ],
+      "llmSupportImage": true,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "vision"
+      ],
+      "memoryTier": "entry",
+      "sourceRepo": "litert-community/Qwen3.5-0.8B-LiteRT",
+      "downloadRepo": "adiagarwal/nanochat-models",
+      "downloadPath": "Qwen3.5-0.8B-Instruct/model_multimodal.litertlm"
+    },
+    {
+      "name": "Qwen3.5-4B-Instruct",
+      "modelId": "adiagarwal/nanochat-models/Qwen3.5-4B-LiteRT",
+      "modelFile": "model_multimodal.litertlm",
+      "description": "Powerful Qwen 3.5 hybrid MoE vision-language model.",
+      "enabled": true,
+      "sizeInBytes": 5647810560,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 32,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_ask_image"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat"
+      ],
+      "llmSupportImage": true,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "vision"
+      ],
+      "memoryTier": "high",
+      "sourceRepo": "litert-community/Qwen3.5-4B-LiteRT",
+      "downloadRepo": "adiagarwal/nanochat-models",
+      "downloadPath": "Qwen3.5-4B-Instruct/model_multimodal.litertlm"
+    },
+    {
+      "name": "Qwen3.5-2B-Instruct",
+      "modelId": "adiagarwal/nanochat-models/Qwen3.5-2B-LiteRT",
+      "modelFile": "model_multimodal.litertlm",
+      "description": "Intermediate Qwen 3.5 vision-language model with balanced performance.",
+      "enabled": true,
+      "sizeInBytes": 2984960000,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 32,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_ask_image"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat"
+      ],
+      "llmSupportImage": true,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "vision"
+      ],
+      "memoryTier": "mid",
+      "sourceRepo": "litert-community/Qwen3.5-2B-LiteRT",
+      "downloadRepo": "adiagarwal/nanochat-models",
+      "downloadPath": "Qwen3.5-2B-Instruct/model_multimodal.litertlm"
+    },
+    {
+      "name": "Phi-4-mini-instruct",
+      "modelId": "adiagarwal/nanochat-models/Phi-4-mini-instruct",
+      "modelFile": "Phi-4-mini-instruct_multi-prefill-seq_q8_ekv4096.litertlm",
+      "description": "Compact yet powerful reasoning model from Microsoft.",
+      "enabled": true,
+      "sizeInBytes": 4096000000,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.8,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ],
+      "llmSupportImage": false,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "reasoning"
+      ],
+      "memoryTier": "high",
+      "sourceRepo": "litert-community/Phi-4-mini-instruct",
+      "downloadRepo": "adiagarwal/nanochat-models",
+      "downloadPath": "Phi-4-mini-instruct/Phi-4-mini-instruct_multi-prefill-seq_q8_ekv4096.litertlm"
+    }
+  ]
+}
