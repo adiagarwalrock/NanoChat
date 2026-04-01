@@ -73,7 +73,8 @@ internal class LiteRtLmRuntime(
             val canReuse = sessionId != null &&
                     active != null &&
                     active.sessionId == sessionId &&
-                    active.systemInstruction == normalizedSystemInstruction
+                    active.systemInstruction == normalizedSystemInstruction &&
+                    !active.gate.isCancelled()
 
             if (canReuse) {
                 Log.d(
@@ -337,6 +338,8 @@ internal class StreamLifecycleGate {
     fun tryCancel(): Boolean = cancelled.compareAndSet(false, true)
 
     fun tryFinalize(): Boolean = finalized.compareAndSet(false, true)
+
+    fun isCancelled(): Boolean = cancelled.get()
 
     fun isFinalized(): Boolean = finalized.get()
 }

@@ -53,6 +53,7 @@ class ChatViewModel @Inject constructor(
     private val selectedSessionId = MutableStateFlow<Long?>(null)
     private val draft = MutableStateFlow("")
     private val notice = MutableStateFlow<String?>(null)
+    private val isGeminiNanoSupported = MutableStateFlow(false)
     private val isSending = MutableStateFlow(false)
     private var sendJob: Job? = null
     private var activeRequestId: Long = 0
@@ -170,11 +171,13 @@ class ChatViewModel @Inject constructor(
                     )
 
     val uiState: StateFlow<ChatScreenState> =
-            combine(baseUiState, activeLocalModelCapabilities, notice) {
+        combine(baseUiState, activeLocalModelCapabilities, notice, isGeminiNanoSupported) {
                             base,
                             capabilities,
-                            noticeValue ->
+                            noticeValue,
+                            geminiSupported ->
                         base.copy(
+                            isGeminiNanoSupported = geminiSupported,
                                 localModelSupportsThinking = capabilities.supportsThinking,
                                 localModelSupportedAccelerators =
                                         capabilities.supportedAccelerators,
@@ -189,6 +192,14 @@ class ChatViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { selectedSessionId.value = repository.ensureSession() }
+        viewModelScope.launch(Dispatchers.IO) {
+            val supported =
+                runCatching { repository.geminiNanoStatus().supported }.getOrDefault(false)
+            isGeminiNanoSupported.value = supported
+            if (!supported && settings.value.inferenceMode == InferenceMode.AICORE) {
+                repository.setInferenceMode(InferenceMode.REMOTE)
+            }
+        }
     }
 
     fun updateDraft(value: String) {
@@ -239,15 +250,12 @@ class ChatViewModel @Inject constructor(
             withContext(Dispatchers.IO) { repository.setInferenceMode(mode) }
 
             if (mode == InferenceMode.DOWNLOADED) {
-                val preparationError =
-                    withContext(Dispatchers.IO) {
-                        repository.prepareSelectedLocalModel(settings.value)
-                    }
-                if (!preparationError.isNullOrBlank() && shouldSurfaceNotice(preparationError)
-                ) {
-                    notice.value = preparationError
-                    return@launch
-                }
+                // Warm up the selected local model in the background, but keep the composer clean.
+                // Any readiness/mismatch messaging is shown via the local model status UI instead
+                // of the composer notice banner.
+                withContext(Dispatchers.IO) { repository.prepareSelectedLocalModel(settings.value) }
+                notice.value = null
+                return@launch
             }
 
             when (val availability =

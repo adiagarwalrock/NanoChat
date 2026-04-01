@@ -20,6 +20,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fcm.nanochat.data.AppPreferences
+import com.fcm.nanochat.model.ModelCardUi
+import com.fcm.nanochat.model.ModelGalleryScreenState
+import com.fcm.nanochat.model.ModelLibraryPhase
+import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
+import com.fcm.nanochat.models.registry.ModelInstallState
 import com.fcm.nanochat.notifications.NotificationCoordinator
 import com.fcm.nanochat.ui.NanoChatApp
 import com.fcm.nanochat.ui.StartupGateContent
@@ -57,10 +62,13 @@ class MainActivity : ComponentActivity() {
     private val requestNotificationsPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> }
     private var gemmaTermsAccepted by mutableStateOf<Boolean?>(null)
+    private var onboardingDownloadPromptSeen by mutableStateOf<Boolean?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         runCatching {
-            installSplashScreen().setKeepOnScreenCondition { gemmaTermsAccepted == null }
+            installSplashScreen().setKeepOnScreenCondition {
+                gemmaTermsAccepted == null || onboardingDownloadPromptSeen == null
+            }
         }.onFailure { error ->
             Log.w(TAG, "SplashScreen setup failed, continuing without keep condition", error)
             crashReporter.logBreadcrumb("startup_splashscreen_setup_failed")
@@ -98,6 +106,11 @@ class MainActivity : ComponentActivity() {
                 gemmaTermsAccepted = accepted
             }
         }
+        lifecycleScope.launch {
+            appPreferences.onboardingDownloadPromptSeen.collect { seen ->
+                onboardingDownloadPromptSeen = seen
+            }
+        }
 
         setContent {
             NanoChatTheme {
@@ -110,13 +123,55 @@ class MainActivity : ComponentActivity() {
                 val modelState by modelManagerViewModel.uiState.collectAsStateWithLifecycle()
                 val targetSessionId by sessionNavigation.collectAsStateWithLifecycle()
                 val navigateToModels by modelsNavigation.collectAsStateWithLifecycle()
+                val isModelLibraryLoaded = modelState.phase != ModelLibraryPhase.Loading
+                val hasInstalledModels =
+                    modelState.models.any { it.installState == ModelInstallState.INSTALLED }
+                val onboardingModel =
+                    if (isModelLibraryLoaded && !hasInstalledModels) {
+                        onboardingCandidateModel(modelState)
+                    } else {
+                        null
+                    }
 
                 StartupGateContent(
                     gemmaTermsAccepted = gemmaTermsAccepted,
+                    onboardingDownloadPromptSeen = onboardingDownloadPromptSeen,
+                    isModelLibraryLoaded = isModelLibraryLoaded,
+                    hasInstalledModels = hasInstalledModels,
+                    onboardingModel = onboardingModel,
                     onAccepted = {
                         gemmaTermsAccepted = true
                         lifecycleScope.launch {
                             appPreferences.updateGemmaTermsAccepted(true)
+                        }
+                    },
+                    onContinueOnboarding = {
+                        onboardingDownloadPromptSeen = true
+                        lifecycleScope.launch {
+                            appPreferences.updateOnboardingDownloadPromptSeen(true)
+                        }
+                        onboardingModel?.let { model ->
+                            modelManagerViewModel.selectAndPreferDownloadedMode(model.modelId)
+                            if (model.installState != ModelInstallState.INSTALLED) {
+                                modelManagerViewModel.downloadModel(model.modelId)
+                                modelManagerViewModel.markPendingAutoActivation(model.modelId)
+                            } else {
+                                // Model already installed — activate immediately
+                                modelManagerViewModel.useModel(model.modelId)
+                            }
+                        }
+                    },
+                    onOpenModelManagement = {
+                        onboardingDownloadPromptSeen = true
+                        modelsNavigation.value = true
+                        lifecycleScope.launch {
+                            appPreferences.updateOnboardingDownloadPromptSeen(true)
+                        }
+                    },
+                    onDismissOnboarding = {
+                        onboardingDownloadPromptSeen = true
+                        lifecycleScope.launch {
+                            appPreferences.updateOnboardingDownloadPromptSeen(true)
                         }
                     }
                 ) {
@@ -200,6 +255,28 @@ class MainActivity : ComponentActivity() {
     private companion object {
         const val TAG = "MainActivity"
     }
+}
+
+private fun onboardingCandidateModel(state: ModelGalleryScreenState): ModelCardUi? {
+    val candidates = state.models.filter { card ->
+        if (card.isLegacy || !card.recommendedForChat) {
+            return@filter false
+        }
+        when (card.compatibility) {
+            LocalModelCompatibilityState.Ready,
+            LocalModelCompatibilityState.Downloadable -> true
+
+            else -> card.installState == ModelInstallState.INSTALLED
+        }
+    }
+
+    if (candidates.isEmpty()) {
+        return state.models
+            .filter { !it.isLegacy && it.recommendedForChat }
+            .minByOrNull { it.sizeInBytes }
+    }
+
+    return candidates.minByOrNull { it.sizeInBytes }
 }
 
 @Preview(showBackground = true)

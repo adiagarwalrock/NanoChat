@@ -65,6 +65,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -106,11 +107,9 @@ internal enum class SettingsSection {
     Home,
     AiConfiguration,
     ModelControls,
-    Connection,
     DataHistory,
     AppInfo,
-    AboutDeveloper,
-    OpenSourceLicenses
+    AboutDeveloper
 }
 
 private enum class BehaviorPreset(
@@ -240,8 +239,26 @@ internal fun SettingsHome(
         item {
             SystemSummaryCard(
                 modelName =
-                    if (remoteConfigured) displayModelName(state.modelName)
-                    else "Not configured",
+                    when (state.inferenceMode) {
+                        com.fcm.nanochat.inference.InferenceMode.AICORE ->
+                            if (state.geminiStatus.downloaded) "Gemini Nano"
+                            else "Gemini Nano (not ready)"
+                        com.fcm.nanochat.inference.InferenceMode.DOWNLOADED -> {
+                            val model = activeLocalModel
+                            when {
+                                model == null -> "No model selected"
+                                model.installState == ModelInstallState.INSTALLED &&
+                                    model.compatibility is LocalModelCompatibilityState.Ready ->
+                                    model.displayName
+                                model.installState == ModelInstallState.DOWNLOADING ->
+                                    "${model.displayName} (downloading)"
+                                else -> "${model.displayName} (not ready)"
+                            }
+                        }
+                        com.fcm.nanochat.inference.InferenceMode.REMOTE ->
+                            if (remoteConfigured) displayModelName(state.modelName)
+                            else "Not configured"
+                    },
                 behaviorMode = activePreset.title,
                 providerStatus = connectionModeSummary(remoteConfigured),
                 onDeviceBadge =
@@ -268,6 +285,14 @@ internal fun SettingsHome(
                     title = "Remote AI configuration",
                     subtitle = "Behavior profiles and connection setup",
                     onClick = { onNavigate(SettingsSection.AiConfiguration) }
+                )
+                SettingsNavigationRow(
+                    icon = {
+                        Icon(Icons.Default.Tune, contentDescription = null)
+                    },
+                    title = "Edit model behavior",
+                    subtitle = "Behavior presets and advanced model tuning",
+                    onClick = { onNavigate(SettingsSection.ModelControls) }
                 )
                 SettingsNavigationRow(
                     icon = {
@@ -333,7 +358,11 @@ internal fun SettingsHome(
 internal fun AiConfigurationSettings(
     state: SettingsScreenState,
     modifier: Modifier = Modifier,
-    onNavigate: (SettingsSection) -> Unit
+    onNavigate: (SettingsSection) -> Unit,
+    onBaseUrlChange: (String) -> Unit,
+    onModelNameChange: (String) -> Unit,
+    onApiKeyChange: (String) -> Unit,
+    onSaveSettings: () -> Unit
 ) {
     val remoteConfigured =
         RemoteConfigValidator.missingFields(
@@ -342,6 +371,9 @@ internal fun AiConfigurationSettings(
             apiKey = state.apiKey
         )
             .isEmpty()
+
+    var advancedExpanded by rememberSaveable { mutableStateOf(false) }
+    var apiKeyVisible by rememberSaveable { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
@@ -382,232 +414,11 @@ internal fun AiConfigurationSettings(
                         Icon(Icons.Default.Link, contentDescription = null)
                     },
                     label = "Connection",
-                    value = connectionModeSummary(remoteConfigured)
-                )
-            }
-        }
-
-        item {
-            SettingsGroup(title = "Configuration panels") {
-                SettingsNavigationRow(
-                    icon = {
-                        Icon(Icons.Default.Tune, contentDescription = null)
-                    },
-                    title = "Edit model behavior",
-                    subtitle = "Behavior presets and advanced model tuning",
-                    onClick = { onNavigate(SettingsSection.ModelControls) }
-                )
-                SettingsNavigationRow(
-                    icon = {
-                        Icon(Icons.Default.Link, contentDescription = null)
-                    },
-                    title = "Edit connection settings",
-                    subtitle =
-                        "Connection status and advanced API configuration",
-                    onClick = { onNavigate(SettingsSection.Connection) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-internal fun ConnectionSettings(
-    state: SettingsScreenState,
-    modifier: Modifier = Modifier,
-    onBaseUrlChange: (String) -> Unit,
-    onModelNameChange: (String) -> Unit,
-    onApiKeyChange: (String) -> Unit,
-    onRefreshGeminiStatus: () -> Unit,
-    onDownloadGeminiNano: () -> Unit,
-    onSaveSettings: () -> Unit = {}
-) {
-    val providerStatus = inferProviderStatus(state.baseUrl)
-    val missingRemoteFields =
-        RemoteConfigValidator.missingFields(
-            baseUrl = state.baseUrl,
-            modelName = state.modelName,
-            apiKey = state.apiKey
-        )
-
-    var advancedExpanded by rememberSaveable { mutableStateOf(false) }
-    var apiKeyVisible by rememberSaveable { mutableStateOf(false) }
-
-    LazyColumn(
-        modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
-        contentPadding = PaddingValues(bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(SectionSpacing)
-    ) {
-        item {
-            SettingsPanel(
-                title = "Connection status",
-                subtitle = "Current provider and on-device model readiness"
-            ) {
-                SummaryStatusRow(
-                    icon = {
-                        Icon(Icons.Default.Link, contentDescription = null)
-                    },
-                    label = "Remote provider",
-                    value = providerStatus,
+                    value = connectionModeSummary(remoteConfigured),
                     badge =
-                        if (missingRemoteFields.isEmpty()) {
-                            BadgeData("Connected", BadgeTone.Positive)
-                        } else {
-                            BadgeData("Needs setup", BadgeTone.Warning)
-                        }
+                        if (remoteConfigured) null
+                        else BadgeData("Needs setup", BadgeTone.Warning)
                 )
-                SummaryStatusRow(
-                    icon = {
-                        Icon(
-                            Icons.Outlined.CheckCircle,
-                            contentDescription = null
-                        )
-                    },
-                    label = "On-device model",
-                    value = stringResource(R.string.gemini_nano_title),
-                    badge =
-                        when {
-                            state.geminiStatus.supported &&
-                                    state.geminiStatus.downloaded ->
-                                BadgeData(
-                                    "Available",
-                                    BadgeTone.Positive
-                                )
-
-                            state.geminiStatus.supported ->
-                                BadgeData(
-                                    "Supported",
-                                    BadgeTone.Neutral
-                                )
-
-                            else ->
-                                BadgeData(
-                                    "Unavailable",
-                                    BadgeTone.Warning
-                                )
-                        }
-                )
-
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    StatusBadge(
-                        label =
-                            if (state.geminiStatus.supported)
-                                "Supported"
-                            else "Unsupported",
-                        tone =
-                            if (state.geminiStatus.supported)
-                                BadgeTone.Positive
-                            else BadgeTone.Warning
-                    )
-                    StatusBadge(
-                        label =
-                            when {
-                                state.geminiStatus.downloaded ->
-                                    "Downloaded"
-
-                                state.geminiStatus.downloading ->
-                                    "Downloading"
-
-                                else -> "Not downloaded"
-                            },
-                        tone =
-                            when {
-                                state.geminiStatus.downloaded ->
-                                    BadgeTone.Positive
-
-                                state.geminiStatus.downloading ->
-                                    BadgeTone.Neutral
-
-                                else -> BadgeTone.Warning
-                            }
-                    )
-                }
-
-                val sizeLabel =
-                    formatModelSize(
-                        status = state.geminiStatus,
-                        unavailableLabel =
-                            stringResource(
-                                R.string.gemini_size_unavailable
-                            )
-                    )
-                if (sizeLabel.isNotBlank()) {
-                    Text(
-                        text = "Model size: $sizeLabel",
-                        style =
-                            MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 13.sp
-                            ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                if (state.geminiStatus.downloading) {
-                    val downloaded = state.geminiStatus.bytesDownloaded ?: 0L
-                    val total =
-                        state.geminiStatus.bytesToDownload
-                            ?: state.geminiStatus
-                                .lastKnownModelSizeBytes
-                    val progressText =
-                        if (total > 0) {
-                            val pct =
-                                (downloaded * 100f / total)
-                                    .coerceIn(0f, 100f)
-                            stringResource(
-                                R.string.gemini_downloading_percent,
-                                pct.toInt()
-                            )
-                        } else {
-                            stringResource(
-                                R.string.gemini_downloading_generic
-                            )
-                        }
-                    Text(
-                        text = progressText,
-                        style =
-                            MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 13.sp
-                            ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                if (!state.geminiStatus.downloaded &&
-                    state.geminiStatus.supported &&
-                    state.geminiStatus.downloadable &&
-                    !state.geminiStatus.downloading
-                ) {
-                    OutlinedButton(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = onDownloadGeminiNano
-                    ) { Text(stringResource(R.string.gemini_download_gemini)) }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onRefreshGeminiStatus) {
-                        Text(stringResource(R.string.gemini_refresh_status))
-                    }
-                }
-
-                state.geminiStatus.message?.takeIf { it.isNotBlank() }?.let { message ->
-                    Text(
-                        text = message,
-                        style =
-                            MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 13.sp
-                            ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
         }
 
@@ -703,6 +514,8 @@ internal fun ConnectionSettings(
         }
     }
 }
+
+
 
 @Composable
 internal fun ModelControlsSettings(
@@ -840,16 +653,12 @@ internal fun DataHistorySettings(
     onRefreshStats: () -> Unit,
     onClearHistory: () -> Unit
 ) {
-    val missingRemoteFields =
-        RemoteConfigValidator.missingFields(
-            baseUrl = state.baseUrl,
-            modelName = state.modelName,
-            apiKey = state.apiKey
-        )
-    val remoteConfigured = missingRemoteFields.isEmpty()
-    val nanoAvailable = state.geminiStatus.supported && state.geminiStatus.downloaded
     val confirmClearHistoryState = rememberSaveable { mutableStateOf(false) }
     val confirmClearHistory = confirmClearHistoryState.value
+
+    LaunchedEffect(Unit) {
+        onRefreshStats()
+    }
 
     LazyColumn(
         modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
@@ -905,68 +714,7 @@ internal fun DataHistorySettings(
             }
         }
 
-        item {
-            SettingsPanel(
-                title = "System health",
-                subtitle = "Backend and on-device readiness"
-            ) {
-                SummaryStatusRow(
-                    icon = {
-                        Icon(Icons.Default.Link, contentDescription = null)
-                    },
-                    label = "Remote API",
-                    value =
-                        if (remoteConfigured) "Configured"
-                        else "Setup required",
-                    badge =
-                        if (remoteConfigured) {
-                            BadgeData("Connected", BadgeTone.Positive)
-                        } else {
-                            BadgeData(
-                                "Missing fields",
-                                BadgeTone.Warning
-                            )
-                        }
-                )
-                SummaryStatusRow(
-                    icon = {
-                        Icon(
-                            Icons.Outlined.CheckCircle,
-                            contentDescription = null
-                        )
-                    },
-                    label = "Gemini Nano",
-                    value =
-                        when {
-                            nanoAvailable -> "Available"
-                            state.geminiStatus.supported ->
-                                "Not downloaded"
 
-                            else -> "Unavailable"
-                        },
-                    badge =
-                        when {
-                            nanoAvailable ->
-                                BadgeData(
-                                    "Ready",
-                                    BadgeTone.Positive
-                                )
-
-                            state.geminiStatus.supported ->
-                                BadgeData(
-                                    "Download needed",
-                                    BadgeTone.Neutral
-                                )
-
-                            else ->
-                                BadgeData(
-                                    "Unavailable",
-                                    BadgeTone.Warning
-                                )
-                        }
-                )
-            }
-        }
 
         item {
             SettingsPanel(
@@ -1877,21 +1625,7 @@ internal fun AppInfoSettings(
             }
         }
 
-        item {
-            SettingsGroup(title = "Resources") {
-                SettingsNavigationRow(
-                    icon = {
-                        Icon(
-                            Icons.Outlined.Code,
-                            contentDescription = null
-                        )
-                    },
-                    title = stringResource(R.string.open_source_licenses),
-                    subtitle = "Libraries and tools powering NanoChat",
-                    onClick = { onNavigate(SettingsSection.OpenSourceLicenses) }
-                )
-            }
-        }
+
     }
 }
 
@@ -1959,47 +1693,6 @@ internal fun AboutDeveloperSettings(
     }
 }
 
-@Composable
-internal fun OpenSourceLicensesSettings(
-    modifier: Modifier = Modifier
-) {
-    LazyColumn(
-        modifier = modifier.padding(horizontal = ScreenHorizontalPadding, vertical = 16.dp),
-        contentPadding = PaddingValues(bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(SectionSpacing)
-    ) {
-        item {
-            SettingsGroup(title = "Dependencies") {
-                SettingsStaticRow(title = "Jetpack Compose", subtitle = "Android UI toolkit")
-                SettingsStaticRow(title = "Material 3", subtitle = "Design system & components")
-                SettingsStaticRow(
-                    title = "Kotlin Coroutines",
-                    subtitle = "Asynchronous programming"
-                )
-                SettingsStaticRow(title = "Room", subtitle = "Local SQLite persistence")
-                SettingsStaticRow(title = "DataStore", subtitle = "Typed preferences storage")
-                SettingsStaticRow(title = "Hilt", subtitle = "Dependency injection")
-                SettingsStaticRow(title = "OkHttp", subtitle = "HTTP client and SSE processing")
-                SettingsStaticRow(title = "Coil", subtitle = "Image loading")
-                SettingsStaticRow(title = "Markwon", subtitle = "Markdown rendering")
-                SettingsStaticRow(title = "AICore", subtitle = "Android on-device AI integration")
-                SettingsStaticRow(
-                    title = "LiteRT-LM",
-                    subtitle = "Local LLM runtime for downloaded models"
-                )
-                SettingsStaticRow(title = "Firebase", subtitle = "App distribution and analytics")
-                SettingsStaticRow(
-                    title = "kotlinx.serialization",
-                    subtitle = "JSON parsing and serialization"
-                )
-                SettingsStaticRow(
-                    title = "EncryptedSharedPreferences",
-                    subtitle = "Secure secret storage"
-                )
-            }
-        }
-    }
-}
 
 @Preview(showBackground = true)
 @Composable
@@ -2017,20 +1710,13 @@ private fun SettingsHomePreview() {
 @Preview(showBackground = true)
 @Composable
 private fun AiConfigurationSettingsPreview() {
-    NanoChatTheme { AiConfigurationSettings(state = SettingsScreenState(), onNavigate = {}) }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun ConnectionSettingsPreview() {
     NanoChatTheme {
-        ConnectionSettings(
+        AiConfigurationSettings(
             state = SettingsScreenState(),
+            onNavigate = {},
             onBaseUrlChange = {},
             onModelNameChange = {},
             onApiKeyChange = {},
-            onRefreshGeminiStatus = {},
-            onDownloadGeminiNano = {},
             onSaveSettings = {}
         )
     }

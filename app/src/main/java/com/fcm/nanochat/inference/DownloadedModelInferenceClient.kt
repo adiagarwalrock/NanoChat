@@ -219,12 +219,7 @@ class DownloadedModelInferenceClient(
                         thinkingEffort = request.settings.thinkingEffort,
                         supportsThinking = model?.supportsThinking ?: false
                     )
-                val finalUserMessage =
-                    if (isGemmaFamily) {
-                        "$systemPrompt\n\n$latestTurn"
-                    } else {
-                        latestTurn
-                    }
+                val finalUserMessage = latestTurn
 
                 DownloadedPrompt(
                     family = promptFamily,
@@ -916,6 +911,15 @@ class DownloadedModelInferenceClient(
                 "This model needs more memory on this device."
             }
 
+            "context" in combined && "limit" in combined ||
+                    "context" in combined && "exceed" in combined ||
+                    "maximum context" in combined ||
+                    "too many token" in combined ||
+                    "input token" in combined && "limit" in combined ||
+                    "prompt token" in combined && "limit" in combined -> {
+                "This conversation is too long for the local model. Start a new chat or shorten your message."
+            }
+
             "permission" in combined -> {
                 "NanoChat cannot access the local model file. Move or re-download the model."
             }
@@ -950,6 +954,14 @@ class DownloadedModelInferenceClient(
             }
             "outofmemory" in lowercase || "out of memory" in lowercase -> {
                 "This model needs more memory on this device."
+            }
+            "context" in lowercase && "limit" in lowercase ||
+                    "context" in lowercase && "exceed" in lowercase ||
+                    "maximum context" in lowercase ||
+                    "too many token" in lowercase ||
+                    "input token" in lowercase && "limit" in lowercase ||
+                    "prompt token" in lowercase && "limit" in lowercase -> {
+                "This conversation is too long for the local model. Start a new chat or shorten your message."
             }
             "permission" in lowercase -> {
                 "NanoChat cannot access the local model file. Move or re-download the model."
