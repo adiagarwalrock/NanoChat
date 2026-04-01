@@ -1728,42 +1728,28 @@ private fun Composer(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(
-                                    alpha = 0.8f
-                                )
-                            ) {
-                                IconButton(
-                                    onClick = onOpenAttachments,
-                                    enabled = !isSending && !isPreparingAttachment,
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.AttachFile,
-                                        contentDescription = stringResource(R.string.attach_media),
-                                        tint = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                            }
-
+                            if (capabilities.visionUnderstanding.supported || capabilities.audioTranscription.supported) {
                                 Surface(
-                                        shape = RoundedCornerShape(14.dp),
+                                    shape = RoundedCornerShape(14.dp),
                                     color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(
                                         alpha = 0.8f
                                     )
                                 ) {
-                                        IconButton(
-                                                onClick = onOpenControls,
-                                                modifier = Modifier.size(40.dp)
-                                        ) {
-                                                Icon(
-                                                        imageVector = Icons.Default.Tune,
-                                                    contentDescription = stringResource(id = R.string.model_controls_title),
-                                                        tint = MaterialTheme.colorScheme.onSurface
-                                                )
-                                        }
+                                    IconButton(
+                                        onClick = onOpenAttachments,
+                                        enabled = !isSending && !isPreparingAttachment,
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.AttachFile,
+                                            contentDescription = stringResource(R.string.attach_media),
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
                                 }
+                            }
+
+
 
                                 TextField(
                                         value = draft,

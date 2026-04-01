@@ -998,6 +998,12 @@ private fun SimplifiedModelCard(
                         tone = ModelBadgeTone.Warning
                     )
                 }
+                if (model.llmSupportImage || model.llmSupportAudio) {
+                    ModelStatusBadge(
+                        text = stringResource(id = R.string.multimodal_badge),
+                        tone = ModelBadgeTone.Positive
+                    )
+                }
             }
 
             val statusModifier = Modifier
@@ -1142,6 +1148,12 @@ private fun RedesignedDetailsSheet(
                         text = model.installStateLabel(),
                         tone = ModelBadgeTone.Neutral
                     )
+                    if (model.llmSupportImage || model.llmSupportAudio) {
+                        ModelStatusBadge(
+                            text = stringResource(id = R.string.multimodal_badge),
+                            tone = ModelBadgeTone.Positive
+                        )
+                    }
                 }
                 Text(
                     text = model.fullDescription(),

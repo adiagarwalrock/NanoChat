@@ -63,8 +63,8 @@ class ModelLifecycleCoordinator @Inject constructor(
      */
     fun onTrimMemory(level: Int) {
         @Suppress("DEPRECATION")
-        val isCritical = level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL ||
-                level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE
+        val isCritical = level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL ||
+                level >= ComponentCallbacks2.TRIM_MEMORY_MODERATE
 
         // We avoid ejecting on TRIM_MEMORY_UI_HIDDEN (20) to allow quick task switching
         // without losing the loaded model. onStop handles the 5-minute timeout.

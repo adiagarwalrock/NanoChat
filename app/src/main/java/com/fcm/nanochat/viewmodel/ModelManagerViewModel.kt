@@ -1,5 +1,8 @@
 package com.fcm.nanochat.viewmodel
 
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fcm.nanochat.data.repository.LocalModelRepository
@@ -31,7 +34,7 @@ import javax.inject.Inject
 @HiltViewModel
 class ModelManagerViewModel @Inject constructor(
     private val localModelRepository: LocalModelRepository
-) : ViewModel() {
+) : ViewModel(), DefaultLifecycleObserver {
     private val notice = MutableStateFlow<String?>(null)
     private val isRefreshing = MutableStateFlow(false)
 
@@ -44,6 +47,20 @@ class ModelManagerViewModel @Inject constructor(
 
     init {
         observeAndAutoActivate()
+        ProcessLifecycleOwner.get().lifecycle.addObserver(this)
+    }
+
+    override fun onStart(owner: LifecycleOwner) {
+        val activeModelId = localModelRepository.activeModelStatus.value.modelId
+        val loadState = localModelRepository.runtimeLoadState.value
+        if (!activeModelId.isNullOrBlank() && loadState.phase == RuntimeLoadPhase.EJECTED) {
+            useModel(activeModelId)
+        }
+    }
+
+    override fun onCleared() {
+        ProcessLifecycleOwner.get().lifecycle.removeObserver(this)
+        super.onCleared()
     }
 
     val uiState: StateFlow<ModelGalleryScreenState> = combine(
@@ -356,7 +373,7 @@ class ModelManagerViewModel @Inject constructor(
         return when (compatibility) {
             LocalModelCompatibilityState.UnsupportedForChat -> LocalModelHealthState.UnsupportedForChat
             is LocalModelCompatibilityState.NeedsMoreRam -> {
-                LocalModelHealthState.NotCompatible("Requires ${compatibility.requiredGb} GB RAM.")
+                LocalModelHealthState.NotCompatible("Requires ${compatibility.requiredGb} GB+ RAM.")
             }
 
             is LocalModelCompatibilityState.NeedsMoreStorage -> {

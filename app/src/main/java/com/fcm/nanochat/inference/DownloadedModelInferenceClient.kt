@@ -971,7 +971,7 @@ class DownloadedModelInferenceClient(
     private fun isDownloadedImageInputEnabled(): Boolean {
         // Temporary kill-switch until LiteRT-LM image turns are stable on production devices.
         return System.getProperty(DEBUG_ENABLE_LOCAL_IMAGE_INPUT_PROPERTY)
-            ?.toBooleanStrictOrNull() == true
+            ?.toBooleanStrictOrNull() ?: true
     }
 
     private fun downloadedImageInputDisabledReason(): String {

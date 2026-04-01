@@ -72,6 +72,7 @@
     <string name="model_details">Model details</string>
     <string name="supports_image">Image</string>
     <string name="supports_audio">Audio</string>
+    <string name="multimodal_badge">Multimodal</string>
     <string name="not_chat_ready">Not chat-first</string>
     <string name="fits_device">Fits this device</string>
     <string name="installed">Installed</string>
