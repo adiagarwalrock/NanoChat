@@ -36,12 +36,18 @@ class ModelRuntimeManager(
         defaultConfig: AllowlistDefaultConfig,
         expectedFileName: String? = null,
         expectedFileType: String? = null,
-        expectedSizeBytes: Long = 0L
+        expectedSizeBytes: Long = 0L,
+        supportsVisionInput: Boolean = false,
+        supportsAudioInput: Boolean = false
     ): RuntimeHandle {
         return withContext(Dispatchers.IO) {
             mutex.withLock {
                 val normalizedModelId = modelId.trim().lowercase()
-                val configSignature = configSignature(defaultConfig)
+                val configSignature = configSignature(
+                    config = defaultConfig,
+                    supportsVisionInput = supportsVisionInput,
+                    supportsAudioInput = supportsAudioInput
+                )
                 val shouldReuse = activeRuntime != null &&
                         activeModelId == normalizedModelId &&
                         activeModelPath == modelPath &&
@@ -80,7 +86,9 @@ class ModelRuntimeManager(
                         config = defaultConfig,
                         expectedFileName = expectedFileName,
                         expectedFileType = expectedFileType,
-                        expectedSizeBytes = expectedSizeBytes
+                        expectedSizeBytes = expectedSizeBytes,
+                        supportsVisionInput = supportsVisionInput,
+                        supportsAudioInput = supportsAudioInput
                     )
                 }.getOrElse { error ->
                     Log.e(TAG, "Failed to initialize local runtime", error)
@@ -142,7 +150,9 @@ class ModelRuntimeManager(
             defaultConfig = defaultConfig,
             expectedFileName = null,
             expectedFileType = null,
-            expectedSizeBytes = 0L
+            expectedSizeBytes = 0L,
+            supportsVisionInput = false,
+            supportsAudioInput = false
         )
     }
 
@@ -153,7 +163,9 @@ class ModelRuntimeManager(
         defaultConfig: AllowlistDefaultConfig,
         expectedFileName: String?,
         expectedFileType: String?,
-        expectedSizeBytes: Long
+        expectedSizeBytes: Long,
+        supportsVisionInput: Boolean = false,
+        supportsAudioInput: Boolean = false
     ): String? {
         return withContext(Dispatchers.IO) {
             mutex.withLock {
@@ -167,7 +179,9 @@ class ModelRuntimeManager(
                     config = defaultConfig,
                     expectedFileName = expectedFileName,
                     expectedFileType = expectedFileType,
-                    expectedSizeBytes = expectedSizeBytes
+                    expectedSizeBytes = expectedSizeBytes,
+                    supportsVisionInput = supportsVisionInput,
+                    supportsAudioInput = supportsAudioInput
                 )
             }
         }
@@ -181,7 +195,11 @@ class ModelRuntimeManager(
         const val TAG = "ModelRuntimeManager"
     }
 
-    private fun configSignature(config: AllowlistDefaultConfig): String {
-        return "${config.topK}|${config.topP}|${config.temperature}|${config.maxTokens}|${config.accelerators}|${config.strictAccelerator}"
+    private fun configSignature(
+        config: AllowlistDefaultConfig,
+        supportsVisionInput: Boolean,
+        supportsAudioInput: Boolean
+    ): String {
+        return "${config.topK}|${config.topP}|${config.temperature}|${config.maxTokens}|${config.accelerators}|${config.strictAccelerator}|vision=$supportsVisionInput|audio=$supportsAudioInput"
     }
 }

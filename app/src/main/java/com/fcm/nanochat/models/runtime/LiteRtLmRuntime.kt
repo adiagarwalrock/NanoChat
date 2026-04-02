@@ -392,7 +392,9 @@ internal object LiteRtLmRuntimeFactory {
             config: AllowlistDefaultConfig,
             expectedFileName: String?,
             expectedFileType: String?,
-            expectedSizeBytes: Long
+            expectedSizeBytes: Long,
+            supportsVisionInput: Boolean,
+            supportsAudioInput: Boolean
     ): LocalModelRuntime {
         val trimmedPath = modelPath.trim()
         val debugEnabled = isDebugBuild(context)
@@ -421,7 +423,9 @@ internal object LiteRtLmRuntimeFactory {
                                 context = context,
                                 modelPath = trimmedPath,
                                 config = config,
-                                backendLabel = backend
+                                backendLabel = backend,
+                                supportsVisionInput = supportsVisionInput,
+                                supportsAudioInput = supportsAudioInput
                         )
                     }
                             .getOrElse { error ->
@@ -449,7 +453,9 @@ internal object LiteRtLmRuntimeFactory {
             config: AllowlistDefaultConfig,
             expectedFileName: String?,
             expectedFileType: String?,
-            expectedSizeBytes: Long
+            expectedSizeBytes: Long,
+            supportsVisionInput: Boolean,
+            supportsAudioInput: Boolean
     ): String? {
         if (!isRuntimeClassAvailable()) {
             return "Local runtime is unavailable on this build."
@@ -466,7 +472,9 @@ internal object LiteRtLmRuntimeFactory {
                             config = config,
                             expectedFileName = expectedFileName,
                             expectedFileType = expectedFileType,
-                            expectedSizeBytes = expectedSizeBytes
+                            expectedSizeBytes = expectedSizeBytes,
+                            supportsVisionInput = supportsVisionInput,
+                            supportsAudioInput = supportsAudioInput
                     )
             kotlinx.coroutines.runBlocking { runtime.close() }
         }
@@ -483,14 +491,19 @@ internal object LiteRtLmRuntimeFactory {
             context: Context,
             modelPath: String,
             config: AllowlistDefaultConfig,
-            backendLabel: String
+            backendLabel: String,
+            supportsVisionInput: Boolean,
+            supportsAudioInput: Boolean
     ): LocalModelRuntime {
         val backend = backendFromLabel(backendLabel, context.applicationInfo.nativeLibraryDir)
+        val multimodalBackend = multimodalBackendFor(backendLabel, context.applicationInfo.nativeLibraryDir)
 
         val engineConfig =
                 EngineConfig(
                         modelPath = modelPath,
                         backend = backend,
+                        visionBackend = if (supportsVisionInput) multimodalBackend else null,
+                        audioBackend = if (supportsAudioInput) multimodalBackend else null,
                         maxNumTokens = config.maxTokens.coerceAtLeast(256),
                         cacheDir =
                                 if (modelPath.startsWith(TMP_MODEL_PATH_PREFIX)) {
@@ -522,6 +535,16 @@ internal object LiteRtLmRuntimeFactory {
             "gpu" -> Backend.GPU()
             "npu" -> Backend.NPU(nativeLibraryDir = nativeLibraryDir)
             else -> Backend.CPU()
+        }
+    }
+
+    @OptIn(ExperimentalApi::class)
+    private fun multimodalBackendFor(label: String, nativeLibraryDir: String): Backend {
+        return when (label) {
+            // NPU support for image/audio adapters is device/runtime dependent.
+            // Keep multimodal adapters on CPU for stability when text runs on NPU.
+            "npu" -> Backend.CPU()
+            else -> backendFromLabel(label, nativeLibraryDir)
         }
     }
 

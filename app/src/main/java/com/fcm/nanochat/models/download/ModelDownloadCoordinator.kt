@@ -293,78 +293,90 @@ class ModelDownloadCoordinator(
             )
         )
 
-        val requestBuilder = Request.Builder()
-            .url(model.downloadUrl)
-            .header("Accept", "application/octet-stream")
-            .get()
-
-        if (resumeBytes > 0L) {
-            requestBuilder.header("Range", "bytes=$resumeBytes-")
-        }
-
-        val request = requestBuilder.build()
-        var lastNotifyMs = 0L
-
         try {
             var resolvedDownloadUrl: String? = null
             var responseContentType: String? = null
-            httpClient.newCall(request).execute().use { response ->
-                resolvedDownloadUrl = response.request.url.toString()
-                responseContentType = response.header("Content-Type")
-                Log.d(
-                    TAG,
-                    "download_response modelId=${model.id} httpCode=${response.code} " +
-                            "contentType=${responseContentType.orEmpty()} resolvedUrl=${resolvedDownloadUrl.orEmpty()}"
-                )
+            var lastNotifyMs = 0L
 
-                if (!response.isSuccessful && response.code != 206) {
-            val message = downloadHttpErrorMessage(response.code, model.downloadUrl)
-            upsertFailure(modelId, message)
-            return
-        }
+            if (model.sizeInBytes <= 0L || resumeBytes < model.sizeInBytes) {
+                val requestBuilder = Request.Builder()
+                    .url(model.downloadUrl)
+                    .header("Accept", "application/octet-stream")
+                    .get()
+        
+                if (resumeBytes > 0L) {
+                    requestBuilder.header("Range", "bytes=$resumeBytes-")
+                }
+        
+                val request = requestBuilder.build()
+                httpClient.newCall(request).execute().use { response ->
+                    resolvedDownloadUrl = response.request.url.toString()
+                    responseContentType = response.header("Content-Type")
+                    Log.d(
+                        TAG,
+                        "download_response modelId=${model.id} httpCode=${response.code} " +
+                                "contentType=${responseContentType.orEmpty()} resolvedUrl=${resolvedDownloadUrl.orEmpty()}"
+                    )
 
-                val body = response.body
+                    if (!response.isSuccessful && response.code != 206) {
+                        if (response.code == 416 && resumeBytes > 0L) {
+                            Log.w(TAG, "Server returned 416 Requested Range Not Satisfiable. Proceeding to validation.")
+                        } else {
+                            val message = downloadHttpErrorMessage(response.code, model.downloadUrl)
+                            upsertFailure(modelId, message)
+                            return
+                        }
+                    } else {
+                        val body = response.body
+                        
+                        // Treat a full 200 response as a restart if resumeBytes > 0
+                        val append = resumeBytes > 0L && response.code == 206
+                        val startingBytes = if (append) resumeBytes else 0L
 
-                val append = resumeBytes > 0L && response.code == 206
-                val startingBytes = if (append) resumeBytes else 0L
+                        FileOutputStream(tempFile, append).use { output ->
+                            body?.byteStream()?.use { input ->
+                                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                                var bytesRead: Int
+                                var bytesWritten = startingBytes
+                                var lastReport = System.currentTimeMillis()
 
-                FileOutputStream(tempFile, append).use { output ->
-                    body.byteStream().use { input ->
-                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                        var bytesRead: Int
-                        var bytesWritten = startingBytes
-                        var lastReport = System.currentTimeMillis()
+                                while (input.read(buffer).also { bytesRead = it } != -1) {
+                                    ensureJobActive(modelId)
+                                    output.write(buffer, 0, bytesRead)
+                                    bytesWritten += bytesRead
 
-                        while (input.read(buffer).also { bytesRead = it } != -1) {
-                            ensureJobActive(modelId)
-                            output.write(buffer, 0, bytesRead)
-                            bytesWritten += bytesRead
+                                    val nowMs = System.currentTimeMillis()
+                                    if (nowMs - lastReport >= 150L) {
+                                        installedModelDao.upsert(
+                                            queuedEntity.copy(
+                                                installState = ModelInstallState.DOWNLOADING,
+                                                downloadedBytes = bytesWritten,
+                                                updatedAt = nowMs,
+                                                localPath = existing?.localPath.orEmpty()
+                                            )
+                                        )
+                                        lastReport = nowMs
+                                    }
 
-                            val nowMs = System.currentTimeMillis()
-                            if (nowMs - lastReport >= 150L) {
-                                installedModelDao.upsert(
-                                    queuedEntity.copy(
-                                        installState = ModelInstallState.DOWNLOADING,
-                                        downloadedBytes = bytesWritten,
-                                        updatedAt = nowMs,
-                                        localPath = existing?.localPath.orEmpty()
-                                    )
-                                )
-                                lastReport = nowMs
-                            }
-
-                            if (nowMs - lastNotifyMs >= 750L) {
-                                ModelDownloadService.updateProgress(
-                                    appContext,
-                                    model.displayName,
-                                    bytesWritten,
-                                    model.sizeInBytes
-                                )
-                                lastNotifyMs = nowMs
+                                    if (nowMs - lastNotifyMs >= 750L) {
+                                        ModelDownloadService.updateProgress(
+                                            appContext,
+                                            model.displayName,
+                                            bytesWritten,
+                                            model.sizeInBytes
+                                        )
+                                        lastNotifyMs = nowMs
+                                    }
+                                }
                             }
                         }
                     }
                 }
+            } else {
+                Log.d(
+                    TAG,
+                    "download_skipped modelId=${model.id} reason=already_downloaded localSize=$resumeBytes expectedSize=${model.sizeInBytes}"
+                )
             }
 
             installedModelDao.upsert(

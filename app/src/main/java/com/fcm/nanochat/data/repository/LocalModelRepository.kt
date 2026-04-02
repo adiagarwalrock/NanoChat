@@ -157,7 +157,9 @@ class LocalModelRepository(
                     defaultConfig = finalConfig,
                     expectedFileName = model?.modelFile,
                     expectedFileType = model?.fileType,
-                    expectedSizeBytes = model?.sizeInBytes ?: 0L
+                    expectedSizeBytes = model?.sizeInBytes ?: 0L,
+                    supportsVisionInput = model?.llmSupportImage == true,
+                    supportsAudioInput = model?.llmSupportAudio == true
                 )
             }
                 .exceptionOrNull()

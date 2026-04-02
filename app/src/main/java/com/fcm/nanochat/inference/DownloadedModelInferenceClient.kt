@@ -343,7 +343,9 @@ class DownloadedModelInferenceClient(
                         defaultConfig = runtimeConfig,
                         expectedFileName = model?.modelFile,
                         expectedFileType = model?.fileType,
-                        expectedSizeBytes = model?.sizeInBytes ?: 0L
+                        expectedSizeBytes = model?.sizeInBytes ?: 0L,
+                        supportsVisionInput = model?.llmSupportImage == true,
+                        supportsAudioInput = model?.llmSupportAudio == true
                     )
                 }
                     .getOrElse { error ->
@@ -844,7 +846,9 @@ class DownloadedModelInferenceClient(
                 defaultConfig = runtimeConfig,
                 expectedFileName = allowlistedModel.modelFile,
                 expectedFileType = allowlistedModel.fileType,
-                expectedSizeBytes = allowlistedModel.sizeInBytes
+                expectedSizeBytes = allowlistedModel.sizeInBytes,
+                supportsVisionInput = allowlistedModel.llmSupportImage,
+                supportsAudioInput = allowlistedModel.llmSupportAudio
             )
         }.getOrElse { error ->
             throw InferenceException.BackendUnavailable(toFriendlyRuntimeError(error))
