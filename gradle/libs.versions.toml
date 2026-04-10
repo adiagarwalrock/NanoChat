@@ -60,6 +60,8 @@ coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coi
 markwon-core = { group = "io.noties.markwon", name = "core", version.ref = "markwon" }
 markwon-inline-parser = { group = "io.noties.markwon", name = "inline-parser", version.ref = "markwon" }
 markwon-ext-latex = { group = "io.noties.markwon", name = "ext-latex", version.ref = "markwon" }
+markwon-ext-strikethrough = { group = "io.noties.markwon", name = "ext-strikethrough", version.ref = "markwon" }
+markwon-ext-tables = { group = "io.noties.markwon", name = "ext-tables", version.ref = "markwon" }
 orgjson = { group = "org.json", name = "json", version.ref = "orgJson" }
 google-aicore = { group = "com.google.ai.edge.aicore", name = "aicore", version.ref = "aicore" }
 google-mlkit-prompt = { group = "com.google.mlkit", name = "genai-prompt", version.ref = "mlkitPrompt" }

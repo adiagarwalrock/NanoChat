@@ -112,7 +112,7 @@ internal enum class SettingsSection {
     AboutDeveloper
 }
 
-private enum class BehaviorPreset(
+internal enum class BehaviorPreset(
     val title: String,
     val description: String,
     val temperature: Double,
@@ -1456,7 +1456,7 @@ private fun formatTimestamp(epochMs: Long): String {
         .format(Instant.ofEpochMilli(epochMs).atZone(ZoneId.systemDefault()))
 }
 
-private fun closestBehaviorPreset(temperature: Double, topP: Double): BehaviorPreset {
+internal fun closestBehaviorPreset(temperature: Double, topP: Double): BehaviorPreset {
     return BehaviorPreset.entries.minByOrNull { preset ->
         abs(temperature - preset.temperature) + abs(topP - preset.topP)
     }
