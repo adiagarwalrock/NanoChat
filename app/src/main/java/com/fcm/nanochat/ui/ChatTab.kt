@@ -111,8 +111,11 @@ import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.SettingsScreenState
 import com.fcm.nanochat.ui.theme.NanoChatTheme
 import io.noties.markwon.Markwon
+import io.noties.markwon.SoftBreakAddsNewLinePlugin
 import io.noties.markwon.ext.latex.JLatexMathPlugin
 import io.noties.markwon.ext.latex.JLatexMathTheme
+import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
+import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
 
 private val HeaderIconShape = RoundedCornerShape(14.dp)
@@ -1517,6 +1520,9 @@ private fun MarkdownMessage(
 
     val markwon = remember(context, textArgb, latexBackgroundColor, latexCornerRadiusPx) {
         markwonCache.get(textArgb) ?: Markwon.builder(context)
+            .usePlugin(SoftBreakAddsNewLinePlugin.create())
+            .usePlugin(StrikethroughPlugin.create())
+            .usePlugin(TablePlugin.create(context))
             .usePlugin(MarkwonInlineParserPlugin.create())
             .usePlugin(JLatexMathPlugin.create(16f) { builder ->
                 builder.inlinesEnabled(true)
@@ -1718,10 +1724,38 @@ private fun shareMessage(context: android.content.Context, content: String) {
 private fun normalizeLists(raw: String): String {
         if (raw.isBlank()) return raw
 
-        val orderedListMissingSpaceRegex = Regex("""(?<=\b\d)\.(?=[A-Z])""")
+    // --- Phase 1: Global pre-processing ---
+    var text = raw.replace("\r\n", "\n").replace('\r', '\n')
+
+    // Replace 2+ asterisks used as section separators with paragraph breaks.
+    // Small models like Gemma3 produce "text***Section" or "text*****Title" where
+    // the asterisks are used as delimiters, not markdown formatting.
+    // Safe for well-formatted markdown because proper inline bold always has
+    // whitespace before ** (e.g. "text **bold**"), not "text**bold**".
+    text = text.replace(
+        Regex("""(?<=[\p{L}\p{N}).!?:,;])\*{2,}(?=[A-Z\p{Lu}])"""),
+        "\n\n"
+    )
+
+    // Replace single * used as bullet separator between text and uppercase.
+    // "text*NextItem" → "text\n* NextItem"
+    text = text.replace(
+        Regex("""(?<=[\p{L}\p{N}).!?:,;])\*(?=[A-Z\p{Lu}])"""),
+        "\n* "
+    )
+
+    // Insert paragraph break before markdown headings stuck to text.
+    text = text.replace(
+        Regex("""(?<=[\p{L}\p{N}).!?:])(?=#{1,6}\s)"""),
+        "\n\n"
+    )
+
+    // --- Phase 2: Per-line normalization ---
+    val orderedListMissingSpaceRegex = Regex("""(?<=\b\d)\.(?=[A-Z])""")
     val orderedListBoundaryRegex = Regex("""(?<=[\p{L}\p{N})\].!?:])(?=\d+\.\s*[A-Z])""")
-    val unorderedListBoundaryRegex = Regex("""(?<=[\p{L}\p{N})\].!?:])(?=[-*+]\s+[A-Z])""")
-        val lines = raw.replace("\r\n", "\n").replace('\r', '\n').lines()
+    val unorderedListBoundaryRegex = Regex("""(?<=[\p{L}\p{N})\].!?:])(?=[-+]\s+[A-Z])""")
+
+        val lines = text.lines()
         val builder = StringBuilder()
         var insideFence = false
 
