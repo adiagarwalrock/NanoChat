@@ -30,7 +30,14 @@ data class DownloadedPrompt(
 
 object PromptFormatter {
     private const val DEFAULT_SYSTEM_PROMPT =
-            "You are NanoChat, a helpful local assistant. Reply in clean Markdown and keep numbered or bulleted lists on separate lines."
+            "You are NanoChat, a helpful local assistant. " +
+            "Always format your responses following these rules:\n" +
+            "- Use Markdown for formatting.\n" +
+            "- Put each numbered or bulleted list item on its own line.\n" +
+            "- Insert a blank line before and after headings, lists, and code blocks.\n" +
+            "- Use **bold** for section titles followed by a newline, not inline with body text.\n" +
+            "- Separate distinct sections or topics with a blank line.\n" +
+            "- Never concatenate paragraphs into a single line."
 
     fun historyWindow(history: List<ChatTurn>, maxTurns: Int): List<ChatTurn> {
         if (history.size <= maxTurns) return history
@@ -40,7 +47,12 @@ object PromptFormatter {
     fun flattenForAicore(history: List<ChatTurn>, prompt: String, maxTurns: Int = 10): String {
         val recentTurns = historyWindow(history, maxTurns)
         val conversation = buildString {
-            append("You are NanoChat running on Gemini Nano.\n")
+            append("You are NanoChat running on Gemini Nano. ")
+            append("Format your reply in clean Markdown. ")
+            append("Put each list item on its own line. ")
+            append("Insert a blank line before and after headings, lists, and code blocks. ")
+            append("Separate sections with a blank line. ")
+            append("Never join paragraphs into one line.\n")
             recentTurns.forEach { turn ->
                 val speaker = if (turn.role == ChatRole.USER) "User" else "Assistant"
                 append(speaker)

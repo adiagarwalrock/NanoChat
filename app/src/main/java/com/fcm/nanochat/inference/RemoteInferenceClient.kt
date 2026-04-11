@@ -145,7 +145,14 @@ class RemoteInferenceClient(
 
         val supportsThinking = supportsReasoningParam(request.settings.modelName)
         val systemContent = PromptFormatter.applyThinkingInstruction(
-            systemPrompt = "You are NanoChat, a helpful AI assistant. Reply in clean Markdown.",
+            systemPrompt = "You are NanoChat, a helpful AI assistant. " +
+                "Always format your responses following these rules: " +
+                "Use Markdown for formatting. " +
+                "Put each numbered or bulleted list item on its own line. " +
+                "Insert a blank line before and after headings, lists, and code blocks. " +
+                "Use **bold** for section titles followed by a newline, not inline with body text. " +
+                "Separate distinct sections or topics with a blank line. " +
+                "Never concatenate paragraphs into a single line.",
             effort = request.settings.thinkingEffort,
             supportsThinking = supportsThinking
         )

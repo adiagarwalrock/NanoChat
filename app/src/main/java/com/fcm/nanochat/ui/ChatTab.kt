@@ -108,6 +108,7 @@ import com.fcm.nanochat.model.ChatScreenState
 import com.fcm.nanochat.model.SettingsScreenState
 import com.fcm.nanochat.ui.theme.NanoChatTheme
 import io.noties.markwon.Markwon
+import io.noties.markwon.SoftBreakAddsNewLinePlugin
 import io.noties.markwon.ext.latex.JLatexMathPlugin
 import io.noties.markwon.ext.latex.JLatexMathTheme
 import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
@@ -1458,6 +1459,7 @@ private fun MarkdownMessage(
 
     val markwon = remember(context, textArgb, latexBackgroundColor, latexCornerRadiusPx) {
         markwonCache.get(textArgb) ?: Markwon.builder(context)
+            .usePlugin(SoftBreakAddsNewLinePlugin.create())
             .usePlugin(MarkwonInlineParserPlugin.create())
             .usePlugin(JLatexMathPlugin.create(16f) { builder ->
                 builder.inlinesEnabled(true)
@@ -1662,12 +1664,39 @@ private fun normalizeLists(raw: String): String {
         val orderedListMissingSpaceRegex = Regex("""(?<=\b\d)\.(?=[A-Z])""")
     val orderedListBoundaryRegex = Regex("""(?<=[\p{L}\p{N})\].!?:])(?=\d+\.\s*[A-Z])""")
     val unorderedListBoundaryRegex = Regex("""(?<=[\p{L}\p{N})\].!?:])(?=[-*+]\s+[A-Z])""")
-        val lines = raw.replace("\r\n", "\n").replace('\r', '\n').lines()
+
+    // Concatenated words with no markers: "richnessDesserts:", "coolDo you want"
+    // When 2+ lowercase chars immediately touch an uppercase-word of 3+ letters
+    val wordConcatBoundaryRegex = Regex("""(?<=\p{Ll}{2})(?=\p{Lu}\p{Ll}{2,})""")
+
+    // Bold/italic header glued to PRECEDING text: "health.**Brain**", "age.*Source:"
+    // Handles *, **, *** before an uppercase word
+    val beforeEmphasisHeaderRegex = Regex("""(?<=[\p{L}\p{N})\].!?;:])(?=\*{1,3}[A-Z])""")
+
+    // Bold/italic header glued to FOLLOWING text: "**Title:**Some" or "*Label:*Some"
+    val afterEmphasisHeaderRegex = Regex("""(\*{1,3}[^*\n]{2,}?\*{1,3}:?)(?=[A-Za-z])""")
+
+    // Markdown heading glued to text: "some text.## Heading"
+    val headingBoundaryRegex = Regex("""(?<=[.!?:])(?=#{1,6}\s)""")
+
+    // Orphaned ** or *** on their own line (broken bold markers)
+    val orphanedEmphasisRegex = Regex("""(?m)^\s*\*{2,3}\s*$""")
+
+    var text = raw.replace("\r\n", "\n").replace('\r', '\n')
+
+    // First pass: clean up orphaned emphasis markers on their own line
+    text = text.replace(orphanedEmphasisRegex, "")
+
+        val lines = text.lines()
         val builder = StringBuilder()
         var insideFence = false
 
         for (line in lines) {
                 val trimmed = line.trimStart()
+            if (trimmed.isBlank() && !insideFence) {
+                builder.append('\n')
+                continue
+            }
                 val isFenceToggle = trimmed.startsWith("```") || trimmed.startsWith("~~~")
                 if (isFenceToggle) {
                         insideFence = !insideFence
@@ -1681,6 +1710,10 @@ private fun normalizeLists(raw: String): String {
                 line.replace(orderedListMissingSpaceRegex, ". ")
                     .replace(orderedListBoundaryRegex, "\n")
                     .replace(unorderedListBoundaryRegex, "\n")
+                    .replace(beforeEmphasisHeaderRegex, "\n\n")
+                    .replace(afterEmphasisHeaderRegex, "$1\n")
+                    .replace(headingBoundaryRegex, "\n\n")
+                    .replace(wordConcatBoundaryRegex, "\n")
             }
 
                 if (!insideFence && normalizedLine.startsWith("    ")) {
@@ -1690,7 +1723,10 @@ private fun normalizeLists(raw: String): String {
                 }
         }
 
-        return builder.toString().trimEnd('\n')
+    // Collapse runs of 4+ newlines into paragraph breaks
+        return builder.toString()
+        .replace(Regex("\n{4,}"), "\n\n")
+        .trimEnd('\n')
 }
 
 @Preview(showBackground = true)

@@ -208,7 +208,14 @@ class DownloadedModelInferenceClient(
                 val systemPrompt =
                     PromptFormatter.applyThinkingInstruction(
                         systemPrompt =
-                            "You are NanoChat, a helpful local assistant. Reply in clean Markdown and keep numbered or bulleted lists on separate lines.",
+                            "You are NanoChat, a helpful local assistant. " +
+                            "Always format your responses following these rules: " +
+                            "Use Markdown for formatting. " +
+                            "Put each numbered or bulleted list item on its own line. " +
+                            "Insert a blank line before and after headings, lists, and code blocks. " +
+                            "Use **bold** for section titles followed by a newline, not inline with body text. " +
+                            "Separate distinct sections or topics with a blank line. " +
+                            "Never concatenate paragraphs into a single line.",
                         effort = request.settings.thinkingEffort,
                         supportsThinking = model?.supportsThinking ?: false
                     )
