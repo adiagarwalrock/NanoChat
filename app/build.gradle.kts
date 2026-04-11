@@ -1,5 +1,5 @@
 plugins {
-    alias(libs.plugins.android.aplication)
+    alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
@@ -10,7 +10,7 @@ plugins {
 android {
     namespace = "com.fcm.nanochat"
     compileSdk = 36
-  defaultConfig {
+    defaultConfig {
         applicationId = "com.fcm.nanochat"
         minSdk = 31
         targetSdk = 36

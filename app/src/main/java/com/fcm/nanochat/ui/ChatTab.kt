@@ -1770,8 +1770,6 @@ private fun normalizeLists(raw: String): String {
     // Orphaned ** or *** on their own line (broken bold markers)
     val orphanedEmphasisRegex = Regex("""(?m)^\s*\*{2,3}\s*$""")
 
-    var text = raw.replace("\r\n", "\n").replace('\r', '\n')
-
     // First pass: clean up orphaned emphasis markers on their own line
     text = text.replace(orphanedEmphasisRegex, "")
 
