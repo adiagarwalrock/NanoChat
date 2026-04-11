@@ -1,5 +1,5 @@
 plugins {
-    alias(libs.plugins.android.application)
+    alias(libs.plugins.android.aplication)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
@@ -10,8 +10,7 @@ plugins {
 android {
     namespace = "com.fcm.nanochat"
     compileSdk = 36
-
-    defaultConfig {
+  defaultConfig {
         applicationId = "com.fcm.nanochat"
         minSdk = 31
         targetSdk = 36
@@ -101,6 +100,8 @@ dependencies {
     implementation(libs.markwon.core)
     implementation(libs.markwon.inline.parser)
     implementation(libs.markwon.ext.latex)
+    implementation(libs.markwon.ext.strikethrough)
+    implementation(libs.markwon.ext.tables)
 
     // AICore — Gemini Nano on-device
     implementation(libs.google.aicore)
