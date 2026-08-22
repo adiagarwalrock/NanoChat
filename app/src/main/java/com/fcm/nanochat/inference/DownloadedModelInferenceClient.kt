@@ -192,57 +192,23 @@ class DownloadedModelInferenceClient(
             "local_generation_prepare modelId=$resolvedModelId sessionId=${request.sessionId ?: -1L}"
         )
 
-        val activeSessionId = request.sessionId
-        val runtimeState = runtimeManager.loadState.value
-        val isReusing =
-            activeSessionId != null &&
-                    runtimeState.phase ==
-                    com.fcm.nanochat.models.runtime.RuntimeLoadPhase.LOADED &&
-                    normalizeModelId(runtimeState.modelId) == normalizedResolvedModelId &&
-                    runtimeManager.getActiveSessionId() == activeSessionId
-
         val promptFamily = model?.promptFamily.toPromptFamily()
-        val isGemmaFamily = promptFamily == DownloadedPromptFamily.GEMMA
-        val formattedPrompt =
-            if (isReusing) {
-                val systemPrompt =
-                    PromptFormatter.applyThinkingInstruction(
-                        systemPrompt =
-                            "You are NanoChat, a helpful local assistant. Reply in clean Markdown and keep numbered or bulleted lists on separate lines.",
-                        effort = request.settings.thinkingEffort,
-                        supportsThinking = model?.supportsThinking ?: false
-                    )
-                val finalSystemInstruction = if (isGemmaFamily) "" else systemPrompt
-                val latestTurn =
-                    PromptFormatter.formatLatestTurn(
-                        prompt = request.prompt,
-                        thinkingEffort = request.settings.thinkingEffort,
-                        supportsThinking = model?.supportsThinking ?: false
-                    )
-                val finalUserMessage = latestTurn
-
-                DownloadedPrompt(
-                    family = promptFamily,
-                    systemInstruction = finalSystemInstruction,
-                    userMessage = finalUserMessage
-                )
-            } else {
-                PromptFormatter.formatDownloadedPrompt(
-                    history = request.history,
-                    prompt = request.prompt,
-                    maxTurns = 20,
-                    promptFamily = model?.promptFamily ?: resolvedModelId,
-                    thinkingEffort = request.settings.thinkingEffort,
-                    supportsThinking = model?.supportsThinking ?: false
-                )
-            }
+        val formattedPrompt = PromptFormatter.formatDownloadedPrompt(
+            history = request.history,
+            prompt = request.prompt,
+            maxTurns = 20,
+            promptFamily = model?.promptFamily ?: resolvedModelId,
+            thinkingEffort = request.settings.thinkingEffort,
+            supportsThinking = model?.supportsThinking ?: false,
+            systemPrompt = request.settings.systemPrompt
+        )
 
         logFormattedPrompt(
             modelId = resolvedModelId,
             family = formattedPrompt.family,
             systemInstruction = formattedPrompt.systemInstruction,
             userMessage = formattedPrompt.userMessage,
-            isReusing = isReusing
+            isReusing = false
         )
 
         suspend fun kotlinx.coroutines.flow.FlowCollector<String>.emitGenerationAttempt(
@@ -311,7 +277,7 @@ class DownloadedModelInferenceClient(
 
             Log.d(
                 TAG,
-                "local_generation_started modelId=$resolvedModelId family=${formattedPrompt.family.name} watchdogMs=$noTokenWatchdogMs stallMs=$visibleStallWatchdogMs isRetry=$isRetry reusing=$isReusing"
+                "local_generation_started modelId=$resolvedModelId family=${formattedPrompt.family.name} watchdogMs=$noTokenWatchdogMs stallMs=$visibleStallWatchdogMs isRetry=$isRetry reusing=false"
             )
             crashReporter.logBreadcrumb(
                 "local_generation_started modelId=$resolvedModelId watchdogMs=$noTokenWatchdogMs retry=$isRetry"
@@ -425,7 +391,7 @@ class DownloadedModelInferenceClient(
 
                     try {
                         currentRuntimeHandle.runtime.stream(
-                            sessionId = activeSessionId,
+                            sessionId = null,
                             prompt = formattedPrompt.userMessage,
                             systemInstruction = formattedPrompt.systemInstruction
                         )

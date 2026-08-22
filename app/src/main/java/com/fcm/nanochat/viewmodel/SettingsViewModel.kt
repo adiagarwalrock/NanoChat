@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fcm.nanochat.data.AcceleratorPreference
 import com.fcm.nanochat.data.AppPreferences
+import com.fcm.nanochat.data.DEFAULT_SYSTEM_PROMPT
 import com.fcm.nanochat.data.ThinkingEffort
 import com.fcm.nanochat.data.repository.ChatRepository
 import com.fcm.nanochat.inference.GeminiNanoStatus
@@ -49,6 +50,7 @@ class SettingsViewModel @Inject constructor(
                             temperature = snapshot.temperature,
                             topP = snapshot.topP,
                             contextLength = snapshot.contextLength,
+                            systemPrompt = snapshot.systemPrompt,
                             thinkingEffort = snapshot.thinkingEffort,
                             acceleratorPreference = snapshot.acceleratorPreference,
                             geminiStatus = current.geminiStatus.copy(
@@ -104,6 +106,15 @@ class SettingsViewModel @Inject constructor(
         _uiState.update { it.copy(contextLength = clamped, saveNotice = null) }
     }
 
+    fun updateSystemPrompt(value: String) {
+        _uiState.update {
+            it.copy(
+                systemPrompt = value.take(AppPreferences.MAX_SYSTEM_PROMPT_LENGTH),
+                saveNotice = null
+            )
+        }
+    }
+
     fun updateThinkingEffort(value: ThinkingEffort) {
         _uiState.update { it.copy(thinkingEffort = value, saveNotice = null) }
         viewModelScope.launch { preferences.updateThinkingEffort(value) }
@@ -117,19 +128,27 @@ class SettingsViewModel @Inject constructor(
     fun save() {
         viewModelScope.launch {
             val current = _uiState.value
+            val systemPrompt = current.systemPrompt.trim().ifBlank { DEFAULT_SYSTEM_PROMPT }
             preferences.updateModelSettings(
                 baseUrl = current.baseUrl,
                 modelName = current.modelName,
                 temperature = current.temperature,
                 topP = current.topP,
-                contextLength = current.contextLength
+                contextLength = current.contextLength,
+                systemPrompt = systemPrompt
             )
             preferences.updateSecrets(
                 apiKey = current.apiKey
             )
             preferences.updateThinkingEffort(current.thinkingEffort)
             preferences.updateAcceleratorPreference(current.acceleratorPreference)
-            _uiState.update { it.copy(saveNotice = "Settings saved.", clearNotice = null) }
+            _uiState.update {
+                it.copy(
+                    systemPrompt = systemPrompt,
+                    saveNotice = "Settings saved.",
+                    clearNotice = null
+                )
+            }
         }
     }
 

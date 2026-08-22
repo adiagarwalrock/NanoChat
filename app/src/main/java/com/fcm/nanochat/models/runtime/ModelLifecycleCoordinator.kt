@@ -62,13 +62,9 @@ class ModelLifecycleCoordinator @Inject constructor(
      * Handles granular memory pressure signals.
      */
     fun onTrimMemory(level: Int) {
-        @Suppress("DEPRECATION")
-        val isCritical = level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL ||
-                level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE
-
-        // We avoid ejecting on TRIM_MEMORY_UI_HIDDEN (20) to allow quick task switching
-        // without losing the loaded model. onStop handles the 5-minute timeout.
-        if (isCritical) {
+        // UI_HIDDEN is an ordinary task switch, not memory pressure. Keep the model briefly
+        // for a responsive return, while true background/critical signals release it at once.
+        if (shouldEjectForTrimMemory(level)) {
             Log.w(TAG, "Memory trim level $level (critical), ejecting local model immediately")
             scope.launch {
                 runtimeManager.release(reason = RuntimeReleaseReason.EJECTED)
@@ -80,6 +76,12 @@ class ModelLifecycleCoordinator @Inject constructor(
 
     companion object {
         private const val TAG = "ModelLifecycleCoord"
-        private const val BACKGROUND_EJECT_TIMEOUT_MS = 5 * 60 * 1000L // 5 minutes
+        private const val BACKGROUND_EJECT_TIMEOUT_MS = 60_000L
     }
+}
+
+@Suppress("DEPRECATION")
+internal fun shouldEjectForTrimMemory(level: Int): Boolean {
+    return level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL ||
+            level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
 }

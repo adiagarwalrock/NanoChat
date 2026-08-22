@@ -24,6 +24,8 @@
     <string name="top_p_description">Controls how surprising or predictable the responses are.</string>
     <string name="context_length_label">Context length</string>
     <string name="context_length_description">How much of the previous conversation the AI remembers.</string>
+    <string name="system_prompt_label">System prompt</string>
+    <string name="system_prompt_description">Defines the assistant’s role and response style for local, Gemini Nano, and remote models.</string>
     <string name="drawer_conversations_label">Your conversations</string>
     <string name="new_chat">New chat</string>
     <string name="pinned_section">Pinned</string>
@@ -77,6 +79,7 @@
     <string name="local_model_incompatible_error">This downloaded file may be incompatible with the current runtime.</string>
     <string name="sort_recommended">Recommended</string>
     <string name="sort_smallest">Smallest first</string>
+    <string name="sort_lowest_ram">Lowest RAM first</string>
     <string name="sort_best_device">Best for this device</string>
     <string name="sort_installed">Installed first</string>
     <string name="sort_name">Name</string>

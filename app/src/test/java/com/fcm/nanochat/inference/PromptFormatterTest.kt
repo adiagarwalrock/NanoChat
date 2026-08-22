@@ -73,6 +73,27 @@ class PromptFormatterTest {
     }
 
     @Test
+    fun `follow-up includes stored history and custom system prompt`() {
+        val formatted = PromptFormatter.formatDownloadedPrompt(
+            history = listOf(
+                ChatTurn(ChatRole.USER, "A log cut my arm and it is an emergency."),
+                ChatTurn(ChatRole.ASSISTANT, "Apply firm pressure to stop the bleeding.")
+            ),
+            prompt = "How do I treat it?",
+            promptFamily = "litert-community/SmolLM2-135M-Instruct",
+            systemPrompt = "Give clear and practical first-aid guidance."
+        )
+
+        assertEquals(
+            "Give clear and practical first-aid guidance.",
+            formatted.systemInstruction
+        )
+        assertTrue(formatted.userMessage.contains("A log cut my arm"))
+        assertTrue(formatted.userMessage.contains("Apply firm pressure"))
+        assertTrue(formatted.userMessage.endsWith("Latest user message:\nHow do I treat it?"))
+    }
+
+    @Test
     fun `formatDownloadedPrompt requests tagged reasoning when supported`() {
         val formatted = PromptFormatter.formatDownloadedPrompt(
             history = emptyList(),

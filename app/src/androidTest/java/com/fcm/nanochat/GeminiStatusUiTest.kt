@@ -7,8 +7,9 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import com.fcm.nanochat.model.GeminiNanoStatusUi
+import com.fcm.nanochat.model.ModelGalleryScreenState
 import com.fcm.nanochat.model.SettingsScreenState
-import com.fcm.nanochat.ui.ConnectionSettings
+import com.fcm.nanochat.ui.SettingsHome
 import org.junit.Rule
 import org.junit.Test
 
@@ -35,24 +36,21 @@ class GeminiStatusUiTest {
         )
 
         composeRule.setContent {
-            ConnectionSettings(
+            SettingsHome(
                 state = state,
-                onBaseUrlChange = {},
-                onModelNameChange = {},
-                onApiKeyChange = {},
-                onRefreshGeminiStatus = {},
-                onDownloadGeminiNano = {},
-                onSaveSettings = {}
+                modelState = ModelGalleryScreenState(),
+                onNavigate = {},
+                onOpenModelLibrary = {}
             )
         }
 
-        composeRule.onNodeWithText("On-device model").assertIsDisplayed()
-        composeRule.onNodeWithText("Downloaded").assertIsDisplayed()
+        composeRule.onNodeWithText("On-device AI").assertIsDisplayed()
+        composeRule.onNodeWithText("Enabled").assertIsDisplayed()
         composeRule.onAllNodesWithText("Download Gemini Nano").assertCountEquals(0)
     }
 
     @Test
-    fun showsDownloadButtonWhenDownloadable() {
+    fun showsAvailableStateWhenDownloadable() {
         val state = SettingsScreenState(
             baseUrl = "https://example.com",
             modelName = "gpt",
@@ -69,17 +67,15 @@ class GeminiStatusUiTest {
         )
 
         composeRule.setContent {
-            ConnectionSettings(
+            SettingsHome(
                 state = state,
-                onBaseUrlChange = {},
-                onModelNameChange = {},
-                onApiKeyChange = {},
-                onRefreshGeminiStatus = {},
-                onDownloadGeminiNano = {},
-                onSaveSettings = {}
+                modelState = ModelGalleryScreenState(),
+                onNavigate = {},
+                onOpenModelLibrary = {}
             )
         }
 
-        composeRule.onNodeWithText("Download Gemini Nano").assertIsDisplayed()
+        composeRule.onNodeWithText("On-device AI").assertIsDisplayed()
+        composeRule.onNodeWithText("Available").assertIsDisplayed()
     }
 }

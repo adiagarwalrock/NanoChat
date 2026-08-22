@@ -211,6 +211,7 @@ class MainActivity : ComponentActivity() {
                         onTemperatureChange = settingsViewModel::updateTemperature,
                         onTopPChange = settingsViewModel::updateTopP,
                         onContextLengthChange = settingsViewModel::updateContextLength,
+                        onSystemPromptChange = settingsViewModel::updateSystemPrompt,
                         onThinkingEffortChange = settingsViewModel::updateThinkingEffort,
                         onAcceleratorChange = settingsViewModel::updateAcceleratorPreference,
                         onSaveSettings = settingsViewModel::save,

@@ -340,7 +340,7 @@ private fun ModelControlsSheet(
         onUpdateAccelerator: (AcceleratorPreference) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(
+    ModalBottomSheet(
                 onDismissRequest = onDismiss,
             sheetState = sheetState,
                 shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -654,7 +654,7 @@ private fun ChatTopBar(
         label = "ModelChevronRotation"
     )
 
-        Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1024,7 +1024,7 @@ private fun EmptyChatGreeting(bottomPadding: Dp, modifier: Modifier = Modifier) 
                 label = "GreetingSlide"
         )
 
-        Column(
+    Column(
             modifier = modifier
                 .fillMaxWidth()
                 .padding(horizontal = 28.dp)
@@ -1104,7 +1104,7 @@ private fun MessageRow(
         label = "MessageOffset"
     )
 
-        Row(
+    Row(
             modifier = modifier
                 .fillMaxWidth()
                 .graphicsLayer {
@@ -1124,7 +1124,7 @@ private fun MessageRow(
                             }
                         )
 
-                        if (isUser) {
+                    if (isUser) {
                                 Surface(
                                         modifier = interactionModifier,
                                         shape = UserBubbleShape,
@@ -1167,6 +1167,14 @@ private fun MessageRow(
                                                         ThinkAccordion(thinkingText = thinking)
                                                 }
                                                 if (visible.isNotBlank()) {
+                                                    if (isStreaming) {
+                                                        Text(
+                                                            text = visible,
+                                                            style = MaterialTheme.typography.bodyLarge,
+                                                            color = MaterialTheme.colorScheme.onSurface,
+                                                            modifier = Modifier.fillMaxWidth()
+                                                        )
+                                                    } else {
                                                         MarkdownMessage(
                                                                 content = visible,
                                                             textColor = MaterialTheme.colorScheme.onSurface,
@@ -1174,6 +1182,7 @@ private fun MessageRow(
                                                                 lineSpacingMultiplier = 1.45f,
                                                                 modifier = Modifier.fillMaxWidth()
                                                         )
+                                                    }
                                                 }
                                         }
                                 }
@@ -1298,7 +1307,7 @@ private fun TypingIndicator() {
         label = "DotThreeAlpha"
     )
 
-        Row(
+    Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(vertical = 4.dp)

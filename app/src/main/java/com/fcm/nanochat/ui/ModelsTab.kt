@@ -93,6 +93,7 @@ private enum class ModelSort(val labelRes: Int) {
     Recommended(R.string.sort_recommended),
     InstalledFirst(R.string.sort_installed),
     SmallestFirst(R.string.sort_smallest),
+    LowestRamFirst(R.string.sort_lowest_ram),
     Name(R.string.sort_name)
 }
 
@@ -1001,15 +1002,15 @@ private fun SimplifiedModelCard(
                 }
             }
 
-            val statusModifier = Modifier
-            StatusRow(
-                text = status.label,
-                supporting = status.supporting,
-                tone = status.tone,
-                progress = status.progress,
-                isIndeterminate = status.isIndeterminate,
-                modifier = statusModifier
-            )
+            status?.let {
+                StatusRow(
+                    text = it.label,
+                    supporting = it.supporting,
+                    tone = it.tone,
+                    progress = it.progress,
+                    isIndeterminate = it.isIndeterminate
+                )
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1153,16 +1154,16 @@ private fun RedesignedDetailsSheet(
                 )
             }
 
-            item {
-                val statusModifier = Modifier
-                StatusRow(
-                    text = status.label,
-                    supporting = status.supporting,
-                    tone = status.tone,
-                    progress = status.progress,
-                    isIndeterminate = status.isIndeterminate,
-                    modifier = statusModifier
-                )
+            if (status != null) {
+                item {
+                    StatusRow(
+                        text = status.label,
+                        supporting = status.supporting,
+                        tone = status.tone,
+                        progress = status.progress,
+                        isIndeterminate = status.isIndeterminate
+                    )
+                }
             }
 
             item {
@@ -1559,6 +1560,10 @@ private fun ModelSort.comparator(): Comparator<ModelCardUi> {
                 .thenBy { it.displayName.lowercase() }
         ModelSort.SmallestFirst ->
             compareBy<ModelCardUi> { it.sizeInBytes }.thenBy { it.displayName.lowercase() }
+        ModelSort.LowestRamFirst ->
+            compareBy<ModelCardUi> { it.minDeviceMemoryInGb }
+                .thenBy { it.sizeInBytes }
+                .thenBy { it.displayName.lowercase() }
         ModelSort.Name -> compareBy { it.displayName.lowercase() }
     }
 }
@@ -1577,7 +1582,7 @@ private fun ModelCardUi.compatibilityRank(): Int {
     }
 }
 
-private fun ModelCardUi.statusLine(pendingAction: PendingModelAction? = null): StatusLine {
+private fun ModelCardUi.statusLine(pendingAction: PendingModelAction? = null): StatusLine? {
     val totalBytes = sizeInBytes.takeIf { it > 0L } ?: sizeOnDiskBytes
     val progressValue =
         if (totalBytes > 0L) {
@@ -1695,15 +1700,10 @@ private fun ModelCardUi.statusLine(pendingAction: PendingModelAction? = null): S
     return fallbackStatusLine(progressValue)
 }
 
-private fun ModelCardUi.fallbackStatusLine(progressValue: Float?): StatusLine {
+private fun ModelCardUi.fallbackStatusLine(progressValue: Float?): StatusLine? {
 
     return when (val state = healthState) {
-        LocalModelHealthState.NotInstalled ->
-            StatusLine(
-                label = "Not installed",
-                supporting = "Download to use this model in local chat.",
-                tone = ModelBadgeTone.Neutral
-            )
+        LocalModelHealthState.NotInstalled -> null
         is LocalModelHealthState.Downloading ->
             StatusLine(
                 label = "Downloading",
@@ -1733,16 +1733,15 @@ private fun ModelCardUi.fallbackStatusLine(progressValue: Float?): StatusLine {
                 isIndeterminate = true
             )
         LocalModelHealthState.InstalledReady ->
-            StatusLine(
-                label = if (isActive) "Selected for chat" else "Installed on device",
-                supporting =
-                    if (isActive) {
-                        "Tap Use model to load this selection into memory for local chat."
-                    } else {
-                        "Installed and compatible with this device."
-                    },
-                tone = ModelBadgeTone.Positive
-            )
+            if (isActive) {
+                StatusLine(
+                    label = "Selected for chat",
+                    supporting = "Tap Use model to load this selection into memory for local chat.",
+                    tone = ModelBadgeTone.Positive
+                )
+            } else {
+                null
+            }
         is LocalModelHealthState.InstalledStartupFailed ->
             StatusLine(
                 label = "Installed, but NanoChat could not start this model",

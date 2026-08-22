@@ -155,7 +155,7 @@ class AllowlistParserTest {
     }
 
     @Test
-    fun `enabled models in bundled asset have valid offline mirror metadata`() {
+    fun `enabled models in bundled asset have valid download metadata`() {
         val file = java.io.File("src/main/assets/model_allowlist_2_0_3.json")
         assertTrue("Allowlist file must exist at ${file.absolutePath}", file.exists())
 
@@ -178,19 +178,16 @@ class AllowlistParserTest {
                 "modelFile must be basename-only for ${model.name}",
                 model.modelFile.contains('\\')
             )
-            assertTrue(
-                "downloadRepo must be present for ${model.name}",
-                !model.downloadRepo.isNullOrBlank()
-            )
-            assertTrue(
-                "downloadPath must be present for ${model.name}",
-                !model.downloadPath.isNullOrBlank()
-            )
-            assertTrue(
-                "downloadPath must end with modelFile for ${model.name}",
-                model.downloadPath!!.endsWith("/${model.modelFile}") ||
-                        model.downloadPath == model.modelFile
-            )
+            assertTrue("sourceRepo must be present for ${model.name}", model.sourceRepo.isNotBlank())
+            if (model.downloadRepo != null || model.downloadPath != null) {
+                assertTrue("downloadRepo must be present for ${model.name}", !model.downloadRepo.isNullOrBlank())
+                assertTrue("downloadPath must be present for ${model.name}", !model.downloadPath.isNullOrBlank())
+                assertTrue(
+                    "downloadPath must end with modelFile for ${model.name}",
+                    model.downloadPath!!.endsWith("/${model.modelFile}") ||
+                            model.downloadPath == model.modelFile
+                )
+            }
             assertTrue(
                 "downloadUrl must include resolve path for ${model.name}",
                 model.downloadUrl.contains("/resolve/")

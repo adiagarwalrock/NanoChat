@@ -17,6 +17,12 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "nanochat_preferences")
 
+const val DEFAULT_SYSTEM_PROMPT =
+    "You are NanoChat, a helpful, clear, and practical assistant. Use the conversation history " +
+            "to understand follow-up questions. Answer directly and ask a clarifying question " +
+            "only when essential. For emergencies, give immediate safety steps first and advise " +
+            "contacting local emergency services. Reply in clean Markdown."
+
 data class SettingsSnapshot(
     val inferenceMode: InferenceMode = InferenceMode.REMOTE,
     val activeLocalModelId: String = "",
@@ -26,6 +32,7 @@ data class SettingsSnapshot(
     val temperature: Double = 0.7,
     val topP: Double = 0.9,
     val contextLength: Int = 4096,
+    val systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
     val geminiNanoModelSizeBytes: Long = 0,
     val thinkingEffort: ThinkingEffort = ThinkingEffort.MEDIUM,
     val acceleratorPreference: AcceleratorPreference = AcceleratorPreference.AUTO
@@ -69,6 +76,10 @@ class AppPreferences(context: Context) {
                 temperature = preferences[Keys.temperature] ?: DEFAULT_TEMPERATURE,
                 topP = preferences[Keys.topP] ?: DEFAULT_TOP_P,
                 contextLength = preferences[Keys.contextLength] ?: DEFAULT_CONTEXT_LENGTH,
+                systemPrompt = preferences[Keys.systemPrompt]
+                    ?.trim()
+                    ?.takeIf(String::isNotBlank)
+                    ?: DEFAULT_SYSTEM_PROMPT,
                 geminiNanoModelSizeBytes = preferences[Keys.geminiNanoModelSizeBytes] ?: 0,
                 thinkingEffort = parseThinkingEffort(preferences[Keys.thinkingEffort]),
                 acceleratorPreference =
@@ -144,7 +155,8 @@ class AppPreferences(context: Context) {
         modelName: String,
         temperature: Double,
         topP: Double,
-        contextLength: Int
+        contextLength: Int,
+        systemPrompt: String
     ) {
         appContext.dataStore.edit { preferences ->
             preferences[Keys.baseUrl] = normalizeBaseUrl(baseUrl)
@@ -152,6 +164,10 @@ class AppPreferences(context: Context) {
             preferences[Keys.temperature] = temperature.coerceIn(0.0, 2.0)
             preferences[Keys.topP] = topP.coerceIn(0.0, 1.0)
             preferences[Keys.contextLength] = contextLength.coerceIn(512, 32768)
+            preferences[Keys.systemPrompt] = systemPrompt
+                .trim()
+                .take(MAX_SYSTEM_PROMPT_LENGTH)
+                .ifBlank { DEFAULT_SYSTEM_PROMPT }
         }
     }
 
@@ -220,6 +236,7 @@ class AppPreferences(context: Context) {
         val temperature: Preferences.Key<Double> = doublePreferencesKey("temperature")
         val topP: Preferences.Key<Double> = doublePreferencesKey("top_p")
         val contextLength: Preferences.Key<Int> = intPreferencesKey("context_length")
+        val systemPrompt: Preferences.Key<String> = stringPreferencesKey("system_prompt")
         val geminiNanoModelSizeBytes: Preferences.Key<Long> =
             longPreferencesKey("gemini_nano_model_size_bytes")
         val thinkingEffort: Preferences.Key<String> = stringPreferencesKey("thinking_effort")
@@ -243,6 +260,7 @@ class AppPreferences(context: Context) {
         const val DEFAULT_TEMPERATURE = 0.7
         const val DEFAULT_TOP_P = 0.9
         const val DEFAULT_CONTEXT_LENGTH = 4096
+        const val MAX_SYSTEM_PROMPT_LENGTH = 4_000
     }
 }
 

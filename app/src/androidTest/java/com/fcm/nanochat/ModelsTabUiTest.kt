@@ -46,13 +46,14 @@ class ModelsTabUiTest {
                 onEjectModel = {},
                 onDeleteModel = {},
                 onMoveStorage = { _, _ -> },
-                onImportLocalModel = {}
+                onImportLocalModel = {},
+                onOpenSettings = {}
             )
         }
 
         composeRule.onNodeWithText("Model Library").assertIsDisplayed()
         composeRule.onNodeWithText("Qwen2.5-1.5B-Instruct").assertIsDisplayed()
-        composeRule.onNodeWithText("Not installed").assertIsDisplayed()
+        composeRule.onNodeWithText("Download").assertIsDisplayed()
     }
 
     @Test
@@ -85,7 +86,8 @@ class ModelsTabUiTest {
                 onEjectModel = {},
                 onDeleteModel = {},
                 onMoveStorage = { _, _ -> },
-                onImportLocalModel = {}
+                onImportLocalModel = {},
+                onOpenSettings = {}
             )
         }
 

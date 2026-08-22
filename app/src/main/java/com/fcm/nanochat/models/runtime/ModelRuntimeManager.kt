@@ -1,5 +1,6 @@
 package com.fcm.nanochat.models.runtime
 
+import android.app.ActivityManager
 import android.content.Context
 import android.util.Log
 import com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig
@@ -20,6 +21,8 @@ class ModelRuntimeManager(
     context: Context
 ) {
     private val appContext = context.applicationContext
+    private val activityManager =
+        appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     private val mutex = Mutex()
 
     private var activeModelId: String? = null
@@ -70,6 +73,15 @@ class ModelRuntimeManager(
                 activeModelId = null
                 activeModelPath = null
                 activeConfigSignature = null
+
+                memoryPreflightError(expectedSizeBytes)?.let { message ->
+                    _loadState.value = RuntimeLoadState(
+                        phase = RuntimeLoadPhase.FAILED,
+                        modelId = modelId,
+                        message = message
+                    )
+                    throw IllegalStateException(message)
+                }
 
                 val initStart = System.currentTimeMillis()
                 val runtime = runCatching {
@@ -184,4 +196,31 @@ class ModelRuntimeManager(
     private fun configSignature(config: AllowlistDefaultConfig): String {
         return "${config.topK}|${config.topP}|${config.temperature}|${config.maxTokens}|${config.accelerators}|${config.strictAccelerator}"
     }
+
+    private fun memoryPreflightError(expectedSizeBytes: Long): String? {
+        val memoryInfo = ActivityManager.MemoryInfo()
+        activityManager.getMemoryInfo(memoryInfo)
+        if (memoryInfo.lowMemory ||
+            !hasMemoryHeadroom(
+                availableBytes = memoryInfo.availMem,
+                lowMemoryThresholdBytes = memoryInfo.threshold,
+                expectedModelBytes = expectedSizeBytes
+            )
+        ) {
+            return "Loading this model now risks running out of memory. Close other apps or choose a smaller model."
+        }
+        return null
+    }
 }
+
+internal fun hasMemoryHeadroom(
+    availableBytes: Long,
+    lowMemoryThresholdBytes: Long,
+    expectedModelBytes: Long
+): Boolean {
+    if (expectedModelBytes <= 0L) return true
+    val reserveBytes = maxOf(lowMemoryThresholdBytes, MIN_RUNTIME_MEMORY_RESERVE_BYTES)
+    return availableBytes >= expectedModelBytes + reserveBytes
+}
+
+private const val MIN_RUNTIME_MEMORY_RESERVE_BYTES = 512L * 1024L * 1024L

@@ -57,6 +57,7 @@ data class SettingsScreenState(
         val temperature: Double = com.fcm.nanochat.data.AppPreferences.DEFAULT_TEMPERATURE,
         val topP: Double = com.fcm.nanochat.data.AppPreferences.DEFAULT_TOP_P,
         val contextLength: Int = com.fcm.nanochat.data.AppPreferences.DEFAULT_CONTEXT_LENGTH,
+        val systemPrompt: String = com.fcm.nanochat.data.DEFAULT_SYSTEM_PROMPT,
         val thinkingEffort: com.fcm.nanochat.data.ThinkingEffort =
                 com.fcm.nanochat.data.ThinkingEffort.MEDIUM,
         val acceleratorPreference: com.fcm.nanochat.data.AcceleratorPreference =

@@ -31,7 +31,6 @@ class DownloadedModeChatUiTest {
                 onSendMessage = {},
                 onStopGeneration = {},
                 onMessageDraftChange = {},
-                onCreateSession = {},
                 onRetryLast = {},
                 onInferenceModeChange = {},
                 onOpenModelGallery = {},

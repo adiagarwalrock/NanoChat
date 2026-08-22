@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.FileInputStream
 import java.util.Locale
@@ -49,12 +50,19 @@ internal class LiteRtLmRuntime(
     private val activeConversation = AtomicReference<ActiveConversation?>(null)
     private val lifecycleMutex = Mutex()
     private val cleanupExecutor = Executors.newSingleThreadExecutor()
+    private val cleanupLock = Any()
+    private val closed = AtomicBoolean(false)
 
     override fun stream(
         sessionId: Long?,
         prompt: String,
         systemInstruction: String?
     ): Flow<String> = callbackFlow {
+        if (closed.get()) {
+            channel.close(IllegalStateException("Local model runtime has been released."))
+            return@callbackFlow
+        }
+
         val request = sanitizeForNative(prompt.trim())
         if (request.isBlank()) {
             channel.close()
@@ -69,6 +77,8 @@ internal class LiteRtLmRuntime(
         var resolvedConversation: Conversation? = null
 
         lifecycleMutex.withLock {
+            check(!closed.get()) { "Local model runtime has been released." }
+
             val active = activeConversation.get()
             val canReuse = sessionId != null &&
                     active != null &&
@@ -207,10 +217,24 @@ internal class LiteRtLmRuntime(
     }
 
     override suspend fun close() {
+        if (!closed.compareAndSet(false, true)) return
+
         lifecycleMutex.withLock {
             cancelAndDrainActiveConversationLocked(reason = "close")
-            runCatching { engine.close() }
-            cleanupExecutor.shutdown()
+
+            val engineClosed = CompletableDeferred<Unit>()
+            synchronized(cleanupLock) {
+                cleanupExecutor.execute {
+                    runCatching { engine.close() }
+                        .onFailure { Log.e(TAG, "Failed to close LiteRT-LM engine", it) }
+                    engineClosed.complete(Unit)
+                }
+                cleanupExecutor.shutdown()
+            }
+
+            if (withTimeoutOrNull(NATIVE_CLEANUP_TIMEOUT_MS) { engineClosed.await() } == null) {
+                Log.e(TAG, "Timed out waiting for LiteRT-LM engine cleanup")
+            }
         }
     }
 
@@ -220,6 +244,7 @@ internal class LiteRtLmRuntime(
         const val SUPERSEDE_DRAIN_ATTEMPTS = 50
         const val SESSION_RETRY_ATTEMPTS = 8
         const val SESSION_RETRY_DELAY_MS = 200L
+        const val NATIVE_CLEANUP_TIMEOUT_MS = 5_000L
 
         /**
          * Strips characters known to crash the LiteRT-LM native tokenizer:
@@ -267,20 +292,22 @@ internal class LiteRtLmRuntime(
             conversation: Conversation,
             reason: String
     ): Boolean {
-        val active = activeConversation.get() ?: return false
-        if (active.generationId != generationId) return false
-        if (active.conversation !== conversation) return false
-        if (!active.gate.tryFinalize()) return false
+        return synchronized(cleanupLock) {
+            val active = activeConversation.get() ?: return@synchronized false
+            if (active.generationId != generationId) return@synchronized false
+            if (active.conversation !== conversation) return@synchronized false
+            if (!active.gate.tryFinalize()) return@synchronized false
 
-        activeConversation.compareAndSet(active, null)
-        Log.d(TAG, "Finalizing local generation generationId=$generationId reason=$reason")
+            activeConversation.compareAndSet(active, null)
+            Log.d(TAG, "Finalizing local generation generationId=$generationId reason=$reason")
 
-        val deferred = CompletableDeferred<Unit>()
-        cleanupExecutor.execute {
-            runCatching { conversation.close() }
-            deferred.complete(Unit)
+            if (!cleanupExecutor.isShutdown) {
+                cleanupExecutor.execute {
+                    runCatching { conversation.close() }
+                }
+            }
+            true
         }
-        return true
     }
 
     private suspend fun cancelAndDrainActiveConversationLocked(reason: String) {
@@ -308,9 +335,15 @@ internal class LiteRtLmRuntime(
         runCatching { stale.conversation.cancelProcess() }
 
         val deferred = CompletableDeferred<Unit>()
-        cleanupExecutor.execute {
-            runCatching { stale.conversation.close() }
-            deferred.complete(Unit)
+        synchronized(cleanupLock) {
+            if (!cleanupExecutor.isShutdown) {
+                cleanupExecutor.execute {
+                    runCatching { stale.conversation.close() }
+                    deferred.complete(Unit)
+                }
+            } else {
+                deferred.complete(Unit)
+            }
         }
 
         // Wait for the conversation to be fully closed to avoid "session already exists"

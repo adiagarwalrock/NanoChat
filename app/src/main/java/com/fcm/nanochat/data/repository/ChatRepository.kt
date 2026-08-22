@@ -208,14 +208,16 @@ class ChatRepository(
             apiKey: String,
             temperature: Double,
             topP: Double,
-            contextLength: Int
+            contextLength: Int,
+            systemPrompt: String
     ) {
         preferences.updateModelSettings(
                 baseUrl = baseUrl,
                 modelName = modelName,
                 temperature = temperature,
                 topP = topP,
-                contextLength = contextLength
+                contextLength = contextLength,
+                systemPrompt = systemPrompt
         )
         preferences.updateSecrets(apiKey = apiKey)
     }

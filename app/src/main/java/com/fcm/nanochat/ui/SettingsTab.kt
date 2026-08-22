@@ -524,6 +524,7 @@ internal fun ModelControlsSettings(
     onTemperatureChange: (Double) -> Unit,
     onTopPChange: (Double) -> Unit,
     onContextLengthChange: (Int) -> Unit,
+    onSystemPromptChange: (String) -> Unit,
     onSaveSettings: () -> Unit = {}
 ) {
     var advancedExpanded by rememberSaveable { mutableStateOf(false) }
@@ -578,6 +579,19 @@ internal fun ModelControlsSettings(
                             fontSize = 13.sp
                         ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                OutlinedTextField(
+                    value = state.systemPrompt,
+                    onValueChange = onSystemPromptChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = InputShape,
+                    minLines = 4,
+                    maxLines = 8,
+                    label = { Text(stringResource(R.string.system_prompt_label)) },
+                    supportingText = {
+                        Text(stringResource(R.string.system_prompt_description))
+                    }
                 )
             }
         }
@@ -1731,6 +1745,7 @@ private fun ModelControlsSettingsPreview() {
             onTemperatureChange = {},
             onTopPChange = {},
             onContextLengthChange = {},
+            onSystemPromptChange = {},
             onSaveSettings = {}
         )
     }

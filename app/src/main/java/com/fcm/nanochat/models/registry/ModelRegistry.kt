@@ -77,25 +77,33 @@ class ModelRegistry(
         val purgedIds = mutableSetOf<String>()
 
         installed.forEach { entity ->
-            // Purge entries stuck in transient states (can't resume after reinstall)
+            // ModelDownloadCoordinator owns resumable download reconciliation. Leaving these
+            // records intact prevents its startup pass from racing a second delete here.
             if (entity.installState in setOf(
                     ModelInstallState.QUEUED,
                     ModelInstallState.DOWNLOADING,
                     ModelInstallState.PAUSED,
-                    ModelInstallState.VALIDATING,
-                    ModelInstallState.MOVING
+                    ModelInstallState.VALIDATING
                 )
             ) {
-                val file = File(entity.localPath)
-                if (!file.exists() || file.length() <= 0L) {
-                    installedModelDao.deleteById(entity.modelId)
-                    purgedIds += entity.modelId.lowercase()
+                return@forEach
+            }
+
+            if (entity.installState == ModelInstallState.MOVING) {
+                val sourceFile = File(entity.localPath)
+                if (sourceFile.exists() && sourceFile.length() > 0L) {
+                    installedModelDao.upsert(
+                        entity.copy(
+                            installState = ModelInstallState.INSTALLED,
+                            errorMessage = null,
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
                 } else {
-                    // File exists but state is stuck — mark as BROKEN
                     installedModelDao.upsert(
                         entity.copy(
                             installState = ModelInstallState.BROKEN,
-                            errorMessage = "Download was interrupted. Try re-downloading.",
+                            errorMessage = "Storage move was interrupted. Move or re-download the model.",
                             updatedAt = System.currentTimeMillis()
                         )
                     )

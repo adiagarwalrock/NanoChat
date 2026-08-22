@@ -107,6 +107,7 @@ fun NanoChatApp(
     onTemperatureChange: (Double) -> Unit = {},
     onTopPChange: (Double) -> Unit = {},
     onContextLengthChange: (Int) -> Unit = {},
+    onSystemPromptChange: (String) -> Unit = {},
     onThinkingEffortChange: (com.fcm.nanochat.data.ThinkingEffort) -> Unit = {},
     onAcceleratorChange: (com.fcm.nanochat.data.AcceleratorPreference) -> Unit = {},
     onSaveSettings: () -> Unit = {},
@@ -259,6 +260,7 @@ fun NanoChatApp(
                         onTemperatureChange = onTemperatureChange,
                         onTopPChange = onTopPChange,
                         onContextLengthChange = onContextLengthChange,
+                        onSystemPromptChange = onSystemPromptChange,
                         onSaveSettings = onSaveSettings,
                         onClearHistory = onClearHistory,
                         onRefreshStats = onRefreshStats,
@@ -384,6 +386,7 @@ private fun SettingsPage(
     onTemperatureChange: (Double) -> Unit,
     onTopPChange: (Double) -> Unit,
     onContextLengthChange: (Int) -> Unit,
+    onSystemPromptChange: (String) -> Unit,
     onSaveSettings: () -> Unit,
     onClearHistory: () -> Unit,
     onRefreshStats: () -> Unit,
@@ -462,6 +465,7 @@ private fun SettingsPage(
                     onTemperatureChange = onTemperatureChange,
                     onTopPChange = onTopPChange,
                     onContextLengthChange = onContextLengthChange,
+                    onSystemPromptChange = onSystemPromptChange,
                     onSaveSettings = onSaveSettings
                 )
 

@@ -13,8 +13,12 @@ import com.fcm.nanochat.notifications.NotificationCoordinator
 import com.fcm.nanochat.service.ModelDownloadService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -23,6 +27,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 private val nonSafeIdCharacterRegex = Regex("[^a-zA-Z0-9._-]")
 
@@ -42,20 +47,22 @@ class ModelDownloadCoordinator(
 ) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val jobs = mutableMapOf<String, kotlinx.coroutines.Job>()
+    private val jobs = ConcurrentHashMap<String, Job>()
 
     fun download(modelId: String) {
         val normalized = modelId.trim().lowercase()
         if (normalized.isBlank()) return
 
-        jobs.remove(normalized)?.cancel()
-        jobs[normalized] = scope.launch {
+        val newJob = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 runDownload(normalized)
             } finally {
-                jobs.remove(normalized)
+                jobs.remove(normalized, checkNotNull(currentCoroutineContext()[Job]))
+                stopForegroundServiceIfIdle()
             }
         }
+        jobs.put(normalized, newJob)?.cancel()
+        newJob.start()
     }
 
     fun cancel(modelId: String) {
@@ -64,6 +71,7 @@ class ModelDownloadCoordinator(
         notificationCoordinator.cancelModelDownload(normalized)
         stopForegroundServiceIfIdle()
         scope.launch {
+            if (jobs.containsKey(normalized)) return@launch
             val existing = installedModelDao.installedModel(normalized) ?: return@launch
             installedModelDao.upsert(
                 existing.copy(
@@ -318,10 +326,10 @@ class ModelDownloadCoordinator(
                 )
 
                 if (!response.isSuccessful && response.code != 206) {
-            val message = downloadHttpErrorMessage(response.code, model.downloadUrl)
-            upsertFailure(modelId, message)
-            return
-        }
+                    val message = downloadHttpErrorMessage(response.code)
+                    upsertFailure(modelId, message)
+                    return
+                }
 
                 val body = response.body
 
@@ -330,18 +338,18 @@ class ModelDownloadCoordinator(
 
                 FileOutputStream(tempFile, append).use { output ->
                     body.byteStream().use { input ->
-                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        val buffer = ByteArray(DOWNLOAD_BUFFER_SIZE_BYTES)
                         var bytesRead: Int
                         var bytesWritten = startingBytes
                         var lastReport = System.currentTimeMillis()
 
                         while (input.read(buffer).also { bytesRead = it } != -1) {
-                            ensureJobActive(modelId)
+                            ensureJobActive()
                             output.write(buffer, 0, bytesRead)
                             bytesWritten += bytesRead
 
                             val nowMs = System.currentTimeMillis()
-                            if (nowMs - lastReport >= 150L) {
+                            if (nowMs - lastReport >= PROGRESS_PERSIST_INTERVAL_MS) {
                                 installedModelDao.upsert(
                                     queuedEntity.copy(
                                         installState = ModelInstallState.DOWNLOADING,
@@ -426,9 +434,11 @@ class ModelDownloadCoordinator(
                 totalBytes = finalFile.length(),
                 status = NotificationCoordinator.DownloadStatus.Completed
             )
-            ModelDownloadService.complete(appContext, model.displayName, success = true)
-            stopForegroundServiceIfIdle()
         } catch (_: CancellationException) {
+            val currentJob = currentCoroutineContext()[Job]
+            val wasSuperseded = jobs[modelId]?.let { it !== currentJob } == true
+            if (wasSuperseded) return
+
             val paused = installedModelDao.installedModel(modelId)
             if (paused != null) {
                 installedModelDao.upsert(
@@ -448,18 +458,8 @@ class ModelDownloadCoordinator(
                 totalBytes = model.sizeInBytes,
                 status = NotificationCoordinator.DownloadStatus.Paused
             )
-            stopForegroundServiceIfIdle()
         } catch (error: Throwable) {
             upsertFailure(modelId, toFriendlyFailure(error.message ?: "Model download failed."))
-            notificationCoordinator.notifyModelDownload(
-                modelId = modelId,
-                displayName = model.displayName,
-                downloadedBytes = tempFile.length(),
-                totalBytes = model.sizeInBytes,
-                status = NotificationCoordinator.DownloadStatus.Failed
-            )
-            ModelDownloadService.complete(appContext, model.displayName, success = false)
-            stopForegroundServiceIfIdle()
         }
     }
 
@@ -512,11 +512,8 @@ class ModelDownloadCoordinator(
         )
     }
 
-    private fun ensureJobActive(modelId: String) {
-        val job = jobs[modelId]
-        if (job != null && !job.isActive) {
-            throw CancellationException("Download cancelled")
-        }
+    private suspend fun ensureJobActive() {
+        currentCoroutineContext().ensureActive()
     }
 
     private fun tempFile(modelId: String): File {
@@ -567,10 +564,7 @@ class ModelDownloadCoordinator(
         }
     }
 
-    private fun downloadHttpErrorMessage(
-        httpCode: Int,
-        downloadUrl: String
-    ): String {
+    private fun downloadHttpErrorMessage(httpCode: Int): String {
         return when {
             httpCode in 400..599 -> "Download failed (HTTP $httpCode)."
             else -> "Download failed."
@@ -667,5 +661,7 @@ class ModelDownloadCoordinator(
 
     private companion object {
         const val TAG = "ModelDownloadCoordinator"
+        const val DOWNLOAD_BUFFER_SIZE_BYTES = 64 * 1024
+        const val PROGRESS_PERSIST_INTERVAL_MS = 1_000L
     }
 }

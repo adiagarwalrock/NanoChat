@@ -1,5 +1,6 @@
 package com.fcm.nanochat.inference
 
+import com.fcm.nanochat.data.DEFAULT_SYSTEM_PROMPT
 import com.fcm.nanochat.data.ThinkingEffort
 import com.fcm.nanochat.model.ChatRole
 
@@ -14,8 +15,8 @@ enum class DownloadedPromptFamily {
 internal fun String?.toPromptFamily(): DownloadedPromptFamily {
     val normalized = this?.trim()?.lowercase().orEmpty()
     return when {
-        "qwen" in normalized -> DownloadedPromptFamily.QWEN
         "deepseek" in normalized -> DownloadedPromptFamily.DEEPSEEK
+        "qwen" in normalized -> DownloadedPromptFamily.QWEN
         "gemma" in normalized -> DownloadedPromptFamily.GEMMA
         "phi" in normalized -> DownloadedPromptFamily.PHI
         else -> DownloadedPromptFamily.GENERIC
@@ -29,18 +30,21 @@ data class DownloadedPrompt(
 )
 
 object PromptFormatter {
-    private const val DEFAULT_SYSTEM_PROMPT =
-            "You are NanoChat, a helpful local assistant. Reply in clean Markdown and keep numbered or bulleted lists on separate lines."
-
     fun historyWindow(history: List<ChatTurn>, maxTurns: Int): List<ChatTurn> {
         if (history.size <= maxTurns) return history
         return history.takeLast(maxTurns)
     }
 
-    fun flattenForAicore(history: List<ChatTurn>, prompt: String, maxTurns: Int = 10): String {
+    fun flattenForAicore(
+        history: List<ChatTurn>,
+        prompt: String,
+        maxTurns: Int = 10,
+        systemPrompt: String = DEFAULT_SYSTEM_PROMPT
+    ): String {
         val recentTurns = historyWindow(history, maxTurns)
         val conversation = buildString {
-            append("You are NanoChat running on Gemini Nano.\n")
+            append(systemPrompt.trim().ifBlank { DEFAULT_SYSTEM_PROMPT })
+            append('\n')
             recentTurns.forEach { turn ->
                 val speaker = if (turn.role == ChatRole.USER) "User" else "Assistant"
                 append(speaker)
@@ -62,7 +66,8 @@ object PromptFormatter {
             maxTurns: Int = 20,
             promptFamily: String? = null,
             thinkingEffort: ThinkingEffort = ThinkingEffort.MEDIUM,
-            supportsThinking: Boolean = false
+            supportsThinking: Boolean = false,
+            systemPrompt: String = DEFAULT_SYSTEM_PROMPT
     ): String {
         return formatDownloadedPrompt(
                         history = history,
@@ -70,7 +75,8 @@ object PromptFormatter {
                         maxTurns = maxTurns,
                         promptFamily = promptFamily,
                         thinkingEffort = thinkingEffort,
-                        supportsThinking = supportsThinking
+                        supportsThinking = supportsThinking,
+                        systemPrompt = systemPrompt
                 )
                 .userMessage
     }
@@ -81,12 +87,13 @@ object PromptFormatter {
             maxTurns: Int = 20,
             promptFamily: String? = null,
             thinkingEffort: ThinkingEffort = ThinkingEffort.MEDIUM,
-            supportsThinking: Boolean = false
+            supportsThinking: Boolean = false,
+            systemPrompt: String = DEFAULT_SYSTEM_PROMPT
     ): DownloadedPrompt {
         val family = promptFamily.toPromptFamily()
-        val systemPrompt =
+        val effectiveSystemPrompt =
                 applyThinkingInstruction(
-                        systemPrompt = DEFAULT_SYSTEM_PROMPT,
+                        systemPrompt = systemPrompt.trim().ifBlank { DEFAULT_SYSTEM_PROMPT },
                         effort = thinkingEffort,
                         supportsThinking = supportsThinking
                 )
@@ -96,10 +103,10 @@ object PromptFormatter {
         val baseUserMessage = buildTranscriptMessage(history, prompt, maxTurns)
 
         val finalSystemInstruction =
-            if (family == DownloadedPromptFamily.GEMMA) "" else systemPrompt
+            if (family == DownloadedPromptFamily.GEMMA) "" else effectiveSystemPrompt
         val finalUserMessage =
             if (family == DownloadedPromptFamily.GEMMA) {
-                "$systemPrompt\n\n$baseUserMessage"
+                "$effectiveSystemPrompt\n\n$baseUserMessage"
             } else {
                 baseUserMessage
             }

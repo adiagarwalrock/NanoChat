@@ -40,7 +40,12 @@ class LocalInferenceClient : InferenceClient {
             BackendAvailability.Available -> Unit
         }
 
-        val prompt = PromptFormatter.flattenForAicore(request.history, request.prompt, maxTurns = 10)
+        val prompt = PromptFormatter.flattenForAicore(
+            history = request.history,
+            prompt = request.prompt,
+            maxTurns = 10,
+            systemPrompt = request.settings.systemPrompt
+        )
         val client = try {
             generationClient
         } catch (error: Throwable) {
