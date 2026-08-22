@@ -3,6 +3,7 @@ package com.fcm.nanochat.models.registry
 import com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig
 import com.fcm.nanochat.models.allowlist.AllowlistedModel
 import com.fcm.nanochat.models.compatibility.LocalModelCompatibilityState
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -47,6 +48,25 @@ class ActiveModelResolverTest {
 
         assertTrue(resolution.shouldClearSelection)
         assertTrue(resolution.message.orEmpty().contains("broken"))
+    }
+
+    @Test
+    fun `resolve sanitizes native engine startup failures`() {
+        val nativeFailure =
+            "gpu: LiteRtLmJniException: Failed to create engine: INTERNAL: ERROR: " +
+                "[third_party/odml/litert/litert/cc/litert_tensor_buffer.cc:52]"
+        val record =
+            sampleRecord(
+                modelId = "model-a",
+                installState = ModelInstallState.INSTALLED,
+                compatibility =
+                    LocalModelCompatibilityState.DownloadedButNotActivatable(nativeFailure)
+            )
+
+        val resolution = ActiveModelResolver.resolve("model-a", listOf(record))
+
+        assertTrue(resolution.shouldClearSelection)
+        assertEquals("Installed, but NanoChat could not start this model.", resolution.message)
     }
 
     @Test

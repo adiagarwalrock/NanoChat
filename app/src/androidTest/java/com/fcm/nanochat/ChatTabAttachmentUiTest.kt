@@ -2,6 +2,7 @@ package com.fcm.nanochat
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -34,7 +35,7 @@ class ChatTabAttachmentUiTest {
                 capabilities = InferenceCapabilities(
                     textGeneration = SupportedState.supported(),
                     visionUnderstanding = SupportedState.unsupported("Vision unavailable"),
-                    audioTranscription = SupportedState.unsupported("Audio unavailable"),
+                    audioTranscription = SupportedState.supported(), // Audio is supported so we can open the sheet
                     streaming = SupportedState.supported()
                 )
             ),
@@ -46,15 +47,17 @@ class ChatTabAttachmentUiTest {
         composeRule.onNodeWithContentDescription("Attach media").performClick()
         composeRule.onNodeWithText("Attach").assertIsDisplayed()
         composeRule.onNodeWithText("Vision unavailable").assertIsDisplayed()
-        composeRule.onNodeWithText("Audio unavailable").assertIsDisplayed()
-        composeRule.onNodeWithText("Take photo").performClick()
-        composeRule.onNodeWithContentDescription("Attach media").performClick()
-        composeRule.onNodeWithText("Choose image").performClick()
-        composeRule.onNodeWithContentDescription("Attach media").performClick()
+        
+        // These are disabled because vision is unsupported
+        composeRule.onNodeWithText("Take photo").assertIsNotEnabled()
+        composeRule.onNodeWithText("Choose image").assertIsNotEnabled()
+        
+        // Audio is supported, so we can click it
         composeRule.onNodeWithText("Choose audio").performClick()
+        
         composeRule.runOnIdle {
-            assertTrue(cameraTapped)
-            assertTrue(imageTapped)
+            org.junit.Assert.assertFalse(cameraTapped)
+            org.junit.Assert.assertFalse(imageTapped)
             assertTrue(audioTapped)
         }
     }

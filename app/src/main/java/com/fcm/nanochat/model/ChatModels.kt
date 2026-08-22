@@ -67,6 +67,7 @@ data class SettingsScreenState(
                 com.fcm.nanochat.data.ThinkingEffort.MEDIUM,
         val acceleratorPreference: com.fcm.nanochat.data.AcceleratorPreference =
                 com.fcm.nanochat.data.AcceleratorPreference.AUTO,
+        val customSystemPrompt: String = "",
         val stats: UsageStats = UsageStats(),
         val saveNotice: String? = null,
         val clearNotice: String? = null,

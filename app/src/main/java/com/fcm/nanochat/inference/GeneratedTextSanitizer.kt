@@ -6,7 +6,7 @@ object GeneratedTextSanitizer {
     private val controlLineRegex =
         Regex(
             pattern =
-                """(?i)^\s*(<\|assistant\|>|<\|user\|>|<\|system\|>|<\|im_start\|>|<\|im_end\|>|<\|eot_id\|>|<\|endoftext\|>|<assistant>|</assistant>|<user>|</user>|assistant\s*:|###\s*assistant\s*:|\[assistant])\s*$"""
+                """(?i)^\s*(<\|assistant\|>|<\|user\|>|<\|system\|>|<\|im_start\|>|<\|im_end\|>|<\|eot_id\|>|<\|endoftext\|>|<start_of_turn>|<end_of_turn>|<assistant>|</assistant>|<user>|</user>|assistant\s*:|###\s*assistant\s*:|\[assistant])\s*$"""
         )
 
     private val leadingAssistantPrefixRegex =
@@ -18,11 +18,11 @@ object GeneratedTextSanitizer {
     private val inlineControlTokenRegex =
         Regex(
             pattern =
-                """(?i)[ \t]*(<\|assistant\|>|<\|user\|>|<\|system\|>|<\|im_start\|>|<\|im_end\|>|<\|eot_id\|>|<\|endoftext\|>|<\|begin_of_text\|>|<s>|</s>|<assistant>|</assistant>|<user>|</user>)[ \t]*"""
+                """(?i)[ \t]*(<\|assistant\|>|<\|user\|>|<\|system\|>|<\|im_start\|>|<\|im_end\|>|<\|eot_id\|>|<\|endoftext\|>|<\|begin_of_text\|>|<start_of_turn>|<end_of_turn>|<s>|</s>|<assistant>|</assistant>|<user>|</user>)[ \t]*"""
         )
 
     private val standaloneRoleLineRegex =
-        Regex(pattern = """(?im)^\s*(assistant|user|system)\s*$""")
+        Regex(pattern = """(?im)^\s*(assistant|user|system|model)\s*$""")
 
     private val completeThinkBlockRegex = Regex(pattern = """(?is)<think>.*?</think>""")
 

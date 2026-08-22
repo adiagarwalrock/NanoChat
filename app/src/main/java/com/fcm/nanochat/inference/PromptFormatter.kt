@@ -8,14 +8,16 @@ enum class DownloadedPromptFamily {
     DEEPSEEK,
     GEMMA,
     PHI,
+    FASTVLM,
     GENERIC
 }
 
 internal fun String?.toPromptFamily(): DownloadedPromptFamily {
     val normalized = this?.trim()?.lowercase().orEmpty()
     return when {
-        "qwen" in normalized -> DownloadedPromptFamily.QWEN
         "deepseek" in normalized -> DownloadedPromptFamily.DEEPSEEK
+        "fastvlm" in normalized -> DownloadedPromptFamily.FASTVLM
+        "qwen" in normalized -> DownloadedPromptFamily.QWEN
         "gemma" in normalized -> DownloadedPromptFamily.GEMMA
         "phi" in normalized -> DownloadedPromptFamily.PHI
         else -> DownloadedPromptFamily.GENERIC
@@ -37,10 +39,17 @@ object PromptFormatter {
         return history.takeLast(maxTurns)
     }
 
-    fun flattenForAicore(history: List<ChatTurn>, prompt: String, maxTurns: Int = 10): String {
+    fun flattenForAicore(
+        history: List<ChatTurn>,
+        prompt: String,
+        customSystemPrompt: String = "",
+        maxTurns: Int = 10
+    ): String {
         val recentTurns = historyWindow(history, maxTurns)
         val conversation = buildString {
-            append("You are NanoChat running on Gemini Nano.\n")
+            val basePrompt = customSystemPrompt.ifBlank { "You are NanoChat running on Gemini Nano." }
+            append(basePrompt.trimEnd())
+            append('\n')
             recentTurns.forEach { turn ->
                 val speaker = if (turn.role == ChatRole.USER) "User" else "Assistant"
                 append(speaker)
@@ -62,7 +71,8 @@ object PromptFormatter {
             maxTurns: Int = 20,
             promptFamily: String? = null,
             thinkingEffort: ThinkingEffort = ThinkingEffort.MEDIUM,
-            supportsThinking: Boolean = false
+            supportsThinking: Boolean = false,
+            customSystemPrompt: String = ""
     ): String {
         return formatDownloadedPrompt(
                         history = history,
@@ -70,7 +80,8 @@ object PromptFormatter {
                         maxTurns = maxTurns,
                         promptFamily = promptFamily,
                         thinkingEffort = thinkingEffort,
-                        supportsThinking = supportsThinking
+                        supportsThinking = supportsThinking,
+                        customSystemPrompt = customSystemPrompt
                 )
                 .userMessage
     }
@@ -81,12 +92,14 @@ object PromptFormatter {
             maxTurns: Int = 20,
             promptFamily: String? = null,
             thinkingEffort: ThinkingEffort = ThinkingEffort.MEDIUM,
-            supportsThinking: Boolean = false
+            supportsThinking: Boolean = false,
+            customSystemPrompt: String = ""
     ): DownloadedPrompt {
         val family = promptFamily.toPromptFamily()
+        val baseSystemPrompt = customSystemPrompt.ifBlank { DEFAULT_SYSTEM_PROMPT }
         val systemPrompt =
                 applyThinkingInstruction(
-                        systemPrompt = DEFAULT_SYSTEM_PROMPT,
+                        systemPrompt = baseSystemPrompt,
                         effort = thinkingEffort,
                         supportsThinking = supportsThinking
                 )
@@ -96,10 +109,14 @@ object PromptFormatter {
         val baseUserMessage = buildTranscriptMessage(history, prompt, maxTurns)
 
         val finalSystemInstruction =
-            if (family == DownloadedPromptFamily.GEMMA) "" else systemPrompt
+            if (family == DownloadedPromptFamily.FASTVLM) {
+                ""
+            } else {
+                systemPrompt
+            }
         val finalUserMessage =
-            if (family == DownloadedPromptFamily.GEMMA) {
-                "$systemPrompt\n\n$baseUserMessage"
+            if (family == DownloadedPromptFamily.FASTVLM) {
+                prompt.trim()
             } else {
                 baseUserMessage
             }

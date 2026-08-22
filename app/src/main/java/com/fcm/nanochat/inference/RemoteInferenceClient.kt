@@ -250,7 +250,9 @@ class RemoteInferenceClient(
 
         val supportsThinking = supportsReasoningParam(request.settings.modelName)
         val systemContent = PromptFormatter.applyThinkingInstruction(
-            systemPrompt = "You are NanoChat, a helpful AI assistant. Reply in clean Markdown.",
+            systemPrompt = request.settings.customSystemPrompt.ifBlank {
+                "You are NanoChat, a helpful AI assistant. Reply in clean Markdown."
+            },
             effort = request.settings.thinkingEffort,
             supportsThinking = supportsThinking
         )

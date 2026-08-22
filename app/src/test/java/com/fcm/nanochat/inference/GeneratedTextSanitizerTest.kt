@@ -41,6 +41,15 @@ class GeneratedTextSanitizerTest {
     }
 
     @Test
+    fun `removes gemma turn markers`() {
+        val input = "<start_of_turn>model\nMafia: The Old Country<end_of_turn>"
+
+        val output = GeneratedTextSanitizer.sanitize(input)
+
+        assertEquals("Mafia: The Old Country", output.trim())
+    }
+
+    @Test
     fun `returns empty for control-only chunks`() {
         val input = "<|im_start|>assistant\n<|im_end|>"
 

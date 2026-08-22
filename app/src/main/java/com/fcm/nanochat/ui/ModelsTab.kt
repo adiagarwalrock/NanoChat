@@ -1544,7 +1544,7 @@ private fun ModelCardUi.matchesQuery(query: String): Boolean {
 private fun ModelCardUi.matchesFilter(filter: ModelFilter): Boolean {
     return when (filter) {
         ModelFilter.All -> true
-        ModelFilter.ChatReady -> recommendedForChat
+        ModelFilter.ChatReady -> recommendedForChat && compatibilityRank() <= 1
         ModelFilter.Installed -> installState == ModelInstallState.INSTALLED
         ModelFilter.NeedsAttention -> {
             healthState is LocalModelHealthState.NotCompatible ||
@@ -2090,7 +2090,12 @@ private fun toFriendlyError(raw: String?): String {
         }
         "startup_validation_failed" in lowercase ||
                 "flatbuffer" in lowercase ||
-                "error building tflite model" in lowercase -> {
+                "error building tflite model" in lowercase ||
+                "failed to create engine" in lowercase ||
+                "litertlmjniexception" in lowercase ||
+                "litert_compiled_model" in lowercase ||
+                "litet_tensor_buffer" in lowercase ||
+                "odml/litert" in lowercase -> {
             "Installed, but NanoChat could not start this model."
         }
         "not loaded in memory" in lowercase -> {

@@ -16,6 +16,18 @@ data class RuntimeHandle(
     val initDurationMs: Long
 )
 
+private data class RuntimeConfigKey(
+    val baseSignature: String,
+    val supportsVisionInput: Boolean,
+    val supportsAudioInput: Boolean
+) {
+    fun canServe(requested: RuntimeConfigKey): Boolean {
+        return baseSignature == requested.baseSignature &&
+                (!requested.supportsVisionInput || supportsVisionInput) &&
+                (!requested.supportsAudioInput || supportsAudioInput)
+    }
+}
+
 class ModelRuntimeManager(
     context: Context
 ) {
@@ -24,7 +36,7 @@ class ModelRuntimeManager(
 
     private var activeModelId: String? = null
     private var activeModelPath: String? = null
-    private var activeConfigSignature: String? = null
+    private var activeConfigKey: RuntimeConfigKey? = null
     private var activeRuntime: LocalModelRuntime? = null
 
     private val _loadState = MutableStateFlow(RuntimeLoadState())
@@ -43,7 +55,7 @@ class ModelRuntimeManager(
         return withContext(Dispatchers.IO) {
             mutex.withLock {
                 val normalizedModelId = modelId.trim().lowercase()
-                val configSignature = configSignature(
+                val requestedConfigKey = configKey(
                     config = defaultConfig,
                     supportsVisionInput = supportsVisionInput,
                     supportsAudioInput = supportsAudioInput
@@ -51,7 +63,7 @@ class ModelRuntimeManager(
                 val shouldReuse = activeRuntime != null &&
                         activeModelId == normalizedModelId &&
                         activeModelPath == modelPath &&
-                        activeConfigSignature == configSignature
+                        activeConfigKey?.canServe(requestedConfigKey) == true
                 if (shouldReuse) {
                     Log.d(TAG, "Reusing local runtime for modelId=$modelId")
                     _loadState.value = RuntimeLoadState(
@@ -75,7 +87,7 @@ class ModelRuntimeManager(
                 activeRuntime = null
                 activeModelId = null
                 activeModelPath = null
-                activeConfigSignature = null
+                activeConfigKey = null
 
                 val initStart = System.currentTimeMillis()
                 val runtime = runCatching {
@@ -103,7 +115,7 @@ class ModelRuntimeManager(
 
                 activeModelId = normalizedModelId
                 activeModelPath = modelPath
-                activeConfigSignature = configSignature
+                activeConfigKey = requestedConfigKey
                 activeRuntime = runtime
 
                 _loadState.value = RuntimeLoadState(
@@ -128,7 +140,7 @@ class ModelRuntimeManager(
                 activeRuntime = null
                 activeModelId = null
                 activeModelPath = null
-                activeConfigSignature = null
+                activeConfigKey = null
                 _loadState.value = RuntimeLoadState(
                     phase = if (reason == RuntimeReleaseReason.EJECTED) {
                         RuntimeLoadPhase.EJECTED
@@ -195,11 +207,15 @@ class ModelRuntimeManager(
         const val TAG = "ModelRuntimeManager"
     }
 
-    private fun configSignature(
+    private fun configKey(
         config: AllowlistDefaultConfig,
         supportsVisionInput: Boolean,
         supportsAudioInput: Boolean
-    ): String {
-        return "${config.topK}|${config.topP}|${config.temperature}|${config.maxTokens}|${config.accelerators}|${config.strictAccelerator}|vision=$supportsVisionInput|audio=$supportsAudioInput"
+    ): RuntimeConfigKey {
+        return RuntimeConfigKey(
+            baseSignature = "${config.topK}|${config.topP}|${config.temperature}|${config.maxTokens}|${config.accelerators}|${config.strictAccelerator}",
+            supportsVisionInput = supportsVisionInput,
+            supportsAudioInput = supportsAudioInput
+        )
     }
 }

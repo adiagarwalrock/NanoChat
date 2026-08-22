@@ -1,5 +1,6 @@
 package com.fcm.nanochat.viewmodel
 
+import com.fcm.nanochat.inference.GeneratedTextSanitizer
 import com.fcm.nanochat.inference.InferenceMode
 
 class StreamingMessageAssembler {
@@ -8,8 +9,8 @@ class StreamingMessageAssembler {
     fun append(mode: InferenceMode, chunk: String): String {
         if (mode == InferenceMode.AICORE) rawBuilder.clear()
         rawBuilder.append(chunk)
-        return rawBuilder.toString()
+        return GeneratedTextSanitizer.sanitize(rawBuilder.toString(), preserveThinkingBlocks = true)
     }
 
-    fun current(): String = rawBuilder.toString()
+    fun current(): String = GeneratedTextSanitizer.sanitize(rawBuilder.toString(), preserveThinkingBlocks = true)
 }

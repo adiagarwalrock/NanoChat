@@ -29,7 +29,8 @@ data class SettingsSnapshot(
     val contextLength: Int = 4096,
     val geminiNanoModelSizeBytes: Long = 0,
     val thinkingEffort: ThinkingEffort = ThinkingEffort.MEDIUM,
-    val acceleratorPreference: AcceleratorPreference = AcceleratorPreference.AUTO
+    val acceleratorPreference: AcceleratorPreference = AcceleratorPreference.AUTO,
+    val customSystemPrompt: String = ""
 )
 
 enum class ThinkingEffort {
@@ -74,7 +75,8 @@ class AppPreferences(context: Context) {
                 geminiNanoModelSizeBytes = preferences[Keys.geminiNanoModelSizeBytes] ?: 0,
                 thinkingEffort = parseThinkingEffort(preferences[Keys.thinkingEffort]),
                 acceleratorPreference =
-                    parseAccelerator(preferences[Keys.acceleratorPreference])
+                    parseAccelerator(preferences[Keys.acceleratorPreference]),
+                customSystemPrompt = preferences[Keys.customSystemPrompt].orEmpty()
             )
         }
 
@@ -135,6 +137,10 @@ class AppPreferences(context: Context) {
 
     suspend fun updateThinkingEffort(value: ThinkingEffort) {
         appContext.dataStore.edit { it[Keys.thinkingEffort] = value.name }
+    }
+
+    suspend fun updateCustomSystemPrompt(value: String) {
+        appContext.dataStore.edit { it[Keys.customSystemPrompt] = value.trim() }
     }
 
     suspend fun updateAcceleratorPreference(value: AcceleratorPreference) {
@@ -231,6 +237,7 @@ class AppPreferences(context: Context) {
         val thinkingEffort: Preferences.Key<String> = stringPreferencesKey("thinking_effort")
         val acceleratorPreference: Preferences.Key<String> =
             stringPreferencesKey("accelerator_preference")
+        val customSystemPrompt: Preferences.Key<String> = stringPreferencesKey("custom_system_prompt")
         val allowlistVersion: Preferences.Key<String> = stringPreferencesKey("allowlist_version")
         val allowlistJson: Preferences.Key<String> = stringPreferencesKey("allowlist_json")
         val allowlistLastRefreshEpochMs: Preferences.Key<Long> =

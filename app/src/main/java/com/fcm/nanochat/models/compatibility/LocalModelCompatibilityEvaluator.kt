@@ -31,6 +31,10 @@ class LocalModelCompatibilityEvaluator(
             )
         }
 
+        knownRuntimeIssue(model)?.let { reason ->
+            return LocalModelCompatibilityState.UnsupportedDevice(reason)
+        }
+
         if (!isChatSuitable(model)) {
             return LocalModelCompatibilityState.UnsupportedForChat
         }
@@ -143,6 +147,15 @@ class LocalModelCompatibilityEvaluator(
                 )
             }
         }
+    }
+
+    private fun knownRuntimeIssue(model: AllowlistedModel): String? {
+        val id = model.id.lowercase()
+        val modelId = model.modelId.lowercase()
+        val isQwen35LiteRt = "qwen3.5" in id || "qwen3.5" in modelId
+        if (!isQwen35LiteRt) return null
+
+        return "This Qwen3.5 LiteRT package fails to create a LiteRT-LM engine with the current Android runtime. Use FastVLM-0.5B for small image prompts or Gemma-3n-E2B-it for image and audio."
     }
 
     private fun isChatSuitable(model: AllowlistedModel): Boolean {

@@ -201,4 +201,22 @@ class AllowlistParserTest {
             )
         }
     }
+
+    @Test
+    fun `bundled allowlist includes FastVLM as small vision model`() {
+        val file = java.io.File("src/main/assets/model_allowlist_2_0_3.json")
+        val parsed = AllowlistParser.parse(
+            rawJson = file.readText(),
+            fallbackVersion = "2_0_3",
+            sourceType = AllowlistSourceType.BUNDLED
+        )
+
+        val model = parsed.models.first { it.id == "litert-community/fastvlm-0.5b" }
+
+        assertEquals("FastVLM-0.5B.litertlm", model.modelFile)
+        assertEquals(1_156_349_952L, model.sizeInBytes)
+        assertTrue(model.llmSupportImage)
+        assertFalse(model.llmSupportAudio)
+        assertTrue(model.downloadUrl.contains("litert-community/FastVLM-0.5B"))
+    }
 }

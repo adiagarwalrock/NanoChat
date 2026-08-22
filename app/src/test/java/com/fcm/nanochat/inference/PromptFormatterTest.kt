@@ -88,6 +88,24 @@ class PromptFormatterTest {
     }
 
     @Test
+    fun `formatDownloadedPrompt keeps FastVLM image prompts bare`() {
+        val formatted = PromptFormatter.formatDownloadedPrompt(
+            history = listOf(
+                ChatTurn(ChatRole.USER, "Earlier question"),
+                ChatTurn(ChatRole.ASSISTANT, "Earlier answer")
+            ),
+            prompt = "Which game is this?",
+            promptFamily = "litert-community/FastVLM-0.5B"
+        )
+
+        assertEquals(DownloadedPromptFamily.FASTVLM, formatted.family)
+        assertEquals("", formatted.systemInstruction)
+        assertEquals("Which game is this?", formatted.userMessage)
+        assertTrue("Conversation so far:" !in formatted.userMessage)
+        assertTrue("Assistant:" !in formatted.userMessage)
+    }
+
+    @Test
     fun `flattenForDownloadedModel uses user message payload only`() {
         val prompt = PromptFormatter.flattenForDownloadedModel(
             history = emptyList(),
@@ -98,5 +116,40 @@ class PromptFormatterTest {
         assertEquals("How are you?", prompt)
         assertTrue("Assistant:" !in prompt)
         assertTrue("User:" !in prompt)
+    }
+
+    @Test
+    fun `flattenForAicore respects custom system prompt`() {
+        val prompt = PromptFormatter.flattenForAicore(
+            history = emptyList(),
+            prompt = "Hello",
+            customSystemPrompt = "You are a custom AI."
+        )
+        assertTrue(prompt.startsWith("You are a custom AI."))
+    }
+
+    @Test
+    fun `formatDownloadedPrompt respects custom system prompt`() {
+        val formatted = PromptFormatter.formatDownloadedPrompt(
+            history = emptyList(),
+            prompt = "Hello",
+            promptFamily = "litert-community/Qwen2.5-1.5B-Instruct",
+            customSystemPrompt = "Custom instructions."
+        )
+        assertTrue(formatted.systemInstruction.startsWith("Custom instructions."))
+    }
+
+    @Test
+    fun `formatDownloadedPrompt passes Gemma system prompt natively`() {
+        val formatted = PromptFormatter.formatDownloadedPrompt(
+            history = emptyList(),
+            prompt = "Hello",
+            promptFamily = "google/gemma-3n-E2B-it-litert-lm",
+            customSystemPrompt = "Custom instruction for Gemma"
+        )
+
+        assertEquals(DownloadedPromptFamily.GEMMA, formatted.family)
+        assertEquals("Custom instruction for Gemma", formatted.systemInstruction)
+        assertEquals("Hello", formatted.userMessage)
     }
 }

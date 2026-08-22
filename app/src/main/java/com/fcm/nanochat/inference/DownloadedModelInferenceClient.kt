@@ -280,8 +280,9 @@ class DownloadedModelInferenceClient(
                     normalizeModelId(runtimeState.modelId) == normalizedResolvedModelId &&
                     runtimeManager.getActiveSessionId() == activeSessionId
 
-        val promptFamily = model?.promptFamily.toPromptFamily()
-        val isGemmaFamily = promptFamily == DownloadedPromptFamily.GEMMA
+        val promptFamily = (model?.promptFamily ?: resolvedModelId).toPromptFamily()
+        val suppressConversationSystemPrompt =
+            promptFamily == DownloadedPromptFamily.FASTVLM
         val effectivePrompt = request.prompt.ifBlank {
             if (imageAttachment != null) {
                 "Describe the attached image."
@@ -294,11 +295,14 @@ class DownloadedModelInferenceClient(
                 val systemPrompt =
                     PromptFormatter.applyThinkingInstruction(
                         systemPrompt =
-                            "You are NanoChat, a helpful local assistant. Reply in clean Markdown and keep numbered or bulleted lists on separate lines.",
+                            request.settings.customSystemPrompt.ifBlank {
+                                "You are NanoChat, a helpful local assistant. Reply in clean Markdown and keep numbered or bulleted lists on separate lines."
+                            },
                         effort = request.settings.thinkingEffort,
                         supportsThinking = model?.supportsThinking ?: false
                     )
-                val finalSystemInstruction = if (isGemmaFamily) "" else systemPrompt
+                val finalSystemInstruction =
+                    if (suppressConversationSystemPrompt) "" else systemPrompt
                 val latestTurn =
                     PromptFormatter.formatLatestTurn(
                         prompt = effectivePrompt,
@@ -319,7 +323,8 @@ class DownloadedModelInferenceClient(
                     maxTurns = 20,
                     promptFamily = model?.promptFamily ?: resolvedModelId,
                     thinkingEffort = request.settings.thinkingEffort,
-                    supportsThinking = model?.supportsThinking ?: false
+                    supportsThinking = model?.supportsThinking ?: false,
+                    customSystemPrompt = request.settings.customSystemPrompt
                 )
             }
 

@@ -396,7 +396,12 @@ class ModelRegistry(
         return "startup_validation_failed" in message ||
                 "error building tflite model" in message ||
                 "flatbuffer" in message ||
-                "invocationtargetexception" in message
+                "invocationtargetexception" in message ||
+                "failed to create engine" in message ||
+                "litertlmjniexception" in message ||
+                "litert_compiled_model" in message ||
+                "litet_tensor_buffer" in message ||
+                "odml/litert" in message
     }
 
     private fun isRuntimeOptionFailure(message: String): Boolean {

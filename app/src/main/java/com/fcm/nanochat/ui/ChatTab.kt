@@ -40,7 +40,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
@@ -65,6 +65,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -149,6 +150,7 @@ internal fun ChatTab(
         onTemperatureChange: (Double) -> Unit,
         onTopPChange: (Double) -> Unit,
         onContextLengthChange: (Int) -> Unit,
+        onCustomSystemPromptChange: (String) -> Unit,
         onThinkingEffortChange: (ThinkingEffort) -> Unit,
         onAcceleratorChange: (AcceleratorPreference) -> Unit,
         onMessageInfo: (ChatMessage) -> Unit,
@@ -185,6 +187,7 @@ internal fun ChatTab(
                     onTemperatureChange = onTemperatureChange,
                     onTopPChange = onTopPChange,
                     onContextLengthChange = onContextLengthChange,
+                    onCustomSystemPromptChange = onCustomSystemPromptChange,
                     onThinkingEffortChange = onThinkingEffortChange,
                     onAcceleratorChange = onAcceleratorChange,
                     onMessageInfo = onMessageInfo,
@@ -214,6 +217,7 @@ private fun ChatTabContent(
         onTemperatureChange: (Double) -> Unit,
         onTopPChange: (Double) -> Unit,
         onContextLengthChange: (Int) -> Unit,
+        onCustomSystemPromptChange: (String) -> Unit,
         onThinkingEffortChange: (ThinkingEffort) -> Unit,
         onAcceleratorChange: (AcceleratorPreference) -> Unit,
         onMessageInfo: (ChatMessage) -> Unit,
@@ -342,6 +346,7 @@ private fun ChatTabContent(
                                         onTopPChange(topP)
                                         onContextLengthChange(contextLength)
                                 },
+                                onCustomSystemPromptChange = onCustomSystemPromptChange,
                                 onUpdateThinkingEffort = onThinkingEffortChange,
                                 onUpdateAccelerator = onAcceleratorChange
                         )
@@ -381,6 +386,7 @@ private fun ModelControlsSheet(
                         temperature: Double,
                         topP: Double,
                         contextLength: Int) -> Unit,
+        onCustomSystemPromptChange: (String) -> Unit,
         onUpdateThinkingEffort: (ThinkingEffort) -> Unit,
         onUpdateAccelerator: (AcceleratorPreference) -> Unit
 ) {
@@ -548,6 +554,44 @@ private fun ModelControlsSheet(
                                                 )
                                         }
                                         */
+                                }
+                        }
+
+                        Text(
+                                text = "Chat customization",
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(top = 8.dp)
+                        )
+                        Surface(
+                                shape = ControlCardShape,
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh
+                        ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = settings.customSystemPrompt,
+                                        onValueChange = onCustomSystemPromptChange,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(12.dp),
+                                        placeholder = { Text("Enter custom system prompt...") },
+                                        maxLines = 4
+                                    )
+                                    if (settings.customSystemPrompt.isNotEmpty()) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.End
+                                        ) {
+                                            TextButton(
+                                                onClick = { onCustomSystemPromptChange("") }
+                                            ) {
+                                                Text("Reset to default")
+                                            }
+                                        }
+                                    }
                                 }
                         }
 
@@ -1728,24 +1772,23 @@ private fun Composer(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            if (capabilities.visionUnderstanding.supported || capabilities.audioTranscription.supported) {
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(
-                                        alpha = 0.8f
-                                    )
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(
+                                    alpha = 0.8f
+                                )
+                            ) {
+                                IconButton(
+                                    onClick = onOpenAttachments,
+                                    enabled = !isSending && !isPreparingAttachment && 
+                                              (capabilities.visionUnderstanding.supported || capabilities.audioTranscription.supported),
+                                    modifier = Modifier.size(40.dp)
                                 ) {
-                                    IconButton(
-                                        onClick = onOpenAttachments,
-                                        enabled = !isSending && !isPreparingAttachment,
-                                        modifier = Modifier.size(40.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.AttachFile,
-                                            contentDescription = stringResource(R.string.attach_media),
-                                            tint = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = stringResource(R.string.attach_media),
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
                                 }
                             }
 
@@ -1954,21 +1997,21 @@ private fun AttachmentActionsSheet(
             AttachmentActionButton(
                 text = stringResource(R.string.attach_take_photo),
                 icon = Icons.Default.CameraAlt,
-                enabled = true,
+                enabled = capabilities.visionUnderstanding.supported,
                 reason = capabilities.visionUnderstanding.reasonIfUnsupported,
                 onClick = onTakePhoto
             )
             AttachmentActionButton(
                 text = stringResource(R.string.attach_choose_image),
                 icon = Icons.Default.Image,
-                enabled = true,
+                enabled = capabilities.visionUnderstanding.supported,
                 reason = capabilities.visionUnderstanding.reasonIfUnsupported,
                 onClick = onPickImage
             )
             AttachmentActionButton(
                 text = stringResource(R.string.attach_choose_audio),
                 icon = Icons.Default.Audiotrack,
-                enabled = true,
+                enabled = capabilities.audioTranscription.supported,
                 reason = capabilities.audioTranscription.reasonIfUnsupported,
                 onClick = onPickAudio
             )
@@ -2103,6 +2146,7 @@ private fun ChatTabPreview() {
                         onTemperatureChange = {},
                         onTopPChange = {},
                         onContextLengthChange = {},
+                        onCustomSystemPromptChange = {},
                         onThinkingEffortChange = {},
                         onAcceleratorChange = {},
                         onMessageInfo = {},
@@ -2142,6 +2186,7 @@ private fun ChatTabDarkPreview() {
                         onTemperatureChange = {},
                         onTopPChange = {},
                         onContextLengthChange = {},
+                        onCustomSystemPromptChange = {},
                         onThinkingEffortChange = {},
                         onAcceleratorChange = {},
                         onMessageInfo = {},

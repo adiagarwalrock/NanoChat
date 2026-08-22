@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -537,6 +538,7 @@ internal fun ModelControlsSettings(
     onTemperatureChange: (Double) -> Unit,
     onTopPChange: (Double) -> Unit,
     onContextLengthChange: (Int) -> Unit,
+    onCustomSystemPromptChange: (String) -> Unit,
     onSaveSettings: () -> Unit = {}
 ) {
     var advancedExpanded by rememberSaveable { mutableStateOf(false) }
@@ -653,6 +655,44 @@ internal fun ModelControlsSettings(
                     Icon(Icons.Default.Save, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Save model settings")
+                }
+            }
+        }
+
+        item {
+            SettingsPanel(
+                title = "Chat customization",
+                subtitle = "Configure system prompts and layout options"
+            ) {
+                OutlinedTextField(
+                    value = state.customSystemPrompt,
+                    onValueChange = onCustomSystemPromptChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = InputShape,
+                    placeholder = { Text("Enter custom system prompt...") },
+                    supportingText = {
+                        Text("Overrides default system instructions for AI responses.")
+                    }
+                )
+
+                if (state.customSystemPrompt.isNotEmpty()) {
+                    TextButton(
+                        onClick = { onCustomSystemPromptChange("") },
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text("Reset to default")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = onSaveSettings,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = InputShape
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Save system prompt")
                 }
             }
         }
@@ -1745,6 +1785,7 @@ private fun ModelControlsSettingsPreview() {
             onTemperatureChange = {},
             onTopPChange = {},
             onContextLengthChange = {},
+            onCustomSystemPromptChange = {},
             onSaveSettings = {}
         )
     }

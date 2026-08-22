@@ -224,6 +224,45 @@
       "downloadPath": "Gemma-3n-E4B-it/gemma-3n-E4B-it-int4.litertlm"
     },
     {
+      "name": "FastVLM-0.5B",
+      "modelId": "litert-community/FastVLM-0.5B",
+      "modelFile": "FastVLM-0.5B.litertlm",
+      "description": "Small vision-language model for fast local image understanding.",
+      "enabled": true,
+      "sizeInBytes": 1156349952,
+      "minDeviceMemoryInGb": 4,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 1280,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_ask_image"
+      ],
+      "bestForTaskTypes": [
+        "llm_ask_image"
+      ],
+      "llmSupportImage": true,
+      "llmSupportAudio": false,
+      "requiresHfToken": false,
+      "recommendedForChat": true,
+      "supportedUseCases": [
+        "chat",
+        "vision",
+        "ocr"
+      ],
+      "memoryTier": "entry",
+      "isExperimental": true,
+      "promptFamily": "fastvlm",
+      "sourceRepo": "litert-community/FastVLM-0.5B",
+      "downloadRepo": "litert-community/FastVLM-0.5B",
+      "downloadPath": "FastVLM-0.5B.litertlm"
+    },
+    {
       "name": "TinyGarden-270M",
       "modelId": "adiagarwal/nanochat-models/functiongemma-270m-ft-tiny-garden",
       "modelFile": "tiny_garden_q8_ekv1024.litertlm",
@@ -297,14 +336,14 @@
       "modelFile": "model_multimodal.litertlm",
       "description": "Ultra-compact Qwen 3.5 vision-language model for fast edge reasoning.",
       "enabled": true,
-      "sizeInBytes": 1245540352,
+      "sizeInBytes": 1158643712,
       "minDeviceMemoryInGb": 4,
       "commitHash": "main",
       "defaultConfig": {
         "topK": 20,
         "topP": 0.8,
         "temperature": 0.7,
-        "maxTokens": 4096,
+        "maxTokens": 2048,
         "accelerators": "gpu,cpu"
       },
       "taskTypes": [
@@ -341,7 +380,7 @@
         "topK": 32,
         "topP": 0.9,
         "temperature": 0.7,
-        "maxTokens": 4096,
+        "maxTokens": 2048,
         "accelerators": "gpu,cpu"
       },
       "taskTypes": [
@@ -378,7 +417,7 @@
         "topK": 32,
         "topP": 0.9,
         "temperature": 0.7,
-        "maxTokens": 4096,
+        "maxTokens": 2048,
         "accelerators": "gpu,cpu"
       },
       "taskTypes": [

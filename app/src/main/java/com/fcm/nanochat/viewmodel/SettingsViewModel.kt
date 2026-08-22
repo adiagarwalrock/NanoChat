@@ -15,6 +15,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -47,6 +48,7 @@ class SettingsViewModel @Inject constructor(
                             contextLength = snapshot.contextLength,
                             thinkingEffort = snapshot.thinkingEffort,
                             acceleratorPreference = snapshot.acceleratorPreference,
+                            customSystemPrompt = snapshot.customSystemPrompt,
                             geminiStatus = current.geminiStatus.copy(
                                 lastKnownModelSizeBytes = snapshot.geminiNanoModelSizeBytes
                             ),
@@ -60,6 +62,10 @@ class SettingsViewModel @Inject constructor(
                             activeLocalModelId = snapshot.activeLocalModelId,
                             thinkingEffort = snapshot.thinkingEffort,
                             acceleratorPreference = snapshot.acceleratorPreference,
+                            temperature = snapshot.temperature,
+                            topP = snapshot.topP,
+                            contextLength = snapshot.contextLength,
+                            customSystemPrompt = snapshot.customSystemPrompt,
                             geminiStatus = current.geminiStatus.copy(
                                 lastKnownModelSizeBytes = snapshot.geminiNanoModelSizeBytes
                             )
@@ -115,6 +121,65 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { preferences.updateAcceleratorPreference(value) }
     }
 
+    fun updateCustomSystemPrompt(value: String) {
+        _uiState.update { it.copy(customSystemPrompt = value, saveNotice = null) }
+    }
+
+    fun saveTemperatureDirectly(value: Double) {
+        val clamped = value.coerceIn(0.0, 2.0)
+        _uiState.update { it.copy(temperature = clamped, saveNotice = null) }
+        viewModelScope.launch {
+            val snapshot = preferences.settings.first()
+            preferences.updateModelSettings(
+                baseUrl = snapshot.baseUrl,
+                modelName = snapshot.modelName,
+                transcriptionModelName = snapshot.transcriptionModelName,
+                temperature = clamped,
+                topP = snapshot.topP,
+                contextLength = snapshot.contextLength
+            )
+        }
+    }
+
+    fun saveTopPDirectly(value: Double) {
+        val clamped = value.coerceIn(0.0, 1.0)
+        _uiState.update { it.copy(topP = clamped, saveNotice = null) }
+        viewModelScope.launch {
+            val snapshot = preferences.settings.first()
+            preferences.updateModelSettings(
+                baseUrl = snapshot.baseUrl,
+                modelName = snapshot.modelName,
+                transcriptionModelName = snapshot.transcriptionModelName,
+                temperature = snapshot.temperature,
+                topP = clamped,
+                contextLength = snapshot.contextLength
+            )
+        }
+    }
+
+    fun saveContextLengthDirectly(value: Int) {
+        val clamped = value.coerceIn(512, 32768)
+        _uiState.update { it.copy(contextLength = clamped, saveNotice = null) }
+        viewModelScope.launch {
+            val snapshot = preferences.settings.first()
+            preferences.updateModelSettings(
+                baseUrl = snapshot.baseUrl,
+                modelName = snapshot.modelName,
+                transcriptionModelName = snapshot.transcriptionModelName,
+                temperature = snapshot.temperature,
+                topP = snapshot.topP,
+                contextLength = clamped
+            )
+        }
+    }
+
+    fun saveCustomSystemPromptDirectly(value: String) {
+        _uiState.update { it.copy(customSystemPrompt = value, saveNotice = null) }
+        viewModelScope.launch {
+            preferences.updateCustomSystemPrompt(value)
+        }
+    }
+
     fun save() {
         viewModelScope.launch {
             val current = _uiState.value
@@ -131,6 +196,7 @@ class SettingsViewModel @Inject constructor(
             )
             preferences.updateThinkingEffort(current.thinkingEffort)
             preferences.updateAcceleratorPreference(current.acceleratorPreference)
+            preferences.updateCustomSystemPrompt(current.customSystemPrompt)
             _uiState.update { it.copy(saveNotice = "Settings saved.", clearNotice = null) }
         }
     }

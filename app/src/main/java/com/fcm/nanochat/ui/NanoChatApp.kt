@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
@@ -112,8 +113,13 @@ fun NanoChatApp(
     onTemperatureChange: (Double) -> Unit = {},
     onTopPChange: (Double) -> Unit = {},
     onContextLengthChange: (Int) -> Unit = {},
+    onTemperatureChangeDirectly: (Double) -> Unit = {},
+    onTopPChangeDirectly: (Double) -> Unit = {},
+    onContextLengthChangeDirectly: (Int) -> Unit = {},
     onThinkingEffortChange: (com.fcm.nanochat.data.ThinkingEffort) -> Unit = {},
     onAcceleratorChange: (com.fcm.nanochat.data.AcceleratorPreference) -> Unit = {},
+    onCustomSystemPromptChange: (String) -> Unit = {},
+    onCustomSystemPromptChangeDirectly: (String) -> Unit = {},
     onSaveSettings: () -> Unit = {},
     onClearHistory: () -> Unit = {},
     onRefreshStats: () -> Unit = {},
@@ -215,11 +221,12 @@ fun NanoChatApp(
                             destination = AppDestination.Models
                             onOpenModelGallery()
                         },
-                        onTemperatureChange = onTemperatureChange,
-                        onTopPChange = onTopPChange,
-                        onContextLengthChange = onContextLengthChange,
+                        onTemperatureChange = onTemperatureChangeDirectly,
+                        onTopPChange = onTopPChangeDirectly,
+                        onContextLengthChange = onContextLengthChangeDirectly,
                         onThinkingEffortChange = onThinkingEffortChange,
                         onAcceleratorChange = onAcceleratorChange,
+                        onCustomSystemPromptChange = onCustomSystemPromptChangeDirectly,
                         onMessageInfo = {},
                         onDeleteMessage = { message -> onDeleteMessage(message.id) }
                     )
@@ -269,6 +276,7 @@ fun NanoChatApp(
                         onTemperatureChange = onTemperatureChange,
                         onTopPChange = onTopPChange,
                         onContextLengthChange = onContextLengthChange,
+                        onCustomSystemPromptChange = onCustomSystemPromptChange,
                         onSaveSettings = onSaveSettings,
                         onClearHistory = onClearHistory,
                         onRefreshStats = onRefreshStats,
@@ -395,6 +403,7 @@ private fun SettingsPage(
     onTemperatureChange: (Double) -> Unit,
     onTopPChange: (Double) -> Unit,
     onContextLengthChange: (Int) -> Unit,
+    onCustomSystemPromptChange: (String) -> Unit,
     onSaveSettings: () -> Unit,
     onClearHistory: () -> Unit,
     onRefreshStats: () -> Unit,
@@ -443,7 +452,9 @@ private fun SettingsPage(
         },
         contentWindowInsets = ScaffoldDefaults.contentWindowInsets
     ) { inner ->
-        val contentModifier = Modifier.padding(inner)
+        val contentModifier = Modifier
+            .padding(inner)
+            .imePadding()
 
         when (section) {
             Home ->
@@ -474,6 +485,7 @@ private fun SettingsPage(
                     onTemperatureChange = onTemperatureChange,
                     onTopPChange = onTopPChange,
                     onContextLengthChange = onContextLengthChange,
+                    onCustomSystemPromptChange = onCustomSystemPromptChange,
                     onSaveSettings = onSaveSettings
                 )
 
