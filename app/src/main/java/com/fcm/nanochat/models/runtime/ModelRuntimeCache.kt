@@ -22,7 +22,8 @@ internal data class RuntimeCachePreparation(
 
 internal data class RuntimeCacheInitialization<T>(
     val value: T,
-    val state: RuntimeCacheState
+    val state: RuntimeCacheState,
+    val directory: File?
 )
 
 class ModelRuntimeCache internal constructor(
@@ -58,14 +59,19 @@ class ModelRuntimeCache internal constructor(
 
     @Synchronized
     internal fun markInitialized(modelId: String): Long {
-        val currentDirectory = directoryFor(modelId)
-        if (!currentDirectory.isDirectory) return 0L
+        return runCatching {
+            val currentDirectory = directoryFor(modelId)
+            if (!currentDirectory.isDirectory) return@runCatching 0L
 
-        if (!currentDirectory.setLastModified(System.currentTimeMillis())) {
-            Log.w(TAG, "Unable to update runtime cache recency")
+            if (!currentDirectory.setLastModified(System.currentTimeMillis())) {
+                Log.w(TAG, "Unable to update runtime cache recency")
+            }
+            prune(currentDirectory)
+            directorySize(currentDirectory)
+        }.getOrElse { error ->
+            Log.w(TAG, "Unable to finalize runtime cache; continuing without cache telemetry", error)
+            0L
         }
-        prune(currentDirectory)
-        return directorySize(currentDirectory)
     }
 
     @Synchronized
@@ -86,7 +92,9 @@ class ModelRuntimeCache internal constructor(
     internal fun directoryFor(modelId: String): File {
         val normalized = modelId.trim().lowercase(Locale.US)
         val digest = MessageDigest.getInstance("SHA-256").digest(normalized.toByteArray())
-        val key = digest.joinToString(separator = "") { byte -> "%02x".format(byte) }
+        val key = digest.joinToString(separator = "") { byte ->
+            (byte.toInt() and 0xff).toString(16).padStart(2, '0')
+        }
         return File(rootDirectory, key)
     }
 
@@ -118,6 +126,11 @@ class ModelRuntimeCache internal constructor(
             runCatching { stale.deleteRecursively() }
                 .onFailure { error ->
                     Log.w(TAG, "Unable to prune stale runtime cache", error)
+                }
+                .onSuccess { deleted ->
+                    if (!deleted) {
+                        Log.w(TAG, "Stale runtime cache could not be fully removed")
+                    }
                 }
         }
     }
@@ -152,7 +165,8 @@ internal inline fun <T> initializeWithCacheRecovery(
     return try {
         RuntimeCacheInitialization(
             value = initialize(initialPreparation.directory),
-            state = initialPreparation.state
+            state = initialPreparation.state,
+            directory = initialPreparation.directory
         )
     } catch (initialError: Throwable) {
         if (initialPreparation.state != RuntimeCacheState.WARM) {
@@ -163,7 +177,8 @@ internal inline fun <T> initializeWithCacheRecovery(
         try {
             RuntimeCacheInitialization(
                 value = initialize(recoveredPreparation.directory),
-                state = RuntimeCacheState.RECOVERED
+                state = RuntimeCacheState.RECOVERED,
+                directory = recoveredPreparation.directory
             )
         } catch (recoveryError: Throwable) {
             initialError.addSuppressed(recoveryError)

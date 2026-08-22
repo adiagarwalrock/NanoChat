@@ -9,6 +9,8 @@ import com.fcm.nanochat.data.db.InstalledModelEntity
 import com.fcm.nanochat.models.allowlist.AllowlistRepository
 import com.fcm.nanochat.models.registry.ModelInstallState
 import com.fcm.nanochat.models.registry.ModelStorageLocation
+import com.fcm.nanochat.models.runtime.ModelRuntimeCache
+import com.fcm.nanochat.models.runtime.ModelRuntimeManager
 import com.fcm.nanochat.notifications.NotificationCoordinator
 import com.fcm.nanochat.service.ModelDownloadService
 import kotlinx.coroutines.CancellationException
@@ -36,6 +38,17 @@ private sealed interface DownloadPreflightResult {
     data class Blocked(val message: String) : DownloadPreflightResult
 }
 
+internal suspend fun <T> changeModelFilesAfterRuntimeRelease(
+    modelId: String,
+    releaseRuntime: suspend (String) -> Unit,
+    clearRuntimeCache: (String) -> Unit,
+    changeFiles: suspend () -> T
+): T {
+    releaseRuntime(modelId)
+    clearRuntimeCache(modelId)
+    return changeFiles()
+}
+
 class ModelDownloadCoordinator(
     context: Context,
     private val httpClient: OkHttpClient,
@@ -43,7 +56,9 @@ class ModelDownloadCoordinator(
     private val allowlistRepository: AllowlistRepository,
     private val installedModelDao: InstalledModelDao,
     private val integrityValidator: DownloadIntegrityValidator,
-    private val notificationCoordinator: NotificationCoordinator
+    private val notificationCoordinator: NotificationCoordinator,
+    private val runtimeManager: ModelRuntimeManager,
+    private val runtimeCache: ModelRuntimeCache
 ) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -99,9 +114,15 @@ class ModelDownloadCoordinator(
             installedModelDao.upsert(deleting)
 
             runCatching {
-                File(existing.localPath).takeIf(File::exists)?.delete()
-                tempFile(normalized).takeIf(File::exists)?.delete()
-                installedModelDao.deleteById(normalized)
+                changeModelFilesAfterRuntimeRelease(
+                    modelId = normalized,
+                    releaseRuntime = { runtimeManager.releaseModel(it) },
+                    clearRuntimeCache = { runtimeCache.clear(it) }
+                ) {
+                    File(existing.localPath).takeIf(File::exists)?.delete()
+                    tempFile(normalized).takeIf(File::exists)?.delete()
+                    installedModelDao.deleteById(normalized)
+                }
             }.onFailure { error ->
                 installedModelDao.upsert(
                     deleting.copy(
@@ -149,17 +170,23 @@ class ModelDownloadCoordinator(
             val targetFile = File(targetDir, existing.modelFileName)
 
             runCatching {
-                copyFile(sourceFile, targetFile)
-                sourceFile.delete()
-                installedModelDao.upsert(
-                    existing.copy(
-                        installState = ModelInstallState.INSTALLED,
-                        storageLocation = resolvedTarget,
-                        localPath = targetFile.absolutePath,
-                        errorMessage = null,
-                        updatedAt = System.currentTimeMillis()
+                changeModelFilesAfterRuntimeRelease(
+                    modelId = normalized,
+                    releaseRuntime = { runtimeManager.releaseModel(it) },
+                    clearRuntimeCache = { runtimeCache.clear(it) }
+                ) {
+                    copyFile(sourceFile, targetFile)
+                    sourceFile.delete()
+                    installedModelDao.upsert(
+                        existing.copy(
+                            installState = ModelInstallState.INSTALLED,
+                            storageLocation = resolvedTarget,
+                            localPath = targetFile.absolutePath,
+                            errorMessage = null,
+                            updatedAt = System.currentTimeMillis()
+                        )
                     )
-                )
+                }
             }.onFailure { error ->
                 installedModelDao.upsert(
                     existing.copy(
@@ -403,7 +430,13 @@ class ModelDownloadCoordinator(
             val finalDir = modelStorageDirectory(resolvedStorageLocation)
             finalDir.mkdirs()
             val finalFile = File(finalDir, model.modelFile)
-            finalizeFile(tempFile, finalFile)
+            changeModelFilesAfterRuntimeRelease(
+                modelId = modelId,
+                releaseRuntime = { runtimeManager.releaseModel(it) },
+                clearRuntimeCache = { runtimeCache.clear(it) }
+            ) {
+                finalizeFile(tempFile, finalFile)
+            }
 
             logInstalledArtifact(
                 modelId = model.id,

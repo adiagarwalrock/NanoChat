@@ -2,6 +2,7 @@ package com.fcm.nanochat.models.runtime
 
 import android.app.ActivityManager
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import com.fcm.nanochat.models.allowlist.AllowlistDefaultConfig
 import kotlinx.coroutines.Dispatchers
@@ -14,11 +15,14 @@ import kotlinx.coroutines.withContext
 
 data class RuntimeHandle(
     val runtime: LocalModelRuntime,
-    val initDurationMs: Long
+    val initDurationMs: Long,
+    val cacheState: RuntimeCacheState,
+    val cacheSizeBytes: Long
 )
 
 class ModelRuntimeManager(
-    context: Context
+    context: Context,
+    private val runtimeCache: ModelRuntimeCache
 ) {
     private val appContext = context.applicationContext
     private val activityManager =
@@ -29,6 +33,7 @@ class ModelRuntimeManager(
     private var activeModelPath: String? = null
     private var activeConfigSignature: String? = null
     private var activeRuntime: LocalModelRuntime? = null
+    private var activeCacheSizeBytes: Long = 0L
 
     private val _loadState = MutableStateFlow(RuntimeLoadState())
     val loadState: StateFlow<RuntimeLoadState> = _loadState.asStateFlow()
@@ -58,7 +63,9 @@ class ModelRuntimeManager(
                     )
                     return@withLock RuntimeHandle(
                         runtime = checkNotNull(activeRuntime),
-                        initDurationMs = 0L
+                        initDurationMs = 0L,
+                        cacheState = RuntimeCacheState.ENGINE_REUSED,
+                        cacheSizeBytes = activeCacheSizeBytes
                     )
                 }
 
@@ -73,6 +80,7 @@ class ModelRuntimeManager(
                 activeModelId = null
                 activeModelPath = null
                 activeConfigSignature = null
+                activeCacheSizeBytes = 0L
 
                 memoryPreflightError(expectedSizeBytes)?.let { message ->
                     _loadState.value = RuntimeLoadState(
@@ -83,17 +91,35 @@ class ModelRuntimeManager(
                     throw IllegalStateException(message)
                 }
 
-                val initStart = System.currentTimeMillis()
-                val runtime = runCatching {
-                    LiteRtLmRuntimeFactory.create(
-                        context = appContext,
-                        modelId = modelId,
-                        modelPath = modelPath,
-                        config = defaultConfig,
-                        expectedFileName = expectedFileName,
-                        expectedFileType = expectedFileType,
-                        expectedSizeBytes = expectedSizeBytes
-                    )
+                val cachePreparation = runtimeCache.prepare(modelId)
+                val initStart = SystemClock.elapsedRealtime()
+                val initialization = runCatching {
+                    initializeWithCacheRecovery(
+                        initialPreparation = cachePreparation,
+                        recoverCache = {
+                            val cleared = runtimeCache.clear(modelId)
+                            if (cleared) {
+                                runtimeCache.prepare(modelId)
+                            } else {
+                                RuntimeCachePreparation(
+                                    directory = null,
+                                    state = RuntimeCacheState.DISABLED,
+                                    sizeBytes = 0L
+                                )
+                            }
+                        }
+                    ) { cacheDirectory ->
+                        LiteRtLmRuntimeFactory.create(
+                            context = appContext,
+                            modelId = modelId,
+                            modelPath = modelPath,
+                            config = defaultConfig,
+                            cacheDirectory = cacheDirectory,
+                            expectedFileName = expectedFileName,
+                            expectedFileType = expectedFileType,
+                            expectedSizeBytes = expectedSizeBytes
+                        )
+                    }
                 }.getOrElse { error ->
                     Log.e(TAG, "Failed to initialize local runtime", error)
                     _loadState.value = RuntimeLoadState(
@@ -103,12 +129,19 @@ class ModelRuntimeManager(
                     )
                     throw error
                 }
-                val initDuration = System.currentTimeMillis() - initStart
+                val initDuration = SystemClock.elapsedRealtime() - initStart
+                val runtime = initialization.value
+                val cacheSizeBytes = if (initialization.directory != null) {
+                    runtimeCache.markInitialized(modelId)
+                } else {
+                    0L
+                }
 
                 activeModelId = normalizedModelId
                 activeModelPath = modelPath
                 activeConfigSignature = configSignature
                 activeRuntime = runtime
+                activeCacheSizeBytes = cacheSizeBytes
 
                 _loadState.value = RuntimeLoadState(
                     phase = RuntimeLoadPhase.LOADED,
@@ -116,9 +149,19 @@ class ModelRuntimeManager(
                     message = null
                 )
 
-                Log.d(TAG, "Local runtime ready modelId=$modelId initMs=$initDuration")
+                Log.d(
+                    TAG,
+                    "Local runtime ready modelId=$modelId initMs=$initDuration " +
+                            "cacheState=${initialization.state} cacheBytes=$cacheSizeBytes " +
+                            "startingCacheBytes=${cachePreparation.sizeBytes}"
+                )
 
-                RuntimeHandle(runtime = runtime, initDurationMs = initDuration)
+                RuntimeHandle(
+                    runtime = runtime,
+                    initDurationMs = initDuration,
+                    cacheState = initialization.state,
+                    cacheSizeBytes = cacheSizeBytes
+                )
             }
         }
     }
@@ -133,6 +176,7 @@ class ModelRuntimeManager(
                 activeModelId = null
                 activeModelPath = null
                 activeConfigSignature = null
+                activeCacheSizeBytes = 0L
                 _loadState.value = RuntimeLoadState(
                     phase = if (reason == RuntimeReleaseReason.EJECTED) {
                         RuntimeLoadPhase.EJECTED
@@ -140,6 +184,35 @@ class ModelRuntimeManager(
                         RuntimeLoadPhase.IDLE
                     },
                     modelId = releasedModelId,
+                    message = null
+                )
+            }
+        }
+    }
+
+    suspend fun releaseModel(
+        modelId: String,
+        reason: RuntimeReleaseReason = RuntimeReleaseReason.GENERIC
+    ) {
+        val normalizedModelId = modelId.trim().lowercase()
+        withContext(Dispatchers.IO) {
+            mutex.withLock {
+                if (activeModelId != normalizedModelId) return@withLock
+
+                Log.d(TAG, "Releasing local runtime before model file change")
+                activeRuntime?.close()
+                activeRuntime = null
+                activeModelId = null
+                activeModelPath = null
+                activeConfigSignature = null
+                activeCacheSizeBytes = 0L
+                _loadState.value = RuntimeLoadState(
+                    phase = if (reason == RuntimeReleaseReason.EJECTED) {
+                        RuntimeLoadPhase.EJECTED
+                    } else {
+                        RuntimeLoadPhase.IDLE
+                    },
+                    modelId = normalizedModelId,
                     message = null
                 )
             }
@@ -172,15 +245,26 @@ class ModelRuntimeManager(
                 if (!LiteRtLmRuntimeFactory.isRuntimeClassAvailable()) {
                     return@withLock "Local runtime is unavailable on this build."
                 }
-                LiteRtLmRuntimeFactory.probe(
+                val cachePreparation = runtimeCache.prepare(modelId)
+                val failure = LiteRtLmRuntimeFactory.probe(
                     context = appContext,
                     modelId = modelId,
                     modelPath = modelPath,
                     config = defaultConfig,
+                    cacheDirectory = cachePreparation.directory,
                     expectedFileName = expectedFileName,
                     expectedFileType = expectedFileType,
                     expectedSizeBytes = expectedSizeBytes
                 )
+                if (failure == null) {
+                    val cacheSizeBytes = runtimeCache.markInitialized(modelId)
+                    Log.d(
+                        TAG,
+                        "Local runtime probe ready modelId=$modelId " +
+                                "cacheState=${cachePreparation.state} cacheBytes=$cacheSizeBytes"
+                    )
+                }
+                failure
             }
         }
     }

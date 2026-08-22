@@ -557,7 +557,9 @@ class DownloadedModelInferenceClient(
                             },
                         generationDurationMs = generationDurationMs,
                         tokensPerSecond = tokensPerSecond,
-                        backend = "litert-lm"
+                        backend = "litert-lm",
+                        cacheState = currentRuntimeHandle.cacheState,
+                        cacheSizeBytes = currentRuntimeHandle.cacheSizeBytes
                     )
                 )
 

@@ -20,6 +20,7 @@ import com.fcm.nanochat.models.importing.LocalModelImportCoordinator
 import com.fcm.nanochat.models.importing.StubLocalModelImportCoordinator
 import com.fcm.nanochat.models.registry.ModelRegistry
 import com.fcm.nanochat.models.runtime.InMemoryLocalRuntimeTelemetry
+import com.fcm.nanochat.models.runtime.ModelRuntimeCache
 import com.fcm.nanochat.models.runtime.ModelRuntimeManager
 import com.fcm.nanochat.notifications.NotificationCoordinator
 import com.fcm.nanochat.util.CrashReporter
@@ -95,8 +96,17 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideModelRuntimeManager(@ApplicationContext context: Context): ModelRuntimeManager {
-        return ModelRuntimeManager(context)
+    fun provideModelRuntimeCache(@ApplicationContext context: Context): ModelRuntimeCache {
+        return ModelRuntimeCache(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideModelRuntimeManager(
+        @ApplicationContext context: Context,
+        runtimeCache: ModelRuntimeCache
+    ): ModelRuntimeManager {
+        return ModelRuntimeManager(context, runtimeCache)
     }
 
     @Provides
@@ -138,7 +148,9 @@ object AppModule {
         allowlistRepository: AllowlistRepository,
         installedModelDao: InstalledModelDao,
         integrityValidator: DownloadIntegrityValidator,
-        notificationCoordinator: NotificationCoordinator
+        notificationCoordinator: NotificationCoordinator,
+        runtimeManager: ModelRuntimeManager,
+        runtimeCache: ModelRuntimeCache
     ): ModelDownloadCoordinator {
         return ModelDownloadCoordinator(
             context = context,
@@ -147,7 +159,9 @@ object AppModule {
             allowlistRepository = allowlistRepository,
             installedModelDao = installedModelDao,
             integrityValidator = integrityValidator,
-            notificationCoordinator = notificationCoordinator
+            notificationCoordinator = notificationCoordinator,
+            runtimeManager = runtimeManager,
+            runtimeCache = runtimeCache
         )
     }
 

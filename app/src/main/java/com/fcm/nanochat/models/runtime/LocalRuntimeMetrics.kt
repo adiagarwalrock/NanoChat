@@ -7,6 +7,8 @@ data class LocalRuntimeMetrics(
     val generationDurationMs: Long,
     val tokensPerSecond: Double,
     val backend: String,
+    val cacheState: RuntimeCacheState = RuntimeCacheState.DISABLED,
+    val cacheSizeBytes: Long = 0L,
     val measuredAtEpochMs: Long = System.currentTimeMillis()
 )
 

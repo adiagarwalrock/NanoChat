@@ -383,6 +383,7 @@ internal object LiteRtLmRuntimeFactory {
             modelId: String,
             modelPath: String,
             config: AllowlistDefaultConfig,
+            cacheDirectory: File?,
             expectedFileName: String?,
             expectedFileType: String?,
             expectedSizeBytes: Long
@@ -414,7 +415,8 @@ internal object LiteRtLmRuntimeFactory {
                                 context = context,
                                 modelPath = trimmedPath,
                                 config = config,
-                                backendLabel = backend
+                                backendLabel = backend,
+                                cacheDirectory = cacheDirectory
                         )
                     }
                             .getOrElse { error ->
@@ -440,6 +442,7 @@ internal object LiteRtLmRuntimeFactory {
             modelId: String,
             modelPath: String,
             config: AllowlistDefaultConfig,
+            cacheDirectory: File?,
             expectedFileName: String?,
             expectedFileType: String?,
             expectedSizeBytes: Long
@@ -457,6 +460,7 @@ internal object LiteRtLmRuntimeFactory {
                             modelId = modelId,
                             modelPath = modelPath,
                             config = config,
+                            cacheDirectory = cacheDirectory,
                             expectedFileName = expectedFileName,
                             expectedFileType = expectedFileType,
                             expectedSizeBytes = expectedSizeBytes
@@ -476,7 +480,8 @@ internal object LiteRtLmRuntimeFactory {
             context: Context,
             modelPath: String,
             config: AllowlistDefaultConfig,
-            backendLabel: String
+            backendLabel: String,
+            cacheDirectory: File?
     ): LocalModelRuntime {
         val backend = backendFromLabel(backendLabel, context.applicationInfo.nativeLibraryDir)
 
@@ -485,12 +490,7 @@ internal object LiteRtLmRuntimeFactory {
                         modelPath = modelPath,
                         backend = backend,
                         maxNumTokens = config.maxTokens.coerceAtLeast(256),
-                        cacheDir =
-                                if (modelPath.startsWith(TMP_MODEL_PATH_PREFIX)) {
-                                    context.getExternalFilesDir(null)?.absolutePath
-                                } else {
-                                    null
-                                }
+                        cacheDir = cacheDirectory?.absolutePath
                 )
 
         val engine = Engine(engineConfig)
@@ -609,7 +609,7 @@ internal object LiteRtLmRuntimeFactory {
     ) {
         Log.d(
                 TAG,
-                "startup_file modelId=$modelId path=${inspection.path} exists=${inspection.exists} " +
+                "startup_file modelId=$modelId exists=${inspection.exists} " +
                         "sizeBytes=${inspection.sizeBytes} extension=${inspection.extension} " +
                         "format=${inspection.detectedFormat} expectedName=${expectedFileName.orEmpty()} " +
                         "expectedType=${expectedFileType.orEmpty()} expectedSizeBytes=$expectedSizeBytes"
@@ -665,7 +665,6 @@ internal object LiteRtLmRuntimeFactory {
 
     private fun probeFailureMessage(inspection: StartupFileInspection, error: Throwable): String {
         return "startup_validation_failed; " +
-                "path=${inspection.path}; " +
                 "extension=${inspection.extension.ifBlank { "unknown" }}; " +
                 "format=${inspection.detectedFormat}; " +
                 "sizeBytes=${inspection.sizeBytes}; " +
@@ -700,6 +699,5 @@ internal object LiteRtLmRuntimeFactory {
         return (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     }
 
-    private const val TMP_MODEL_PATH_PREFIX = "/data/local/tmp"
     private const val TAG = "LiteRtLmRuntime"
 }
